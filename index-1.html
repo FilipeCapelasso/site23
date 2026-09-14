@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NovaStore | Loja de produtos digitais</title>
+<meta name="description" content="Jogos, contas e assinaturas com pagamento via Pix e liberação imediata." />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: {
+        bg:"#08090c", surface:"#111318", surface2:"#181b22", surface3:"#1e2129", border:"#23262f",
+        primary:"#7c5cff", primaryhover:"#6a47ff", accent:"#00e6a8", muted:"#8b8fa3",
+      },
+      boxShadow: { glow: "0 0 40px -10px rgba(124,92,255,0.45)" },
+      fontFamily: { display: ["'Rajdhani'","system-ui","sans-serif"], sans: ["Inter","system-ui","sans-serif"] },
+    }},
+  };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{background:#08090c;color:#f1f2f6;font-family:Inter,system-ui,sans-serif}
+  ::-webkit-scrollbar{width:10px;height:10px} ::-webkit-scrollbar-track{background:#0c0d11}
+  ::-webkit-scrollbar-thumb{background:#2a2d38;border-radius:8px}
+  .glass{background:rgba(17,19,24,.72);backdrop-filter:blur(14px)}
+  .gradient-text{background:linear-gradient(90deg,#a78bfa,#7c5cff 45%,#c9b6ff 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .card-hover{transition:.25s ease}
+  .card-hover:hover{transform:translateY(-4px);border-color:rgba(124,92,255,.55);
+    box-shadow:0 16px 44px -14px rgba(124,92,255,.4)}
+  .bg-grid-fade{background:radial-gradient(circle at 50% 0%, rgba(124,92,255,.20), transparent 62%)}
+  body.has-custom-bg::before{content:"";position:fixed;inset:0;z-index:-2;background-image:var(--site-bg-image);
+    background-size:cover;background-position:center;background-attachment:fixed}
+  body.has-custom-bg::after{content:"";position:fixed;inset:0;z-index:-1;background:rgba(8,9,12,var(--site-bg-overlay,0.85))}
+  #hero-overlay{background:linear-gradient(90deg, rgba(8,9,12,var(--hero-overlay,.35)) 15%, rgba(8,9,12,calc(var(--hero-overlay,.35) * 0.55)) 55%, rgba(8,9,12,0) 100%)}
+  .bg-noise{background-image:radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px);background-size:3px 3px}
+  @keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(124,92,255,.45)}50%{box-shadow:0 0 0 8px rgba(124,92,255,0)}}
+  .pulse-glow{animation:pulseGlow 2.4s infinite}
+  @keyframes ctaGlow{0%,100%{box-shadow:0 0 22px 2px rgba(124,92,255,.55),0 0 0 0 rgba(0,230,168,0)}50%{box-shadow:0 0 34px 8px rgba(124,92,255,.85),0 0 14px 2px rgba(0,230,168,.35)}}
+  .glow-cta{animation:ctaGlow 2.2s ease-in-out infinite}
+  @keyframes floatSlow{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+  .float-slow{animation:floatSlow 4.5s ease-in-out infinite}
+  @keyframes badgeShine{0%{background-position:-120% 0}100%{background-position:220% 0}}
+  .badge-shine{background:linear-gradient(110deg,#ff5c5c 0%,#ff8a5c 35%,#ff5c5c 60%,#ff8a5c 100%);background-size:220% 100%;animation:badgeShine 2.8s linear infinite}
+  .badge-hot{background:linear-gradient(110deg,#00e6a8 0%,#38ffcf 35%,#00e6a8 60%,#38ffcf 100%);background-size:220% 100%;animation:badgeShine 2.8s linear infinite}
+  .badge-last{background:linear-gradient(110deg,#ffb020 0%,#ffd76a 35%,#ffb020 60%,#ffd76a 100%);background-size:220% 100%;animation:badgeShine 2.8s linear infinite}
+  .hero-fade-up{opacity:0;animation:cardIn .8s cubic-bezier(.16,.9,.3,1) forwards}
+  .section-title-underline{position:relative}
+  .section-title-underline::after{content:"";position:absolute;left:0;bottom:-10px;width:56px;height:3px;border-radius:99px;background:linear-gradient(90deg,#7c5cff,#00e6a8)}
+  .faq-item[open] summary .faq-chevron{transform:rotate(45deg)}
+  .faq-item summary{list-style:none}
+  .faq-item summary::-webkit-details-marker{display:none}
+  .line-clamp-1{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+  .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .modal-overlay{background:rgba(4,4,7,.75);backdrop-filter:blur(6px)}
+  .lilac{color:#a78bfa}
+  .font-display{font-family:'Rajdhani',Inter,system-ui,sans-serif;letter-spacing:.01em}
+  .cat-btn{scroll-snap-align:start}
+  .cat-scroll{scroll-snap-type:x proximity}
+  .cat-btn.is-active{background:#7c5cff;border-color:#7c5cff;color:#fff;box-shadow:0 8px 24px -8px rgba(124,92,255,.6)}
+  .cat-btn.is-active .cat-icon{color:#fff}
+  .plan-card{transition:.15s ease}
+  .plan-card.is-selected{border-color:#7c5cff;background:rgba(124,92,255,.12);box-shadow:0 0 0 1px #7c5cff inset}
+  .plan-radio{transition:.15s ease}
+  .plan-card.is-selected .plan-radio{background:#7c5cff;border-color:#7c5cff}
+  .tag-chip{background:rgba(124,92,255,.12);border:1px solid rgba(124,92,255,.3);color:#c9b6ff}
+  input[type=number]::-webkit-inner-spin-button{opacity:1}
+  @media(min-width:1024px){.modal-scroll{max-height:88vh}}
+
+  /* ---------- animações de impacto nos produtos ---------- */
+  @keyframes cardIn{from{opacity:0;transform:translateY(22px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
+  .card-in{opacity:0;animation:cardIn .55s cubic-bezier(.16,.9,.3,1) forwards}
+
+  .product-card{position:relative;isolation:isolate;transform-style:preserve-3d;
+    transition:transform .18s ease, border-color .35s ease, box-shadow .35s ease;
+    will-change:transform;}
+  .product-card::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;
+    transition:opacity .35s ease;z-index:5;
+    background:radial-gradient(420px circle at var(--x,50%) var(--y,50%), rgba(124,92,255,.55), transparent 55%);
+    mix-blend-mode:screen;}
+  .product-card:hover::after{opacity:1}
+  .product-card.tilt{
+    transform:perspective(900px) rotateX(var(--ry,0deg)) rotateY(var(--rx,0deg)) translateY(-8px) scale(1.03);
+    border-color:rgba(124,92,255,.55);
+    box-shadow:0 24px 55px -16px rgba(124,92,255,.5), 0 0 0 1px rgba(124,92,255,.15);
+    z-index:10;
+  }
+
+  @keyframes shockRing{0%{box-shadow:0 0 0 0 rgba(124,92,255,.65),0 0 0 0 rgba(0,230,168,.35)}
+    60%{box-shadow:0 0 0 10px rgba(124,92,255,0),0 0 0 22px rgba(0,230,168,0)}
+    100%{box-shadow:0 0 0 0 rgba(124,92,255,0),0 0 0 0 rgba(0,230,168,0)}}
+  .shock-click{animation:shockRing .55s ease}
+
+  @keyframes flashPop{0%{transform:scale(.5);opacity:0}40%{transform:scale(1.15);opacity:1}100%{transform:scale(1);opacity:0}}
+  .flash-pop{animation:flashPop .6s ease forwards}
+
+  .modal-image-frame{position:relative;overflow:hidden}
+  .modal-image-frame img{transition:transform .6s cubic-bezier(.16,.9,.3,1)}
+  .modal-image-frame:hover img{transform:scale(1.08)}
+  .modal-image-frame::before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;
+    background:linear-gradient(135deg, rgba(124,92,255,.18), transparent 40%, transparent 60%, rgba(0,230,168,.14));
+    mix-blend-mode:overlay}
+  .modal-image-frame::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;border-radius:inherit;
+    box-shadow:inset 0 0 0 1px rgba(124,92,255,.35), 0 0 60px -10px rgba(124,92,255,.5)}
+
+  @keyframes badgePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+  .purchase-badge{animation:badgePulse 2.2s ease-in-out infinite}
+
+  .btn-press{transition:transform .12s ease}
+  .btn-press:active{transform:scale(.96)}
+
+  /* ---------- animações da modal de produto ---------- */
+  @keyframes overlayFadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes overlayFadeOut{from{opacity:1}to{opacity:0}}
+  @keyframes modalPopIn{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+  @keyframes modalPopOut{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(10px) scale(.97)}}
+  #product-modal{animation:overlayFadeIn .2s ease}
+  #product-modal.modal-fade-out{animation:overlayFadeOut .16s ease forwards}
+  #product-modal-content.modal-pop-in{animation:modalPopIn .3s cubic-bezier(.16,.9,.3,1)}
+  #product-modal-content.modal-pop-out{animation:modalPopOut .16s ease forwards}
+
+  /* transições mais suaves nos botões de categoria e cards */
+  .cat-btn{transition:background-color .2s ease, border-color .2s ease, color .2s ease, transform .15s ease}
+  .cat-btn:active{transform:scale(.94)}
+
+  /* ---------- NovaStore visual refresh ---------- */
+  :root{color-scheme:dark}
+  html{scroll-behavior:smooth}
+  body{overflow-x:hidden;background:
+    radial-gradient(circle at 15% -5%,rgba(124,92,255,.13),transparent 28%),
+    radial-gradient(circle at 90% 8%,rgba(0,230,168,.055),transparent 22%),#08090c}
+  body::selection{background:rgba(124,92,255,.38);color:#fff}
+  .glass{background:rgba(10,11,16,.72);border-color:rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.18)}
+  header.sticky{backdrop-filter:blur(18px) saturate(145%);box-shadow:0 10px 35px rgba(0,0,0,.20)}
+  header.sticky a{transition:transform .2s ease,filter .2s ease}
+  header.sticky a:hover{transform:translateY(-1px);filter:brightness(1.08)}
+  header.sticky nav a{position:relative;transition:color .2s ease}
+  header.sticky nav a::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:2px;border-radius:999px;background:#7c5cff;transform:scaleX(0);transform-origin:center;transition:transform .2s ease}
+  header.sticky nav a:hover::after,header.sticky nav a.text-white::after{transform:scaleX(1)}
+  #hero-section{min-height:360px;box-shadow:inset 0 -90px 90px -80px rgba(124,92,255,.22)}
+  #hero-section::before{content:"";position:absolute;inset:0;pointer-events:none;background:
+    radial-gradient(circle at 75% 25%,rgba(124,92,255,.22),transparent 30%),
+    linear-gradient(180deg,rgba(4,5,8,.04),rgba(4,5,8,.28) 72%,rgba(4,5,8,.8))}
+  #category-bar{padding-top:2px;scrollbar-width:none}
+  #category-bar::-webkit-scrollbar{display:none}
+  .cat-btn{min-width:88px;position:relative;overflow:hidden;backdrop-filter:blur(10px);box-shadow:0 8px 24px rgba(0,0,0,.12)}
+  .cat-btn::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.045),transparent 55%);pointer-events:none}
+  .cat-btn:hover{transform:translateY(-2px);background:#151821;border-color:rgba(124,92,255,.55);color:#f4f1ff;box-shadow:0 10px 26px rgba(0,0,0,.2)}
+  .cat-btn.is-active{box-shadow:0 10px 28px rgba(124,92,255,.32),inset 0 0 0 1px rgba(255,255,255,.08)}
+  #search-input{height:46px;background:rgba(17,19,24,.82);border-color:rgba(255,255,255,.08);box-shadow:0 10px 28px rgba(0,0,0,.16);transition:border-color .2s ease,box-shadow .2s ease,background .2s ease}
+  #search-input:hover{background:rgba(22,24,31,.9);border-color:rgba(124,92,255,.32)}
+  #search-input:focus{background:rgba(19,20,27,.96);box-shadow:0 0 0 3px rgba(124,92,255,.12),0 12px 30px rgba(0,0,0,.2)}
+  #products-grid{align-items:stretch}
+  .product-card{border-color:rgba(255,255,255,.07)!important;background:linear-gradient(180deg,rgba(20,22,29,.97),rgba(12,13,18,.98));box-shadow:0 12px 28px rgba(0,0,0,.16)}
+  .product-card:hover{box-shadow:0 26px 60px rgba(0,0,0,.34),0 0 0 1px rgba(124,92,255,.10)}
+  .product-card .aspect-\[1\/1\]{background:linear-gradient(135deg,#171923,#0d0e13);}
+  .product-card h3{letter-spacing:.025em;text-wrap:balance}
+  .product-card button{box-shadow:0 9px 22px rgba(124,92,255,.16);transition:transform .16s ease,box-shadow .2s ease,background .2s ease}
+  .product-card button:hover{box-shadow:0 12px 28px rgba(124,92,255,.28);transform:translateY(-1px)}
+  #empty-state{backdrop-filter:blur(10px);box-shadow:0 14px 40px rgba(0,0,0,.14)}
+  footer{background:linear-gradient(180deg,rgba(17,19,24,.94),rgba(8,9,12,1));box-shadow:0 -20px 50px rgba(0,0,0,.16)}
+
+  #product-modal,#form-modal,#checkout-modal{z-index:60}
+  #product-modal-content,#form-modal>div,#checkout-content{box-shadow:0 30px 90px rgba(0,0,0,.58),0 0 0 1px rgba(255,255,255,.035)}
+  #product-modal-content{background:linear-gradient(135deg,rgba(18,20,27,.98),rgba(12,13,18,.985))}
+  #product-modal-content .modal-image-frame{box-shadow:0 18px 46px rgba(0,0,0,.30)}
+  #product-modal-content .modal-image-frame img{filter:saturate(1.06) contrast(1.03)}
+  #product-modal-content .purchase-badge{box-shadow:0 10px 30px rgba(0,230,168,.08)}
+  .plan-card{background:linear-gradient(180deg,rgba(27,29,38,.92),rgba(20,22,29,.92));box-shadow:0 8px 22px rgba(0,0,0,.12)}
+  .plan-card:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,0,0,.2)}
+  .plan-card.is-selected{box-shadow:0 12px 32px rgba(124,92,255,.18),inset 0 0 0 1px rgba(124,92,255,.65)}
+  #product-modal-content .bg-surface2\/60{background:linear-gradient(180deg,rgba(25,27,35,.65),rgba(15,16,22,.76))}
+  #product-modal-content button[onclick="closeProductModal()"]{transition:transform .16s ease,background .16s ease,color .16s ease}
+  #product-modal-content button[onclick="closeProductModal()"]:hover{transform:rotate(90deg) scale(1.04);color:#fff}
+
+  /* Admin visual refresh */
+  #view-admin header{background:rgba(14,15,20,.88);backdrop-filter:blur(14px)}
+  #view-admin .rounded-2xl.border{box-shadow:0 16px 42px rgba(0,0,0,.18)}
+  #view-admin input,#view-admin select,#view-admin textarea{transition:border-color .2s ease,box-shadow .2s ease,background .2s ease}
+  #view-admin input:hover,#view-admin select:hover,#view-admin textarea:hover{border-color:rgba(124,92,255,.34)}
+  #view-admin input:focus,#view-admin select:focus,#view-admin textarea:focus{box-shadow:0 0 0 3px rgba(124,92,255,.1)}
+  #view-admin table tbody tr{transition:background .18s ease}
+  #view-admin table tbody tr:hover{background:rgba(124,92,255,.045)}
+
+  @media(max-width:767px){
+    #hero-section{min-height:320px}
+    #catalogo{padding-top:2rem;padding-bottom:3rem}
+    .product-card{border-radius:1rem!important}
+    .product-card h3{font-size:1.05rem;line-height:1.15}
+    .product-card .p-5{padding:1rem}
+    .product-card .text-2xl{font-size:1.25rem}
+    .cat-btn{min-width:82px;padding-left:1rem;padding-right:1rem}
+  }
+
+</style>
+</head>
+<body class="min-h-screen bg-noise">
+
+<script>
+  window.SUPABASE_URL = "https://tisicavugzcsixvhuvvm.supabase.co";
+  window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpc2ljYXZ1Z3pjc2l4dmh1dnZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzMzQ2NzAsImV4cCI6MjEwNDkxMDY3MH0.j6hD2RdhC3BTgC3TIYuFney3jj4Chg1OO9QnJxw-F3g";
+  /* Não usamos mais Edge Function: o Pix é criado direto por uma função
+     do banco (public.criar_pix), chamada via supabase.rpc(). */
+</script>
+
+<div id="view-store">
+
+  <header class="sticky top-0 z-40 glass border-b border-border">
+    <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+      <a href="#" class="flex items-center gap-2 text-xl font-extrabold tracking-tight font-display">
+        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black text-white">N</span>
+        <span class="gradient-text">Nova</span><span class="text-white">Store</span>
+      </a>
+      <nav class="hidden items-center gap-8 text-sm font-medium text-muted md:flex">
+        <a href="#top" class="text-white">Início</a>
+        <a href="#catalogo" class="hover:text-white">Produtos</a>
+        <a href="#" class="hover:text-white">Contas NFA</a>
+        <a href="#" class="hover:text-white">Avaliações</a>
+        <a href="#" class="hover:text-white">Suporte</a>
+      </nav>
+      <div class="flex items-center gap-3">
+        <button onclick="openCart()" class="relative flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium hover:border-primary/60">
+          🛒 <span class="hidden sm:inline">Carrinho</span>
+          <span id="cart-count" class="absolute -right-2 -top-2 hidden h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white pulse-glow">0</span>
+        </button>
+        <button onclick="goToAdmin()" class="hidden rounded-full bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primaryhover sm:inline-flex">Entrar</button>
+      </div>
+    </div>
+  </header>
+
+  <section id="hero-section" class="relative min-h-[520px] overflow-hidden bg-grid-fade border-b border-border bg-cover bg-center sm:min-h-[560px] md:min-h-[640px] lg:min-h-[700px]">
+    <div id="hero-overlay" class="pointer-events-none absolute inset-0"></div>
+    <div class="relative z-10 mx-auto flex h-full max-w-6xl flex-col items-center justify-center gap-6 px-4 py-24 text-center sm:py-28">
+      <span class="hero-fade-up inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-4 py-1.5 text-xs font-bold uppercase tracking-wide lilac backdrop-blur" style="animation-delay:.05s">
+        ⚡ Entrega 100% automática • Disponível 24h
+      </span>
+      <h1 class="hero-fade-up max-w-3xl font-display text-4xl font-black uppercase leading-[1.05] tracking-tight text-white sm:text-5xl md:text-6xl" style="animation-delay:.15s">
+        As Melhores <span class="gradient-text">Contas e Assinaturas</span> com Entrega Automática
+      </h1>
+      <p class="hero-fade-up max-w-xl text-base font-medium text-muted sm:text-lg" style="animation-delay:.25s">
+        Compre com segurança via Pix e receba na hora. Milhares de clientes satisfeitos, suporte 24/7 e garantia em todos os produtos.
+      </p>
+      <div class="hero-fade-up flex flex-col gap-3 pt-2 sm:flex-row" style="animation-delay:.35s">
+        <a href="#catalogo" class="glow-cta btn-press inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-8 py-4 text-base font-bold text-white hover:bg-primaryhover">
+          🚀 Explorar Catálogo
+        </a>
+        <a href="#por-que" class="btn-press inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-black/30 px-8 py-4 text-base font-bold text-white backdrop-blur hover:border-primary/60">
+          Ver benefícios
+        </a>
+      </div>
+      <div class="hero-fade-up mt-4 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs font-semibold text-muted sm:text-sm" style="animation-delay:.45s">
+        <span class="flex items-center gap-1.5">✅ Pagamento seguro</span>
+        <span class="flex items-center gap-1.5">⚡ Liberação imediata</span>
+        <span class="flex items-center gap-1.5">🎧 Suporte 24/7</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="por-que" class="border-b border-border bg-surface py-10">
+    <div class="mx-auto grid max-w-6xl grid-cols-1 gap-6 px-4 sm:grid-cols-3">
+      <div class="flex items-center gap-4 rounded-2xl border border-border bg-surface2/60 p-5">
+        <span class="float-slow flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-2xl">🎧</span>
+        <div>
+          <p class="font-display text-base font-bold uppercase text-white">Suporte 24/7</p>
+          <p class="text-sm text-muted">Time pronto para te ajudar a qualquer hora do dia.</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-4 rounded-2xl border border-border bg-surface2/60 p-5">
+        <span class="float-slow flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-2xl" style="animation-delay:.3s">🛡️</span>
+        <div>
+          <p class="font-display text-base font-bold uppercase text-white">Pagamento Seguro via Pix</p>
+          <p class="text-sm text-muted">Transações protegidas e liberação automática após confirmação.</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-4 rounded-2xl border border-border bg-surface2/60 p-5">
+        <span class="float-slow flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-2xl" style="animation-delay:.6s">⚡</span>
+        <div>
+          <p class="font-display text-base font-bold uppercase text-white">Entrega Imediata</p>
+          <p class="text-sm text-muted">Receba seu produto na hora, sem espera, direto no seu e-mail ou painel.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <main id="catalogo" class="mx-auto max-w-[2100px] px-4 py-16 sm:px-8 lg:px-14 xl:px-20">
+
+    <div id="category-bar" class="cat-scroll mb-8 flex gap-2 overflow-x-auto pb-2"></div>
+
+    <div class="mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center gap-2 text-lg font-display font-bold uppercase tracking-wide">
+        <span class="lilac">🔥</span> Produtos em destaque
+      </div>
+      <div class="relative w-full sm:w-72">
+        <input id="search-input" type="text" placeholder="Buscar produto..." class="w-full rounded-xl border border-border bg-surface px-4 py-2.5 pr-10 text-sm outline-none focus:border-primary/60" />
+        <span class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-muted">🔎</span>
+      </div>
+    </div>
+
+    <div id="loading" class="text-muted">Carregando produtos...</div>
+    <div id="products-grid" class="grid grid-cols-2 gap-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 xl:gap-8"></div>
+    <div id="empty-state" class="hidden rounded-2xl border border-dashed border-border bg-surface/40 py-14 text-center text-muted">
+      Nenhum produto encontrado nessa categoria.<br/>
+      <button onclick="goToAdmin()" class="lilac underline">Cadastre produtos na área administrativa</button>.
+    </div>
+  </main>
+
+  <section id="depoimentos" class="border-y border-border bg-surface py-16">
+    <div class="mx-auto max-w-6xl px-4">
+      <div class="mb-10 text-center">
+        <h2 class="section-title-underline inline-block font-display text-2xl font-bold uppercase tracking-wide text-white sm:text-3xl">O que dizem nossos clientes</h2>
+        <p class="mx-auto mt-5 max-w-lg text-sm text-muted">Milhares de compras entregues automaticamente, com segurança e satisfação garantida.</p>
+      </div>
+      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div class="card-hover rounded-2xl border border-border bg-surface2/60 p-6">
+          <div class="mb-3 text-accent">★★★★★</div>
+          <p class="mb-5 text-sm leading-relaxed text-muted">"Comprei e recebi o acesso em menos de 2 minutos. Nunca vi entrega tão rápida, virei cliente fiel da loja."</p>
+          <div class="flex items-center gap-3">
+            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-bold text-white">L</span>
+            <div>
+              <p class="text-sm font-bold text-white">Lucas M.</p>
+              <p class="text-xs text-muted">Compra verificada</p>
+            </div>
+          </div>
+        </div>
+        <div class="card-hover rounded-2xl border border-border bg-surface2/60 p-6">
+          <div class="mb-3 text-accent">★★★★★</div>
+          <p class="mb-5 text-sm leading-relaxed text-muted">"Suporte respondeu rápido quando tive uma dúvida sobre o plano. Pagamento via Pix é super prático e seguro."</p>
+          <div class="flex items-center gap-3">
+            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-bold text-white">A</span>
+            <div>
+              <p class="text-sm font-bold text-white">Ana P.</p>
+              <p class="text-xs text-muted">Compra verificada</p>
+            </div>
+          </div>
+        </div>
+        <div class="card-hover rounded-2xl border border-border bg-surface2/60 p-6">
+          <div class="mb-3 text-accent">★★★★★</div>
+          <p class="mb-5 text-sm leading-relaxed text-muted">"Já é a terceira vez que compro aqui. Preço justo, entrega automática e site muito bem organizado."</p>
+          <div class="flex items-center gap-3">
+            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-bold text-white">R</span>
+            <div>
+              <p class="text-sm font-bold text-white">Rafael S.</p>
+              <p class="text-xs text-muted">Compra verificada</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" class="py-16">
+    <div class="mx-auto max-w-3xl px-4">
+      <div class="mb-10 text-center">
+        <h2 class="section-title-underline inline-block font-display text-2xl font-bold uppercase tracking-wide text-white sm:text-3xl">Perguntas frequentes</h2>
+        <p class="mx-auto mt-5 max-w-lg text-sm text-muted">Ainda com dúvidas? Aqui estão as respostas mais comuns antes de finalizar sua compra.</p>
+      </div>
+      <div class="flex flex-col gap-3">
+        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5" open>
+          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
+            Como recebo meu produto após o pagamento?
+            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
+          </summary>
+          <p class="mt-3 text-sm leading-relaxed text-muted">A liberação é automática assim que o pagamento via Pix é confirmado. Você recebe o acesso na hora, direto por e-mail ou no seu painel.</p>
+        </details>
+        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5">
+          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
+            O pagamento via Pix é seguro?
+            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
+          </summary>
+          <p class="mt-3 text-sm leading-relaxed text-muted">Sim. Todas as transações são processadas de forma segura e criptografada, e a liberação do produto só ocorre após a confirmação do pagamento.</p>
+        </details>
+        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5">
+          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
+            E se eu tiver problemas com o produto?
+            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
+          </summary>
+          <p class="mt-3 text-sm leading-relaxed text-muted">Nosso suporte está disponível 24/7 para resolver qualquer problema ou dúvida sobre sua compra rapidamente.</p>
+        </details>
+        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5">
+          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
+            Posso comprar mais de um produto de uma vez?
+            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
+          </summary>
+          <p class="mt-3 text-sm leading-relaxed text-muted">Sim! Você pode adicionar quantos produtos quiser ao carrinho e finalizar tudo em um único pagamento via Pix.</p>
+        </details>
+        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5">
+          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
+            As assinaturas renovam automaticamente?
+            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
+          </summary>
+          <p class="mt-3 text-sm leading-relaxed text-muted">Depende do plano escolhido. As condições de cada assinatura estão detalhadas na página do produto antes da compra.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <footer class="border-t border-border bg-surface py-10">
+    <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-sm text-muted sm:flex-row">
+      <div class="text-center sm:text-left">
+        <p class="mb-1 font-display text-lg font-bold text-white">NovaStore</p>
+        <p>© <span id="year"></span> Todos os direitos reservados.</p>
+      </div>
+      <button onclick="goToAdmin()" class="text-xs text-muted/50 hover:text-muted">área administrativa</button>
+    </div>
+  </footer>
+</div>
+
+<div id="view-admin" class="hidden">
+
+  <div id="admin-login-screen" class="flex min-h-screen items-center justify-center px-4 bg-grid-fade">
+    <form id="login-form" class="w-full max-w-sm rounded-2xl border border-border bg-surface p-8">
+      <div class="mb-6 text-center">
+        <div class="mb-3 text-3xl">🔒</div>
+        <h1 class="font-display text-xl font-bold uppercase">Painel Administrativo</h1>
+        <p class="text-sm text-muted">Entre com sua conta Supabase</p>
+      </div>
+      <div id="login-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+      <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
+      <input required type="email" id="login-email" class="mb-4 w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      <label class="mb-1 block text-xs font-semibold text-muted">Senha</label>
+      <input required type="password" id="login-password" class="mb-6 w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      <button class="w-full rounded-lg bg-primary py-2.5 font-bold text-white hover:bg-primaryhover">Entrar</button>
+      <p class="mt-4 text-center text-xs text-muted">Crie o usuário admin em: Supabase → Authentication → Users → Add user</p>
+      <button type="button" onclick="goToStore()" class="mt-3 block w-full text-center text-xs text-muted hover:text-white">← Voltar para a loja</button>
+    </form>
+  </div>
+
+  <div id="admin-panel-screen" class="hidden">
+    <header class="flex items-center justify-between border-b border-border bg-surface px-6 py-4">
+      <button onclick="goToStore()" class="font-display text-lg font-bold uppercase"><span class="gradient-text">Nova</span>Store
+        <span class="ml-2 rounded bg-primary/20 px-2 py-0.5 text-[10px] font-bold lilac">ADMIN</span>
+      </button>
+      <button onclick="logoutAdmin()" class="text-sm font-medium text-muted hover:text-white">Sair</button>
+    </header>
+
+    <main class="mx-auto max-w-5xl px-4 py-10">
+      <div class="mb-8 flex gap-2 border-b border-border">
+        <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="admin-tab-btn border-b-2 border-primary px-4 py-3 text-sm font-bold text-white">Produtos</button>
+        <button id="admin-tab-btn-appearance" onclick="switchAdminTab('appearance')" class="admin-tab-btn border-b-2 border-transparent px-4 py-3 text-sm font-bold text-muted hover:text-white">Aparência do site</button>
+      </div>
+
+      <section id="admin-tab-products">
+        <div class="mb-6 flex items-center justify-between">
+          <h1 class="font-display text-2xl font-bold uppercase">Produtos</h1>
+          <button onclick="openForm()" class="rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">+ Novo produto</button>
+        </div>
+
+        <div class="overflow-x-auto rounded-2xl border border-border bg-surface">
+          <table class="w-full text-left text-sm">
+            <thead class="border-b border-border text-muted">
+              <tr><th class="px-4 py-3">Produto</th><th class="px-4 py-3">Jogo</th><th class="px-4 py-3">Tipo</th><th class="px-4 py-3">Preço</th><th class="px-4 py-3">Status</th><th class="px-4 py-3 text-right">Ações</th></tr>
+            </thead>
+            <tbody id="products-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="admin-tab-appearance" class="hidden">
+        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Aparência do site</h1>
+        <div id="appearance-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+        <div id="appearance-success" class="hidden mb-4 rounded-lg bg-accent/10 px-3 py-2 text-sm text-accent"></div>
+
+        <div class="flex flex-col gap-8">
+
+          <div class="rounded-2xl border border-border bg-surface p-6">
+            <h2 class="mb-1 font-display text-lg font-bold uppercase">Banner do topo (Hero)</h2>
+            <p class="mb-4 text-sm text-muted">Imagem larga que aparece no topo do site, atrás do texto de destaque. Recomendado: imagem larga e grande, mínimo 1600×700px.</p>
+            <div class="flex flex-col items-start gap-4 sm:flex-row">
+              <div id="hero-image-preview" class="flex h-32 w-full max-w-xs items-center justify-center overflow-hidden rounded-lg border border-border bg-surface2 text-xs text-muted sm:w-72">Sem imagem</div>
+              <div class="flex flex-col gap-2">
+                <input type="file" id="hero-image-input" accept="image/*" class="text-sm text-muted" />
+                <p id="hero-upload-status" class="text-xs text-muted"></p>
+                <button type="button" onclick="removeHeroImage()" class="self-start text-xs font-bold text-red-400 hover:underline">Remover imagem</button>
+              </div>
+            </div>
+            <div class="mt-5">
+              <label class="mb-1 flex items-center justify-between text-xs font-semibold text-muted">
+                <span>Escurecimento sobre o banner (para legibilidade do texto)</span>
+                <span id="hero-overlay-value">35%</span>
+              </label>
+              <input type="range" id="hero-overlay-input" min="0" max="100" value="35" class="w-full accent-primary" />
+              <p class="mt-1 text-[11px] text-muted">Deixe em 0% para exibir a imagem sem nenhum véu escuro por cima.</p>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-border bg-surface p-6">
+            <h2 class="mb-1 font-display text-lg font-bold uppercase">Plano de fundo do site</h2>
+            <p class="mb-4 text-sm text-muted">Imagem de fundo aplicada em todas as páginas da loja, atrás do conteúdo (textura, cenário ou arte escura).</p>
+            <div class="flex flex-col items-start gap-4 sm:flex-row">
+              <div id="bg-image-preview" class="flex h-32 w-full max-w-xs items-center justify-center overflow-hidden rounded-lg border border-border bg-surface2 text-xs text-muted sm:w-72">Sem imagem</div>
+              <div class="flex flex-col gap-2">
+                <input type="file" id="bg-image-input" accept="image/*" class="text-sm text-muted" />
+                <p id="bg-upload-status" class="text-xs text-muted"></p>
+                <button type="button" onclick="removeBgImage()" class="self-start text-xs font-bold text-red-400 hover:underline">Remover imagem</button>
+              </div>
+            </div>
+            <div class="mt-5">
+              <label class="mb-1 flex items-center justify-between text-xs font-semibold text-muted">
+                <span>Intensidade do escurecimento (overlay)</span>
+                <span id="bg-overlay-value">85%</span>
+              </label>
+              <input type="range" id="bg-overlay-input" min="0" max="100" value="85" class="w-full accent-primary" />
+            </div>
+          </div>
+
+          <button id="appearance-save" onclick="saveSiteSettings()" class="self-start rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">Salvar aparência</button>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div id="form-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeForm()">
+  <div class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-surface p-6">
+    <div class="mb-5 flex items-center justify-between">
+      <h2 id="form-title" class="font-display text-xl font-bold uppercase">Novo produto</h2>
+      <button onclick="closeForm()" class="text-2xl text-muted hover:text-white leading-none">✕</button>
+    </div>
+    <div id="form-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+
+    <form id="product-form" class="flex flex-col gap-4">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Nome</label>
+          <input required id="f-name" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Jogo / Categoria</label>
+          <input id="f-category" list="category-options" placeholder="Ex: CS2, Minecraft, Rust, GTA V..."
+            class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+          <datalist id="category-options"></datalist>
+          <p class="mt-1 text-[11px] text-muted">Escolha um jogo já usado ou digite o nome de um jogo novo — ele aparece automaticamente na página principal.</p>
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-xs font-semibold text-muted">Descrição</label>
+        <textarea required id="f-description" rows="3" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary"></textarea>
+      </div>
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Tags rápidas (separadas por vírgula)</label>
+          <input id="f-tags" placeholder="Interno, Legit, Rage, Semi Rage" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Recursos incluídos (um por linha)</label>
+          <input id="f-features" placeholder="Skin Changer, ESP, Aimbot..." class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-2 block text-xs font-semibold text-muted">Imagem principal</label>
+        <div class="flex items-center gap-4">
+          <div id="image-preview" class="h-24 w-24 overflow-hidden rounded-lg border border-border bg-surface2"></div>
+          <input type="file" id="f-image" accept="image/*" class="text-sm text-muted" />
+        </div>
+        <p id="upload-status" class="mt-1 text-xs text-muted"></p>
+      </div>
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Tipo de venda</label>
+          <select id="f-type" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary">
+            <option value="UNICO">Compra única</option>
+            <option value="ASSINATURA">Assinatura (planos por dias)</option>
+          </select>
+        </div>
+        <div id="price-field">
+          <label class="mb-1 block text-xs font-semibold text-muted">Preço (R$)</label>
+          <input type="number" step="0.01" min="0" id="f-price" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div id="stock-field">
+          <label class="mb-1 block text-xs font-semibold text-muted">Estoque (vazio=ilimitado)</label>
+          <input type="number" min="0" id="f-stock" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+      </div>
+
+      <div id="plans-section" class="hidden">
+        <div class="mb-2 flex items-center justify-between">
+          <label class="text-xs font-semibold text-muted">Planos (dias e preço de cada um)</label>
+          <button type="button" onclick="addPlanRow()" class="text-xs font-bold hover:underline lilac">+ Adicionar plano</button>
+        </div>
+        <div id="plans-list" class="flex flex-col gap-3"></div>
+      </div>
+
+      <div class="flex items-center gap-6">
+        <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" id="f-featured" /> Destacar na home</label>
+        <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" id="f-active" checked /> Produto ativo</label>
+      </div>
+
+      <button id="form-submit" class="mt-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">Salvar produto</button>
+    </form>
+  </div>
+</div>
+
+<div id="product-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeProductModal()">
+  <div class="modal-scroll max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-border bg-surface" id="product-modal-content"></div>
+</div>
+
+<div id="cart-drawer" class="fixed inset-0 z-50 hidden justify-end">
+  <div class="absolute inset-0 modal-overlay" onclick="closeCart()"></div>
+  <div class="relative flex h-full w-full max-w-md flex-col border-l border-border bg-surface shadow-2xl">
+    <div class="flex items-center justify-between border-b border-border px-5 py-4">
+      <h2 class="font-display text-lg font-bold uppercase">Seu carrinho</h2>
+      <button onclick="closeCart()" class="text-muted hover:text-white text-xl leading-none">✕</button>
+    </div>
+    <div id="cart-items" class="flex-1 overflow-y-auto px-5 py-4"></div>
+    <div id="cart-offers" class="px-5"></div>
+    <div id="cart-footer" class="hidden border-t border-border px-5 py-4">
+      <div class="mb-3 flex items-center justify-between text-sm">
+        <span class="text-muted">Total</span>
+        <span id="cart-total" class="text-xl font-extrabold text-white"></span>
+      </div>
+      <button onclick="openCheckout()" class="block w-full rounded-xl bg-primary py-3 text-center font-bold text-white shadow-glow hover:bg-primaryhover">
+        Finalizar compra via Pix
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="checkout-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeCheckout()">
+  <div class="w-full max-w-md rounded-2xl border border-border bg-surface p-6" id="checkout-content"></div>
+</div>
+
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const supabase = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+document.getElementById("year").textContent = new Date().getFullYear();
+
+const fmt = (v) => Number(v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+/* ---------------- Game categories (used for filter bar, card tags, and admin select) ---------------- */
+
+function icon(path, extra = "") {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="cat-icon h-5 w-5">${path}</svg>${extra}`;
+}
+
+const ALL_ICON = icon('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>');
+const GENERIC_GAME_ICON = icon('<rect x="2" y="8" width="20" height="9" rx="4.5"/><circle cx="8" cy="12.5" r="1"/><path d="M6 12.5h4"/><path d="M15.2 11.3h.01M17.6 13.2h.01"/>');
+
+/* jogos conhecidos de fábrica (ganham um ícone bonitinho); qualquer outro nome digitado no admin
+   também funciona normalmente, só usa um ícone genérico de controle */
+const GAME_CATEGORIES = [
+  { key: "CS2",       label: "CS2",       icon: icon('<circle cx="12" cy="12" r="8"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/>') },
+  { key: "VALORANT",  label: "Valorant",  icon: icon('<path d="M4 12l6-8 10 8-10 8z"/>') },
+  { key: "WARZONE",   label: "Warzone",   icon: icon('<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/>') },
+  { key: "R6S",       label: "R6S",       icon: icon('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/>') },
+  { key: "FORTNITE",  label: "Fortnite",  icon: icon('<path d="M6 3v18l6-4 6 4V3z"/>') },
+  { key: "CSGOS",     label: "CS:GOS",    icon: icon('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.4"/>') },
+  { key: "POOFER",    label: "Poofer",    icon: icon('<path d="M12 2l1.8 5.6L19 9l-5.2 1.4L12 16l-1.8-5.6L5 9l5.2-1.4z"/>') },
+  { key: "DAYZ",      label: "Dayz",      icon: icon('<circle cx="12" cy="12" r="8"/><path d="M12 8v1M9 15.5a3.5 3 0 016 0M8.5 11a1 1 0 100-2M15.5 11a1 1 0 100-2"/>') },
+  { key: "FIVEM",     label: "Fivem",     icon: icon('<path d="M4 16l1.5-5.5A2 2 0 017.4 9h9.2a2 2 0 011.9 1.5L20 16M4 16h16M6.5 16v2.5M17.5 16v2.5M6 12.5h12"/>') },
+  { key: "UNTURNED",  label: "Unturned",  icon: icon('<path d="M12 2l8 4.6v10.8L12 22l-8-4.6V6.6z"/><path d="M12 2v20M4 6.6l8 4.6 8-4.6"/>') },
+];
+const CATEGORY_MAP = Object.fromEntries(GAME_CATEGORIES.map(c => [c.key, c]));
+
+/* funciona para QUALQUER categoria — conhecida ou digitada na hora pelo admin */
+function categoryMeta(key) {
+  if (!key) return null;
+  const known = CATEGORY_MAP[key.toUpperCase?.() ?? key];
+  if (known) return known;
+  return { key, label: key, icon: GENERIC_GAME_ICON };
+}
+
+/* lista de categorias já usadas nos produtos + os jogos conhecidos, pra sugestão no admin */
+function populateCategoryOptions() {
+  const dl = document.getElementById("category-options");
+  if (!dl) return;
+  const used = ALL_PRODUCTS.map((p) => p.category).filter(Boolean);
+  const known = GAME_CATEGORIES.map((c) => c.label);
+  const all = [...new Set([...known, ...used])];
+  dl.innerHTML = all.map((c) => `<option value="${c}">`).join("");
+}
+
+/* monta a barra de categorias da home a partir dos jogos que realmente existem nos produtos —
+   assim que um jogo novo é cadastrado, o botão dele aparece sozinho aqui */
+const categoryBarEl = document.getElementById("category-bar");
+
+function buildCategoryBar() {
+  const distinct = [...new Set(ALL_PRODUCTS.map((p) => p.category).filter(Boolean))];
+  const knownOrder = GAME_CATEGORIES.map((c) => c.key);
+  distinct.sort((a, b) => {
+    const ai = knownOrder.indexOf(a.toUpperCase?.() ?? a);
+    const bi = knownOrder.indexOf(b.toUpperCase?.() ?? b);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
+  const items = [{ key: null, label: "Todos", icon: ALL_ICON }, ...distinct.map((k) => categoryMeta(k))];
+
+  categoryBarEl.innerHTML = items.map((c) => `
+    <button data-cat="${c.key ?? ""}" onclick='filterCategory(${JSON.stringify(c.key)})'
+      class="cat-btn ${(c.key || null) === (currentCategory || null) ? "is-active" : ""} flex shrink-0 flex-col items-center gap-1.5 rounded-xl border border-border bg-surface px-5 py-3 text-xs font-bold text-muted hover:border-primary/50">
+      ${c.icon}
+      <span>${c.label}</span>
+    </button>`).join("");
+}
+
+/* ---------------- State ---------------- */
+
+let ALL_PRODUCTS = [];
+let currentCategory = null;
+let searchQuery = "";
+let cart = JSON.parse(localStorage.getItem("cart") || "[]");
+let currentImageUrl = "";
+let editingId = null;
+let paymentPollTimer = null;
+
+let SITE_SETTINGS = { hero_image_url: null, hero_overlay: 0.35, background_image_url: null, background_overlay: 0.85 };
+let currentHeroUrl = "";
+let currentBgUrl = "";
+
+function route() {
+  if (location.hash === "#admin") {
+    document.getElementById("view-store").classList.add("hidden");
+    document.getElementById("view-admin").classList.remove("hidden");
+    checkAdminSession();
+  } else {
+    document.getElementById("view-admin").classList.add("hidden");
+    document.getElementById("view-store").classList.remove("hidden");
+  }
+}
+window.addEventListener("hashchange", route);
+window.goToAdmin = () => { location.hash = "#admin"; };
+window.goToStore = () => { location.hash = ""; };
+
+/* ---------------- Site-wide appearance (background + hero banner) ---------------- */
+
+async function loadSiteSettings() {
+  try {
+    const { data, error } = await supabase.from("site_settings").select("*").eq("id", 1).maybeSingle();
+    if (error) throw error;
+    if (data) SITE_SETTINGS = data;
+  } catch (err) {
+    console.warn("Configurações de aparência não carregadas (tabela site_settings pode não existir ainda):", err.message || err);
+  }
+  applySiteSettings(SITE_SETTINGS);
+}
+
+function applySiteSettings(s) {
+  const body = document.body;
+  if (s.background_image_url) {
+    document.documentElement.style.setProperty("--site-bg-image", `url("${s.background_image_url}")`);
+    document.documentElement.style.setProperty("--site-bg-overlay", String(s.background_overlay ?? 0.85));
+    body.classList.add("has-custom-bg");
+  } else {
+    body.classList.remove("has-custom-bg");
+  }
+
+  const heroSection = document.getElementById("hero-section");
+  document.documentElement.style.setProperty("--hero-overlay", String(s.hero_overlay ?? 0.35));
+  if (s.hero_image_url) {
+    heroSection.style.backgroundImage = `url("${s.hero_image_url}")`;
+  } else {
+    heroSection.style.backgroundImage = "";
+  }
+}
+
+window.switchAdminTab = (tab) => {
+  const isProducts = tab === "products";
+  document.getElementById("admin-tab-products").classList.toggle("hidden", !isProducts);
+  document.getElementById("admin-tab-appearance").classList.toggle("hidden", isProducts);
+  document.getElementById("admin-tab-btn-products").classList.toggle("border-primary", isProducts);
+  document.getElementById("admin-tab-btn-products").classList.toggle("text-white", isProducts);
+  document.getElementById("admin-tab-btn-products").classList.toggle("border-transparent", !isProducts);
+  document.getElementById("admin-tab-btn-products").classList.toggle("text-muted", !isProducts);
+  document.getElementById("admin-tab-btn-appearance").classList.toggle("border-primary", !isProducts);
+  document.getElementById("admin-tab-btn-appearance").classList.toggle("text-white", !isProducts);
+  document.getElementById("admin-tab-btn-appearance").classList.toggle("border-transparent", isProducts);
+  document.getElementById("admin-tab-btn-appearance").classList.toggle("text-muted", isProducts);
+  if (!isProducts) populateAppearanceForm();
+};
+
+function populateAppearanceForm() {
+  currentHeroUrl = SITE_SETTINGS.hero_image_url || "";
+  currentBgUrl = SITE_SETTINGS.background_image_url || "";
+  const overlayPct = Math.round((SITE_SETTINGS.background_overlay ?? 0.85) * 100);
+  const heroOverlayPct = Math.round((SITE_SETTINGS.hero_overlay ?? 0.35) * 100);
+  document.getElementById("hero-image-preview").innerHTML = currentHeroUrl ? `<img src="${currentHeroUrl}" class="h-full w-full object-cover" />` : "Sem imagem";
+  document.getElementById("bg-image-preview").innerHTML = currentBgUrl ? `<img src="${currentBgUrl}" class="h-full w-full object-cover" />` : "Sem imagem";
+  document.getElementById("hero-overlay-input").value = heroOverlayPct;
+  document.getElementById("hero-overlay-value").textContent = heroOverlayPct + "%";
+  document.getElementById("bg-overlay-input").value = overlayPct;
+  document.getElementById("bg-overlay-value").textContent = overlayPct + "%";
+  document.getElementById("appearance-error").classList.add("hidden");
+  document.getElementById("appearance-success").classList.add("hidden");
+}
+
+document.getElementById("hero-overlay-input").addEventListener("input", (e) => {
+  document.getElementById("hero-overlay-value").textContent = e.target.value + "%";
+});
+
+document.getElementById("bg-overlay-input").addEventListener("input", (e) => {
+  document.getElementById("bg-overlay-value").textContent = e.target.value + "%";
+});
+
+async function uploadSiteAsset(file, prefix) {
+  const path = `${prefix}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "")}`;
+  const { error } = await supabase.storage.from("site-assets").upload(path, file, { upsert: true });
+  if (error) throw error;
+  const { data } = supabase.storage.from("site-assets").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+document.getElementById("hero-image-input").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById("hero-upload-status");
+  statusEl.textContent = "Enviando imagem...";
+  try {
+    currentHeroUrl = await uploadSiteAsset(file, "hero");
+    document.getElementById("hero-image-preview").innerHTML = `<img src="${currentHeroUrl}" class="h-full w-full object-cover" />`;
+    statusEl.textContent = "Imagem enviada ✓";
+  } catch (err) {
+    statusEl.textContent = "Erro no upload: " + err.message;
+  }
+};
+
+document.getElementById("bg-image-input").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById("bg-upload-status");
+  statusEl.textContent = "Enviando imagem...";
+  try {
+    currentBgUrl = await uploadSiteAsset(file, "background");
+    document.getElementById("bg-image-preview").innerHTML = `<img src="${currentBgUrl}" class="h-full w-full object-cover" />`;
+    statusEl.textContent = "Imagem enviada ✓";
+  } catch (err) {
+    statusEl.textContent = "Erro no upload: " + err.message;
+  }
+};
+
+window.removeHeroImage = () => {
+  currentHeroUrl = "";
+  document.getElementById("hero-image-preview").innerHTML = "Sem imagem";
+  document.getElementById("hero-upload-status").textContent = "";
+};
+
+window.removeBgImage = () => {
+  currentBgUrl = "";
+  document.getElementById("bg-image-preview").innerHTML = "Sem imagem";
+  document.getElementById("bg-upload-status").textContent = "";
+};
+
+window.saveSiteSettings = async () => {
+  const btn = document.getElementById("appearance-save");
+  const errEl = document.getElementById("appearance-error");
+  const okEl = document.getElementById("appearance-success");
+  errEl.classList.add("hidden");
+  okEl.classList.add("hidden");
+  btn.disabled = true;
+  btn.textContent = "Salvando...";
+
+  const overlay = Number(document.getElementById("bg-overlay-input").value) / 100;
+  const heroOverlay = Number(document.getElementById("hero-overlay-input").value) / 100;
+  const payload = {
+    id: 1,
+    hero_image_url: currentHeroUrl || null,
+    hero_overlay: heroOverlay,
+    background_image_url: currentBgUrl || null,
+    background_overlay: overlay,
+  };
+
+  const { error } = await supabase.from("site_settings").upsert(payload);
+  btn.disabled = false;
+  btn.textContent = "Salvar aparência";
+
+  if (error) {
+    errEl.textContent = "Erro ao salvar: " + error.message;
+    errEl.classList.remove("hidden");
+    return;
+  }
+
+  SITE_SETTINGS = payload;
+  applySiteSettings(SITE_SETTINGS);
+  okEl.textContent = "Aparência salva com sucesso ✓";
+  okEl.classList.remove("hidden");
+};
+
+async function loadProducts() {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("active", true)
+    .order("featured", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  document.getElementById("loading").classList.add("hidden");
+
+  if (error) {
+    document.getElementById("products-grid").innerHTML =
+      `<p class="text-red-400 col-span-full">Erro ao carregar produtos: ${error.message}. Confira as credenciais do Supabase no topo do arquivo.</p>`;
+    return;
+  }
+
+  ALL_PRODUCTS = data || [];
+  buildCategoryBar();
+  populateCategoryOptions();
+  renderProducts();
+}
+
+window.filterCategory = (key) => {
+  currentCategory = key;
+  document.querySelectorAll(".cat-btn").forEach((btn) => {
+    btn.classList.toggle("is-active", (btn.dataset.cat || null) === (key || null));
+  });
+  renderProducts();
+};
+
+document.getElementById("search-input").addEventListener("input", (e) => {
+  searchQuery = e.target.value.trim().toLowerCase();
+  renderProducts();
+});
+
+function renderProducts() {
+  const grid = document.getElementById("products-grid");
+  let list = ALL_PRODUCTS;
+  if (currentCategory) list = list.filter((p) => p.category === currentCategory);
+  if (searchQuery) list = list.filter((p) => p.name.toLowerCase().includes(searchQuery));
+  document.getElementById("empty-state").classList.toggle("hidden", list.length !== 0);
+  grid.innerHTML = list.map((p, i) => productCardHTML(p, i)).join("");
+}
+
+function minPlanPrice(product) {
+  if (!product.plans || product.plans.length === 0) return null;
+  return Math.min(...product.plans.map((p) => Number(p.price)));
+}
+
+/* número de "compras" fixo por produto (15 a 44), calculado a partir do próprio id */
+function purchaseCount(id) {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return 15 + (hash % (44 - 15 + 1));
+}
+
+function parseTags(p) {
+  if (Array.isArray(p.tags) && p.tags.length) return p.tags;
+  return [];
+}
+function parseFeatures(p) {
+  if (Array.isArray(p.features) && p.features.length) return p.features;
+  return [];
+}
+
+function scarcityBadge(p, i = 0) {
+  // Distribui as tags de urgência de forma determinística entre os cards
+  const pool = [
+    { label: "🔥 Mais vendido", cls: "badge-hot" },
+    { label: "⏳ Oferta limitada", cls: "badge-shine" },
+    { label: "⚡ Últimas unidades", cls: "badge-last" },
+  ];
+  const seed = (String(p.id).length + i) % 5;
+  if (seed === 3) return null; // nem todo card precisa de badge
+  const pick = pool[(String(p.id).length + i) % pool.length];
+  return pick;
+}
+
+function productCardHTML(p, i = 0) {
+  const price = p.type === "ASSINATURA" ? minPlanPrice(p) : p.price;
+  const cat = categoryMeta(p.category);
+  const tags = parseTags(p);
+  const delay = Math.min(i, 11) * 70;
+  const badge = scarcityBadge(p, i);
+  return `
+  <div class="product-card card-in group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border bg-surface"
+       style="animation-delay:${delay}ms"
+       onclick='shockThenOpen(event, ${JSON.stringify(p.id)})'>
+    ${badge ? `<span class="${badge.cls} absolute left-3 top-3 z-10 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide text-black shadow-lg">${badge.label}</span>` : ""}
+    <div class="relative aspect-[1/1] w-full overflow-hidden bg-surface2">
+      ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />` : `<div class="flex h-full items-center justify-center text-muted">Sem imagem</div>`}
+      <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
+      ${cat ? `<span class="absolute left-3 ${badge ? "top-11" : "top-3"} flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white backdrop-blur">${cat.icon}${cat.label}</span>` : ""}
+      ${p.type === "ASSINATURA" ? `<span class="absolute right-3 top-3 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white">Assinatura</span>` : ""}
+    </div>
+    <div class="flex flex-1 flex-col gap-2.5 p-5">
+      <h3 class="font-display text-xl font-bold uppercase leading-tight">${p.name}</h3>
+      ${tags.length ? `<p class="line-clamp-1 text-sm font-medium text-muted">${tags.join(" • ")}</p>` : `<p class="line-clamp-2 text-sm text-muted">${p.description || ""}</p>`}
+      <div class="mt-auto pt-3">
+        <p class="text-2xl font-extrabold text-white">${p.type === "ASSINATURA" ? `<span class="mr-1 text-xs font-medium text-muted">a partir de</span>` : ""}${price != null ? fmt(price) : "Consultar"}</p>
+        <button onclick='event.stopPropagation(); shockThenOpen(event, ${JSON.stringify(p.id)})' class="glow-cta btn-press mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-3 text-sm font-bold text-white hover:bg-primaryhover">
+          Comprar agora <span>→</span>
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* efeito de "choque" no card ao clicar, antes de abrir o produto */
+window.shockThenOpen = (evt, id) => {
+  const card = evt.currentTarget?.closest?.(".product-card") || evt.target.closest(".product-card");
+  if (card) {
+    card.classList.remove("shock-click");
+    void card.offsetWidth; // reinicia a animação
+    card.classList.add("shock-click");
+  }
+  // evita que o efeito de inclinação (tilt) fique "preso" num card quando a modal
+  // abre por cima do grid (o mouse "sai" do card sem disparar mouseleave)
+  document.querySelectorAll(".product-card.tilt").forEach(resetTilt);
+  openProductModal(id);
+};
+
+/* spotlight elétrico + inclinação 3D (tilt) que seguem o mouse em cima dos cards */
+const productsGridEl = document.getElementById("products-grid");
+
+productsGridEl.addEventListener("mousemove", (e) => {
+  const card = e.target.closest(".product-card");
+  document.querySelectorAll(".product-card.tilt").forEach((c) => { if (c !== card) resetTilt(c); });
+  if (!card) return;
+
+  const rect = card.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  card.style.setProperty("--x", `${x}px`);
+  card.style.setProperty("--y", `${y}px`);
+
+  const rx = ((x / rect.width) - 0.5) * 12;
+  const ry = ((y / rect.height) - 0.5) * -12;
+  card.style.setProperty("--rx", `${rx}deg`);
+  card.style.setProperty("--ry", `${ry}deg`);
+  card.classList.add("tilt");
+});
+
+productsGridEl.addEventListener("mouseleave", () => {
+  document.querySelectorAll(".product-card.tilt").forEach(resetTilt);
+});
+
+function resetTilt(card) {
+  card.classList.remove("tilt");
+  card.style.removeProperty("--rx");
+  card.style.removeProperty("--ry");
+}
+
+/* ---------------- Product detail modal ---------------- */
+
+window.openProductModal = (id) => {
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  if (!p) return;
+
+  const cat = categoryMeta(p.category);
+  const tags = parseTags(p);
+  const features = parseFeatures(p);
+  const isSub = p.type === "ASSINATURA";
+  const plans = p.plans || [];
+
+  const plansHTML = plans.map((plan, i) => `
+    <button type="button" data-plan-index="${i}" onclick='selectPlan(${JSON.stringify(id)}, ${i})'
+      class="plan-card ${i === 0 ? "is-selected" : ""} rounded-xl border border-border bg-surface2 p-3.5 text-left hover:border-primary/50">
+      <div class="mb-2 flex items-center gap-2">
+        <span class="plan-radio flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border"></span>
+        <p class="text-sm font-bold">${plan.name}</p>
+      </div>
+      <p class="text-base font-extrabold text-white">${fmt(plan.price)}</p>
+    </button>`).join("");
+
+  const featuresHTML = features.length ? `
+    <div class="mb-6">
+      <p class="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Recursos incluídos</p>
+      <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        ${features.map((f) => `
+          <div class="flex items-center gap-2 text-sm">
+            <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">✓</span>
+            ${f}
+          </div>`).join("")}
+      </div>
+    </div>` : "";
+
+  const initialPrice = isSub ? (plans[0] ? plans[0].price : null) : p.price;
+
+  document.getElementById("product-modal-content").innerHTML = `
+    <div class="grid grid-cols-1 lg:grid-cols-[1.1fr_1.3fr_0.9fr]">
+
+      <div class="relative border-b border-border p-6 lg:border-b-0 lg:border-r">
+        <button onclick="closeProductModal()" class="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-lg text-white hover:bg-black/70 lg:hidden">✕</button>
+        <div class="modal-image-frame rounded-xl border border-border bg-surface2">
+          ${p.image_url
+            ? `<img src="${p.image_url}" class="aspect-[4/5] w-full object-cover" />`
+            : `<div class="flex aspect-[4/5] items-center justify-center text-muted">Sem imagem</div>`}
+        </div>
+        <div class="purchase-badge mt-4 flex items-center justify-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-2 text-xs font-bold text-accent">
+          🔥 ${purchaseCount(p.id)} pessoas compraram recentemente
+        </div>
+      </div>
+
+      <div class="relative p-6 lg:p-7">
+        <button onclick="closeProductModal()" class="absolute right-5 top-5 hidden text-2xl text-muted hover:text-white leading-none lg:block">✕</button>
+        ${cat ? `<span class="mb-3 inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wide lilac">${cat.icon}${cat.label}</span>` : ""}
+        <h2 class="mb-3 font-display text-2xl font-bold uppercase leading-tight sm:text-3xl">${p.name}</h2>
+        ${tags.length ? `<div class="mb-4 flex flex-wrap gap-2">${tags.map((t) => `<span class="tag-chip rounded-full px-2.5 py-1 text-[11px] font-bold">${t}</span>`).join("")}</div>` : ""}
+        <p class="mb-6 leading-relaxed text-muted">${p.description || ""}</p>
+
+        ${featuresHTML}
+
+        ${isSub ? `
+          <p class="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Escolha o plano</p>
+          <div id="plans-grid" class="grid grid-cols-2 gap-3 sm:grid-cols-2">${plansHTML}</div>
+        ` : ""}
+      </div>
+
+      <div class="flex flex-col gap-5 border-t border-border bg-surface2/60 p-6 lg:border-l lg:border-t-0">
+        <div class="flex items-center gap-2 font-display text-base font-bold uppercase">
+          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-primary to-[#4b2fd6] text-xs font-black text-white">N</span>
+          <span class="gradient-text">Nova</span>Store
+        </div>
+
+        <div>
+          <p class="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Total</p>
+          <p id="modal-price" class="font-display text-3xl font-bold text-white">${initialPrice != null ? fmt(initialPrice) : "Selecione um plano"}</p>
+        </div>
+
+        <div class="flex flex-col gap-2.5">
+          <button onclick='buyNowFromModal(${JSON.stringify(id)})' class="glow-cta w-full rounded-xl bg-primary py-3.5 font-bold text-white hover:bg-primaryhover active:scale-[0.98] transition-transform">
+            Comprar agora
+          </button>
+          <button onclick='addToCartFromModal(${JSON.stringify(id)})' class="flex w-full items-center justify-center gap-2 rounded-xl border border-border py-3 font-bold text-white hover:border-primary/60 active:scale-[0.98] transition-transform">
+            🛒 Adicionar ao carrinho
+          </button>
+        </div>
+
+        <div class="mt-2 grid grid-cols-3 gap-2 border-t border-border pt-5 text-center text-[11px] text-muted">
+          <div><p class="mb-1 lilac">⚡</p>Pagamento via Pix<br/>Liberação imediata</div>
+          <div><p class="mb-1 lilac">🎧</p>Suporte 24/7<br/>Tire suas dúvidas</div>
+          <div><p class="mb-1 lilac">🛡️</p>Compra segura<br/>Seus dados protegidos</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  window._selectedPlan = isSub ? 0 : null;
+  window._productModalClosing = false;
+  const overlay = document.getElementById("product-modal");
+  const content = document.getElementById("product-modal-content");
+  overlay.classList.remove("hidden", "modal-fade-out");
+  overlay.classList.add("flex");
+  content.classList.remove("modal-pop-out");
+  content.classList.add("modal-pop-in");
+};
+
+window.selectPlan = (id, index) => {
+  window._selectedPlan = index;
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  document.getElementById("modal-price").textContent = fmt(p.plans[index].price);
+  document.querySelectorAll(".plan-card").forEach((card, i) => {
+    card.classList.toggle("is-selected", i === index);
+  });
+};
+
+window.closeProductModal = () => {
+  if (window._productModalClosing) return;
+  window._productModalClosing = true;
+  const content = document.getElementById("product-modal-content");
+  const overlay = document.getElementById("product-modal");
+
+  // Evita estados de animação presos e garante que o card aberto volte à grade
+  // sem alterar a categoria ou a busca atuais.
+  content.classList.remove("modal-pop-in");
+  content.classList.add("modal-pop-out");
+  overlay.classList.add("modal-fade-out");
+  document.querySelectorAll(".product-card.tilt").forEach(resetTilt);
+
+  setTimeout(() => {
+    overlay.classList.add("hidden");
+    overlay.classList.remove("flex", "modal-fade-out");
+    content.classList.remove("modal-pop-out");
+
+    // Re-renderiza somente a apresentação atual da loja. Isso corrige o caso
+    // em que o card fica invisível após fechar pelo X, sem limpar filtros.
+    renderProducts();
+    window._productModalClosing = false;
+  }, 160);
+};
+
+function cartItemFromProduct(p) {
+  if (p.type === "ASSINATURA") {
+    const plan = p.plans[window._selectedPlan ?? 0];
+    return { key: `${p.id}-${window._selectedPlan}`, productId: p.id, planId: String(window._selectedPlan),
+      name: p.name, planName: plan.name, price: plan.price, image: p.image_url };
+  }
+  return { key: p.id, productId: p.id, name: p.name, price: p.price, image: p.image_url };
+}
+
+window.addToCartFromModal = (id) => {
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  addToCart(cartItemFromProduct(p));
+  closeProductModal();
+  openCart();
+};
+
+window.buyNowFromModal = (id) => {
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  addToCart(cartItemFromProduct(p));
+  closeProductModal();
+  openCheckout();
+};
+
+function saveCart() { localStorage.setItem("cart", JSON.stringify(cart)); renderCart(); }
+
+function addToCart(item, qty = 1) {
+  const existing = cart.find((i) => i.key === item.key);
+  if (existing) existing.quantity += qty; else cart.push({ ...item, quantity: qty });
+  saveCart();
+}
+
+window.updateQty = (key, delta) => {
+  const item = cart.find((i) => i.key === key);
+  if (!item) return;
+  item.quantity = Math.max(1, item.quantity + delta);
+  saveCart();
+};
+
+window.removeFromCart = (key) => { cart = cart.filter((i) => i.key !== key); saveCart(); };
+function cartTotal() { return cart.reduce((s, i) => s + i.price * i.quantity, 0); }
+
+async function renderCart() {
+  const countEl = document.getElementById("cart-count");
+  const count = cart.reduce((s, i) => s + i.quantity, 0);
+  countEl.textContent = count;
+  countEl.classList.toggle("hidden", count === 0);
+  countEl.classList.toggle("flex", count > 0);
+
+  const itemsEl = document.getElementById("cart-items");
+  const footerEl = document.getElementById("cart-footer");
+
+  if (cart.length === 0) {
+    itemsEl.innerHTML = `<div class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted py-10">
+      <p class="font-medium">Seu carrinho está vazio</p><p class="text-sm">Adicione um produto para começar.</p></div>`;
+    footerEl.classList.add("hidden");
+  } else {
+    itemsEl.innerHTML = cart.map((i) => `
+      <div class="mb-3 flex gap-3 rounded-xl border border-border bg-surface2 p-3">
+        <div class="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-bg">
+          ${i.image ? `<img src="${i.image}" class="h-full w-full object-cover" />` : ""}
+        </div>
+        <div class="flex flex-1 flex-col justify-between">
+          <div>
+            <p class="text-sm font-semibold leading-tight">${i.name}</p>
+            ${i.planName ? `<p class="text-xs lilac">${i.planName}</p>` : ""}
+          </div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <button onclick="updateQty('${i.key}',-1)" class="rounded-md border border-border px-1.5 text-muted hover:text-white">-</button>
+              <span class="w-4 text-center text-sm">${i.quantity}</span>
+              <button onclick="updateQty('${i.key}',1)" class="rounded-md border border-border px-1.5 text-muted hover:text-white">+</button>
+            </div>
+            <span class="text-sm font-bold text-white">${fmt(i.price * i.quantity)}</span>
+          </div>
+        </div>
+        <button onclick="removeFromCart('${i.key}')" class="self-start text-muted hover:text-red-400">🗑</button>
+      </div>`).join("");
+    footerEl.classList.remove("hidden");
+    document.getElementById("cart-total").textContent = fmt(cartTotal());
+  }
+
+  await renderOffers();
+}
+
+async function renderOffers() {
+  const offersEl = document.getElementById("cart-offers");
+  if (cart.length === 0 || ALL_PRODUCTS.length === 0) { offersEl.innerHTML = ""; return; }
+  const shuffled = [...ALL_PRODUCTS].sort(() => Math.random() - 0.5).slice(0, 2);
+  offersEl.innerHTML = `
+    <div class="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
+      <div class="mb-3 flex items-center gap-2 text-sm font-bold lilac">✨ Oferta especial pra você</div>
+      <div class="flex flex-col gap-3">
+        ${shuffled.map((p) => {
+          const price = p.type === "ASSINATURA" ? minPlanPrice(p) : p.price;
+          return `
+          <div class="flex items-center gap-3 rounded-lg border border-border bg-surface2 p-2">
+            <div class="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-bg">
+              ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover" />` : ""}
+            </div>
+            <div class="flex-1">
+              <p class="text-xs font-semibold leading-tight">${p.name}</p>
+              ${price != null ? `<p class="text-xs text-white">${fmt(price)}</p>` : ""}
+            </div>
+            <button onclick='quickAdd(${JSON.stringify(p.id)})' class="rounded-md bg-primary px-2 py-1 text-xs font-bold text-white hover:bg-primaryhover">+ Add</button>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`;
+}
+
+window.quickAdd = (id) => {
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  if (!p) return;
+  if (p.type === "ASSINATURA" && p.plans?.length) {
+    addToCart({ key: `${p.id}-0`, productId: p.id, planId: "0", name: p.name, planName: p.plans[0].name, price: p.plans[0].price, image: p.image_url });
+  } else if (p.price != null) {
+    addToCart({ key: p.id, productId: p.id, name: p.name, price: p.price, image: p.image_url });
+  }
+};
+
+window.openCart = () => { document.getElementById("cart-drawer").classList.remove("hidden"); document.getElementById("cart-drawer").classList.add("flex"); };
+window.closeCart = () => { document.getElementById("cart-drawer").classList.add("hidden"); document.getElementById("cart-drawer").classList.remove("flex"); };
+
+window.openCheckout = () => {
+  closeCart();
+  document.getElementById("checkout-content").innerHTML = `
+    <h2 class="mb-5 font-display text-2xl font-bold uppercase">Finalizar compra</h2>
+    <div class="mb-5 rounded-xl border border-border bg-surface2 p-4 flex justify-between text-sm">
+      <span class="text-muted">${cart.reduce((s, i) => s + i.quantity, 0)} item(ns)</span>
+      <span class="font-bold text-white">${fmt(cartTotal())}</span>
+    </div>
+    <div id="checkout-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+    <form id="checkout-form" class="flex flex-col gap-4">
+      <div>
+        <label class="mb-1 block text-xs font-semibold text-muted">Nome completo</label>
+        <input required id="checkout-name" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      </div>
+      <div>
+        <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
+        <input required type="email" id="checkout-email" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      </div>
+      <button id="checkout-submit" class="mt-2 rounded-xl bg-primary py-3.5 font-bold text-white shadow-glow hover:bg-primaryhover">Gerar Pix e pagar</button>
+    </form>
+  `;
+  document.getElementById("checkout-form").onsubmit = submitCheckout;
+  document.getElementById("checkout-modal").classList.remove("hidden");
+  document.getElementById("checkout-modal").classList.add("flex");
+};
+
+window.closeCheckout = () => {
+  document.getElementById("checkout-modal").classList.add("hidden");
+  document.getElementById("checkout-modal").classList.remove("flex");
+  if (paymentPollTimer) { clearInterval(paymentPollTimer); paymentPollTimer = null; }
+};
+
+async function submitCheckout(e) {
+  e.preventDefault();
+  const btn = document.getElementById("checkout-submit");
+  const errEl = document.getElementById("checkout-error");
+  errEl.classList.add("hidden");
+  btn.disabled = true;
+  btn.textContent = "Gerando Pix...";
+
+  const name = document.getElementById("checkout-name").value;
+  const email = document.getElementById("checkout-email").value;
+
+  try {
+    const { data, error } = await supabase.rpc("criar_pix", {
+      p_name: name,
+      p_email: email,
+      p_items: cart.map((i) => ({ productId: i.productId, planId: i.planId ?? null, name: i.name, planName: i.planName ?? null, price: i.price, quantity: i.quantity })),
+    });
+
+    if (error || (data && data.error)) {
+      errEl.textContent = (data && data.error) || error?.message || "Erro ao gerar o Pix.";
+      errEl.classList.remove("hidden");
+      btn.disabled = false;
+      btn.textContent = "Gerar Pix e pagar";
+      return;
+    }
+
+    cart = [];
+    saveCart();
+    renderPixScreen(data);
+  } catch (err) {
+    errEl.textContent = "Erro de conexão ao gerar o Pix.";
+    errEl.classList.remove("hidden");
+    btn.disabled = false;
+    btn.textContent = "Gerar Pix e pagar";
+  }
+}
+
+function renderPixScreen(data) {
+  document.getElementById("checkout-content").innerHTML = `
+    <div class="text-center">
+      <div class="mb-4 text-4xl">📱</div>
+      <h2 class="mb-2 font-display text-2xl font-bold uppercase">Pague com Pix para confirmar</h2>
+      <p class="mb-4 text-sm text-muted">Escaneie o QR Code ou copie o código abaixo.</p>
+      ${data.qrCodeBase64 ? `<img src="data:image/png;base64,${data.qrCodeBase64}" class="mx-auto mb-4 w-56 rounded-xl border border-border bg-white p-3" />` : ""}
+      ${data.expiresAt ? `<p id="pix-countdown" class="mb-4 text-xs font-semibold text-yellow-400"></p>` : ""}
+      ${data.qrCode ? `<button onclick="copyPixCode(this, '${data.qrCode.replace(/'/g, "\\'")}')" class="btn-press mx-auto mb-4 flex items-center gap-2 rounded-lg border border-border bg-surface2 px-4 py-2.5 text-sm font-semibold text-muted hover:border-primary/60">📋 Copiar código Pix</button>` : ""}
+      <div id="pix-status" class="mb-2 flex items-center justify-center gap-2 text-sm text-muted">
+        <span class="h-2 w-2 animate-pulse rounded-full bg-yellow-400"></span> Aguardando pagamento (confirmação automática)...
+      </div>
+      <p class="text-xs text-muted">Pedido #${data.orderId.slice(0, 8).toUpperCase()}</p>
+      <button onclick="closeCheckout()" class="mt-6 w-full rounded-xl border border-border py-3 font-bold text-muted hover:text-white">Fechar</button>
+    </div>`;
+
+  if (data.expiresAt) startPixCountdown(data.expiresAt);
+  startPaymentPolling(data.orderId);
+}
+
+function startPixCountdown(expiresAt) {
+  const el = document.getElementById("pix-countdown");
+  function tick() {
+    if (!el) return;
+    const diff = new Date(expiresAt).getTime() - Date.now();
+    if (diff <= 0) { el.textContent = "Pix expirado — gere um novo pedido."; return; }
+    const m = Math.floor(diff / 60000), s = Math.floor((diff % 60000) / 1000);
+    el.textContent = `Expira em ${m}:${String(s).padStart(2, "0")}`;
+    setTimeout(tick, 1000);
+  }
+  tick();
+}
+
+/* fica perguntando ao Supabase se o pagamento já caiu, e libera sozinho quando confirmar */
+function startPaymentPolling(orderId) {
+  if (paymentPollTimer) clearInterval(paymentPollTimer);
+  paymentPollTimer = setInterval(async () => {
+    try {
+      const { data: status, error } = await supabase.rpc("get_order_status", { order_id: orderId });
+      if (error || !status) return;
+      if (status === "PAGO") {
+        clearInterval(paymentPollTimer);
+        paymentPollTimer = null;
+        document.getElementById("checkout-content").innerHTML = `
+          <div class="text-center">
+            <div class="mb-4 text-5xl flash-pop">✅</div>
+            <h2 class="mb-2 font-display text-2xl font-bold uppercase text-accent">Pagamento confirmado!</h2>
+            <p class="mb-6 text-sm text-muted">Seu pedido foi liberado automaticamente. Obrigado pela compra!</p>
+            <button onclick="closeCheckout()" class="w-full rounded-xl bg-primary py-3 font-bold text-white hover:bg-primaryhover">Fechar</button>
+          </div>`;
+      } else if (status === "CANCELADO" || status === "EXPIRADO") {
+        clearInterval(paymentPollTimer);
+        paymentPollTimer = null;
+        const statusEl = document.getElementById("pix-status");
+        if (statusEl) statusEl.innerHTML = `<span class="text-red-400 font-semibold">Pagamento não confirmado (${status.toLowerCase()}).</span>`;
+      }
+    } catch (e) { /* tenta de novo no próximo ciclo */ }
+  }, 4000);
+}
+
+window.copyPixCode = (btn, code) => {
+  navigator.clipboard.writeText(code);
+  btn.textContent = "✓ Copiado!";
+  setTimeout(() => (btn.textContent = "📋 Copiar código Pix"), 2000);
+};
+
+async function checkAdminSession() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) showAdminPanel(); else showAdminLogin();
+}
+
+function showAdminLogin() {
+  document.getElementById("admin-login-screen").classList.remove("hidden");
+  document.getElementById("admin-panel-screen").classList.add("hidden");
+}
+
+function showAdminPanel() {
+  document.getElementById("admin-login-screen").classList.add("hidden");
+  document.getElementById("admin-panel-screen").classList.remove("hidden");
+  loadAdminProducts();
+}
+
+document.getElementById("login-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("login-email").value;
+  const password = document.getElementById("login-password").value;
+  const errEl = document.getElementById("login-error");
+  errEl.classList.add("hidden");
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) { errEl.textContent = "E-mail ou senha inválidos."; errEl.classList.remove("hidden"); return; }
+  showAdminPanel();
+};
+
+window.logoutAdmin = async () => { await supabase.auth.signOut(); showAdminLogin(); };
+
+async function loadAdminProducts() {
+  const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false });
+  const tbody = document.getElementById("products-table");
+
+  if (error) { tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-red-400">Erro: ${error.message}</td></tr>`; return; }
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-muted">Nenhum produto cadastrado.</td></tr>`; return; }
+
+  tbody.innerHTML = data.map((p) => {
+    const price = p.type === "ASSINATURA"
+      ? (p.plans?.length ? `a partir de ${fmt(Math.min(...p.plans.map(pl=>pl.price)))}` : "sem planos")
+      : fmt(p.price);
+    const cat = categoryMeta(p.category);
+    return `
+    <tr class="border-b border-border/60 last:border-0">
+      <td class="flex items-center gap-3 px-4 py-3">
+        <div class="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-surface2">
+          ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover" />` : ""}
+        </div>
+        <span class="font-semibold">${p.name}</span>
+      </td>
+      <td class="px-4 py-3">${cat ? `<span class="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-2.5 py-1 text-xs font-bold lilac">${cat.icon}${cat.label}</span>` : `<span class="text-xs text-muted">—</span>`}</td>
+      <td class="px-4 py-3">${p.type === "ASSINATURA" ? `<span class="rounded-full bg-primary/15 px-2.5 py-1 text-xs font-bold lilac">Assinatura</span>` : `<span class="rounded-full bg-surface2 px-2.5 py-1 text-xs font-bold text-muted">Único</span>`}</td>
+      <td class="px-4 py-3 font-semibold text-white">${price}</td>
+      <td class="px-4 py-3"><span class="rounded-full px-2.5 py-1 text-xs font-bold ${p.active ? "bg-accent/15 text-accent" : "bg-red-500/15 text-red-400"}">${p.active ? "Ativo" : "Inativo"}</span></td>
+      <td class="px-4 py-3 text-right">
+        <button onclick='editProduct(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="mr-3 text-xs font-bold hover:underline lilac">Editar</button>
+        <button onclick="deleteProduct('${p.id}','${p.name.replace(/'/g,"\\'")}')" class="text-xs font-bold text-red-400 hover:underline">Excluir</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+window.deleteProduct = async (id, name) => {
+  if (!confirm(`Excluir "${name}"? Essa ação não pode ser desfeita.`)) return;
+  const { error } = await supabase.from("products").delete().eq("id", id);
+  if (error) alert("Erro ao excluir: " + error.message);
+  loadAdminProducts();
+};
+
+document.getElementById("f-type").onchange = (e) => {
+  const isSub = e.target.value === "ASSINATURA";
+  document.getElementById("plans-section").classList.toggle("hidden", !isSub);
+  document.getElementById("price-field").classList.toggle("hidden", isSub);
+  document.getElementById("stock-field").classList.toggle("hidden", isSub);
+};
+
+window.addPlanRow = (plan = { name: "", durationDays: 30, price: 0, recurring: false }) => {
+  const div = document.createElement("div");
+  div.className = "plan-row grid grid-cols-1 items-end gap-2 rounded-lg border border-border bg-surface2 p-3 sm:grid-cols-[2fr_1fr_1fr_auto_auto]";
+  div.innerHTML = `
+    <div><label class="mb-1 block text-[10px] text-muted">Nome do plano</label>
+      <input class="plan-name w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm outline-none focus:border-primary" value="${plan.name}" placeholder="ex: 30 Dias" /></div>
+    <div><label class="mb-1 block text-[10px] text-muted">Dias</label>
+      <input type="number" min="1" class="plan-days w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm outline-none focus:border-primary" value="${plan.durationDays}" /></div>
+    <div><label class="mb-1 block text-[10px] text-muted">Preço (R$)</label>
+      <input type="number" step="0.01" min="0" class="plan-price w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm outline-none focus:border-primary" value="${plan.price}" /></div>
+    <label class="flex items-center gap-1.5 whitespace-nowrap pb-2 text-[11px] text-muted">
+      <input type="checkbox" class="plan-recurring" ${plan.recurring ? "checked" : ""}/> Recorrente</label>
+    <button type="button" onclick="this.closest('.plan-row').remove()" class="mb-1 flex h-9 w-9 items-center justify-center rounded-md border border-border text-red-400 hover:bg-red-500/10">✕</button>
+  `;
+  document.getElementById("plans-list").appendChild(div);
+};
+
+function collectPlans() {
+  return [...document.querySelectorAll(".plan-row")].map((row) => ({
+    name: row.querySelector(".plan-name").value,
+    durationDays: Number(row.querySelector(".plan-days").value),
+    price: Number(row.querySelector(".plan-price").value),
+    recurring: row.querySelector(".plan-recurring").checked,
+  })).filter((p) => p.name);
+}
+
+function parseCommaList(str) {
+  return str.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+window.openForm = () => {
+  editingId = null;
+  currentImageUrl = "";
+  document.getElementById("form-title").textContent = "Novo produto";
+  document.getElementById("product-form").reset();
+  document.getElementById("plans-list").innerHTML = "";
+  document.getElementById("image-preview").innerHTML = "";
+  document.getElementById("upload-status").textContent = "";
+  document.getElementById("f-type").dispatchEvent(new Event("change"));
+  document.getElementById("form-error").classList.add("hidden");
+  document.getElementById("form-modal").classList.remove("hidden");
+  document.getElementById("form-modal").classList.add("flex");
+};
+
+window.closeForm = () => { document.getElementById("form-modal").classList.add("hidden"); document.getElementById("form-modal").classList.remove("flex"); };
+
+window.editProduct = (p) => {
+  editingId = p.id;
+  currentImageUrl = p.image_url || "";
+  document.getElementById("form-title").textContent = "Editar produto";
+  document.getElementById("f-name").value = p.name;
+  document.getElementById("f-category").value = p.category || "";
+  document.getElementById("f-description").value = p.description || "";
+  document.getElementById("f-tags").value = (p.tags || []).join(", ");
+  document.getElementById("f-features").value = (p.features || []).join(", ");
+  document.getElementById("f-type").value = p.type;
+  document.getElementById("f-price").value = p.price ?? "";
+  document.getElementById("f-stock").value = p.stock ?? "";
+  document.getElementById("f-featured").checked = !!p.featured;
+  document.getElementById("f-active").checked = !!p.active;
+  document.getElementById("image-preview").innerHTML = p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover" />` : "";
+  document.getElementById("f-type").dispatchEvent(new Event("change"));
+  document.getElementById("plans-list").innerHTML = "";
+  (p.plans || []).forEach((plan) => addPlanRow(plan));
+  document.getElementById("form-error").classList.add("hidden");
+  document.getElementById("form-modal").classList.remove("hidden");
+  document.getElementById("form-modal").classList.add("flex");
+};
+
+document.getElementById("f-image").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById("upload-status");
+  statusEl.textContent = "Enviando imagem...";
+
+  const path = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "")}`;
+  const { error } = await supabase.storage.from("product-images").upload(path, file, { upsert: true });
+  if (error) { statusEl.textContent = "Erro no upload: " + error.message; return; }
+
+  const { data } = supabase.storage.from("product-images").getPublicUrl(path);
+  currentImageUrl = data.publicUrl;
+  document.getElementById("image-preview").innerHTML = `<img src="${currentImageUrl}" class="h-full w-full object-cover" />`;
+  statusEl.textContent = "Imagem enviada ✓";
+};
+
+function slugify(text) {
+  return text.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+document.getElementById("product-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("form-error");
+  errEl.classList.add("hidden");
+
+  const type = document.getElementById("f-type").value;
+  const name = document.getElementById("f-name").value;
+
+  const payload = {
+    name,
+    description: document.getElementById("f-description").value,
+    category: document.getElementById("f-category").value.trim() || null,
+    tags: parseCommaList(document.getElementById("f-tags").value),
+    features: parseCommaList(document.getElementById("f-features").value),
+    type,
+    price: type === "UNICO" ? Number(document.getElementById("f-price").value) || 0 : null,
+    stock: type === "UNICO" && document.getElementById("f-stock").value !== "" ? Number(document.getElementById("f-stock").value) : null,
+    image_url: currentImageUrl || null,
+    plans: type === "ASSINATURA" ? collectPlans() : [],
+    featured: document.getElementById("f-featured").checked,
+    active: document.getElementById("f-active").checked,
+  };
+
+  let error;
+  if (editingId) {
+    ({ error } = await supabase.from("products").update(payload).eq("id", editingId));
+  } else {
+    payload.slug = slugify(name) + "-" + Date.now().toString(36);
+    ({ error } = await supabase.from("products").insert(payload));
+  }
+
+  if (error) { errEl.textContent = "Erro ao salvar: " + error.message; errEl.classList.remove("hidden"); return; }
+
+  closeForm();
+  loadAdminProducts();
+  loadProducts();
+};
+
+route();
+loadSiteSettings();
+loadProducts().then(renderCart);
+</script>
+</body>
+</html>
