@@ -136,7 +136,7 @@
   </section>
 
 
-  <main id="catalogo" class="mx-auto max-w-[1700px] px-4 py-14 sm:px-6 lg:px-10 xl:px-14">
+  <main id="catalogo" class="mx-auto max-w-[2100px] px-4 py-14 sm:px-8 lg:px-14 xl:px-20">
 
     <div id="category-bar" class="cat-scroll mb-8 flex gap-2 overflow-x-auto pb-2"></div>
 
@@ -151,7 +151,7 @@
     </div>
 
     <div id="loading" class="text-muted">Carregando produtos...</div>
-    <div id="products-grid" class="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"></div>
+    <div id="products-grid" class="grid grid-cols-2 gap-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 xl:gap-8"></div>
     <div id="empty-state" class="hidden rounded-2xl border border-dashed border-border bg-surface/40 py-14 text-center text-muted">
       Nenhum produto encontrado nessa categoria.<br/>
       <button onclick="goToAdmin()" class="lilac underline">Cadastre produtos na área administrativa</button>.
@@ -719,18 +719,18 @@ function productCardHTML(p, i = 0) {
   <div class="product-card card-in group flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border bg-surface"
        style="animation-delay:${delay}ms"
        onclick='shockThenOpen(event, ${JSON.stringify(p.id)})'>
-    <div class="relative aspect-[4/3] w-full overflow-hidden bg-surface2">
+    <div class="relative aspect-[1/1] w-full overflow-hidden bg-surface2">
       ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />` : `<div class="flex h-full items-center justify-center text-muted">Sem imagem</div>`}
       <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
-      ${cat ? `<span class="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white backdrop-blur">${cat.icon}${cat.label}</span>` : ""}
-      ${p.type === "ASSINATURA" ? `<span class="absolute right-3 top-3 rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-white">Assinatura</span>` : ""}
+      ${cat ? `<span class="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white backdrop-blur">${cat.icon}${cat.label}</span>` : ""}
+      ${p.type === "ASSINATURA" ? `<span class="absolute right-3 top-3 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white">Assinatura</span>` : ""}
     </div>
-    <div class="flex flex-1 flex-col gap-2 p-4">
-      <h3 class="font-display text-lg font-bold uppercase leading-tight">${p.name}</h3>
-      ${tags.length ? `<p class="line-clamp-1 text-xs font-medium text-muted">${tags.join(" • ")}</p>` : `<p class="line-clamp-2 text-xs text-muted">${p.description || ""}</p>`}
-      <div class="mt-auto pt-2">
-        <p class="text-lg font-extrabold text-white">${p.type === "ASSINATURA" ? `<span class="mr-1 text-[11px] font-medium text-muted">a partir de</span>` : ""}${price != null ? fmt(price) : "Consultar"}</p>
-        <button onclick='event.stopPropagation(); shockThenOpen(event, ${JSON.stringify(p.id)})' class="btn-press mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-2.5 text-xs font-bold text-white hover:bg-primaryhover">
+    <div class="flex flex-1 flex-col gap-2.5 p-5">
+      <h3 class="font-display text-xl font-bold uppercase leading-tight">${p.name}</h3>
+      ${tags.length ? `<p class="line-clamp-1 text-sm font-medium text-muted">${tags.join(" • ")}</p>` : `<p class="line-clamp-2 text-sm text-muted">${p.description || ""}</p>`}
+      <div class="mt-auto pt-3">
+        <p class="text-2xl font-extrabold text-white">${p.type === "ASSINATURA" ? `<span class="mr-1 text-xs font-medium text-muted">a partir de</span>` : ""}${price != null ? fmt(price) : "Consultar"}</p>
+        <button onclick='event.stopPropagation(); shockThenOpen(event, ${JSON.stringify(p.id)})' class="btn-press mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-3 text-sm font-bold text-white hover:bg-primaryhover">
           Ver detalhes <span>→</span>
         </button>
       </div>
