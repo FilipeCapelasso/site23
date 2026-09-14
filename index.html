@@ -117,7 +117,8 @@
 <script>
   window.SUPABASE_URL = "https://tisicavugzcsixvhuvvm.supabase.co";
   window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpc2ljYXZ1Z3pjc2l4dmh1dnZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzMzQ2NzAsImV4cCI6MjEwNDkxMDY3MH0.j6hD2RdhC3BTgC3TIYuFney3jj4Chg1OO9QnJxw-F3g";
-  window.CRIAR_PIX_URL = "https://tisicavugzcsixvhuvvm.supabase.co/functions/v1/criar-pix";
+  /* Não usamos mais Edge Function: o Pix é criado direto por uma função
+     do banco (public.criar_pix), chamada via supabase.rpc(). */
 </script>
 
 <div id="view-store">
@@ -1091,18 +1092,14 @@ async function submitCheckout(e) {
   const email = document.getElementById("checkout-email").value;
 
   try {
-    const res = await fetch(window.CRIAR_PIX_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name, email,
-        items: cart.map((i) => ({ productId: i.productId, planId: i.planId ?? null, name: i.name, planName: i.planName ?? null, price: i.price, quantity: i.quantity })),
-      }),
+    const { data, error } = await supabase.rpc("criar_pix", {
+      p_name: name,
+      p_email: email,
+      p_items: cart.map((i) => ({ productId: i.productId, planId: i.planId ?? null, name: i.name, planName: i.planName ?? null, price: i.price, quantity: i.quantity })),
     });
-    const data = await res.json();
 
-    if (!res.ok) {
-      errEl.textContent = data.error || "Erro ao gerar o Pix.";
+    if (error || (data && data.error)) {
+      errEl.textContent = (data && data.error) || error?.message || "Erro ao gerar o Pix.";
       errEl.classList.remove("hidden");
       btn.disabled = false;
       btn.textContent = "Gerar Pix e pagar";
