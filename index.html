@@ -59,13 +59,20 @@
   @keyframes cardIn{from{opacity:0;transform:translateY(22px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
   .card-in{opacity:0;animation:cardIn .55s cubic-bezier(.16,.9,.3,1) forwards}
 
-  .product-card{position:relative;isolation:isolate}
+  .product-card{position:relative;isolation:isolate;transform-style:preserve-3d;
+    transition:transform .18s ease, border-color .35s ease, box-shadow .35s ease;
+    will-change:transform;}
   .product-card::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;
     transition:opacity .35s ease;z-index:5;
     background:radial-gradient(420px circle at var(--x,50%) var(--y,50%), rgba(124,92,255,.55), transparent 55%);
     mix-blend-mode:screen;}
   .product-card:hover::after{opacity:1}
-  .product-card:hover{transform:translateY(-6px) scale(1.015)}
+  .product-card.tilt{
+    transform:perspective(900px) rotateX(var(--ry,0deg)) rotateY(var(--rx,0deg)) translateY(-8px) scale(1.03);
+    border-color:rgba(124,92,255,.55);
+    box-shadow:0 24px 55px -16px rgba(124,92,255,.5), 0 0 0 1px rgba(124,92,255,.15);
+    z-index:10;
+  }
 
   @keyframes shockRing{0%{box-shadow:0 0 0 0 rgba(124,92,255,.65),0 0 0 0 rgba(0,230,168,.35)}
     60%{box-shadow:0 0 0 10px rgba(124,92,255,0),0 0 0 22px rgba(0,230,168,0)}
@@ -129,7 +136,7 @@
   </section>
 
 
-  <main id="catalogo" class="mx-auto max-w-6xl px-4 py-14">
+  <main id="catalogo" class="mx-auto max-w-[1700px] px-4 py-14 sm:px-6 lg:px-10 xl:px-14">
 
     <div id="category-bar" class="cat-scroll mb-8 flex gap-2 overflow-x-auto pb-2"></div>
 
@@ -144,7 +151,7 @@
     </div>
 
     <div id="loading" class="text-muted">Carregando produtos...</div>
-    <div id="products-grid" class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4"></div>
+    <div id="products-grid" class="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"></div>
     <div id="empty-state" class="hidden rounded-2xl border border-dashed border-border bg-surface/40 py-14 text-center text-muted">
       Nenhum produto encontrado nessa categoria.<br/>
       <button onclick="goToAdmin()" class="lilac underline">Cadastre produtos na área administrativa</button>.
@@ -283,9 +290,10 @@
         </div>
         <div>
           <label class="mb-1 block text-xs font-semibold text-muted">Jogo / Categoria</label>
-          <select id="f-category" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary">
-            <!-- populated dynamically from GAME_CATEGORIES -->
-          </select>
+          <input id="f-category" list="category-options" placeholder="Ex: CS2, Minecraft, Rust, GTA V..."
+            class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+          <datalist id="category-options"></datalist>
+          <p class="mt-1 text-[11px] text-muted">Escolha um jogo já usado ou digite o nome de um jogo novo — ele aparece automaticamente na página principal.</p>
         </div>
       </div>
 
@@ -393,8 +401,12 @@ function icon(path, extra = "") {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="cat-icon h-5 w-5">${path}</svg>${extra}`;
 }
 
+const ALL_ICON = icon('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>');
+const GENERIC_GAME_ICON = icon('<rect x="2" y="8" width="20" height="9" rx="4.5"/><circle cx="8" cy="12.5" r="1"/><path d="M6 12.5h4"/><path d="M15.2 11.3h.01M17.6 13.2h.01"/>');
+
+/* jogos conhecidos de fábrica (ganham um ícone bonitinho); qualquer outro nome digitado no admin
+   também funciona normalmente, só usa um ícone genérico de controle */
 const GAME_CATEGORIES = [
-  { key: null,        label: "Todos",     icon: icon('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>') },
   { key: "CS2",       label: "CS2",       icon: icon('<circle cx="12" cy="12" r="8"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/>') },
   { key: "VALORANT",  label: "Valorant",  icon: icon('<path d="M4 12l6-8 10 8-10 8z"/>') },
   { key: "WARZONE",   label: "Warzone",   icon: icon('<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/>') },
@@ -406,25 +418,51 @@ const GAME_CATEGORIES = [
   { key: "FIVEM",     label: "Fivem",     icon: icon('<path d="M4 16l1.5-5.5A2 2 0 017.4 9h9.2a2 2 0 011.9 1.5L20 16M4 16h16M6.5 16v2.5M17.5 16v2.5M6 12.5h12"/>') },
   { key: "UNTURNED",  label: "Unturned",  icon: icon('<path d="M12 2l8 4.6v10.8L12 22l-8-4.6V6.6z"/><path d="M12 2v20M4 6.6l8 4.6 8-4.6"/>') },
 ];
-const CATEGORY_MAP = Object.fromEntries(GAME_CATEGORIES.filter(c => c.key).map(c => [c.key, c]));
+const CATEGORY_MAP = Object.fromEntries(GAME_CATEGORIES.map(c => [c.key, c]));
 
+/* funciona para QUALQUER categoria — conhecida ou digitada na hora pelo admin */
 function categoryMeta(key) {
-  return CATEGORY_MAP[key] || null;
+  if (!key) return null;
+  const known = CATEGORY_MAP[key.toUpperCase?.() ?? key];
+  if (known) return known;
+  return { key, label: key, icon: GENERIC_GAME_ICON };
 }
 
-/* populate admin category select */
-const catSelect = document.getElementById("f-category");
-catSelect.innerHTML = GAME_CATEGORIES.filter(c => c.key)
-  .map(c => `<option value="${c.key}">${c.label}</option>`).join("");
+/* lista de categorias já usadas nos produtos + os jogos conhecidos, pra sugestão no admin */
+function populateCategoryOptions() {
+  const dl = document.getElementById("category-options");
+  if (!dl) return;
+  const used = ALL_PRODUCTS.map((p) => p.category).filter(Boolean);
+  const known = GAME_CATEGORIES.map((c) => c.label);
+  const all = [...new Set([...known, ...used])];
+  dl.innerHTML = all.map((c) => `<option value="${c}">`).join("");
+}
 
-/* build the category filter bar */
+/* monta a barra de categorias da home a partir dos jogos que realmente existem nos produtos —
+   assim que um jogo novo é cadastrado, o botão dele aparece sozinho aqui */
 const categoryBarEl = document.getElementById("category-bar");
-categoryBarEl.innerHTML = GAME_CATEGORIES.map((c, i) => `
-  <button data-cat="${c.key ?? ""}" onclick="filterCategory(${JSON.stringify(c.key)})"
-    class="cat-btn ${i === 0 ? "is-active" : ""} flex shrink-0 flex-col items-center gap-1.5 rounded-xl border border-border bg-surface px-5 py-3 text-xs font-bold text-muted hover:border-primary/50">
-    ${c.icon}
-    <span>${c.label}</span>
-  </button>`).join("");
+
+function buildCategoryBar() {
+  const distinct = [...new Set(ALL_PRODUCTS.map((p) => p.category).filter(Boolean))];
+  const knownOrder = GAME_CATEGORIES.map((c) => c.key);
+  distinct.sort((a, b) => {
+    const ai = knownOrder.indexOf(a.toUpperCase?.() ?? a);
+    const bi = knownOrder.indexOf(b.toUpperCase?.() ?? b);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
+  const items = [{ key: null, label: "Todos", icon: ALL_ICON }, ...distinct.map((k) => categoryMeta(k))];
+
+  categoryBarEl.innerHTML = items.map((c) => `
+    <button data-cat="${c.key ?? ""}" onclick='filterCategory(${JSON.stringify(c.key)})'
+      class="cat-btn ${(c.key || null) === (currentCategory || null) ? "is-active" : ""} flex shrink-0 flex-col items-center gap-1.5 rounded-xl border border-border bg-surface px-5 py-3 text-xs font-bold text-muted hover:border-primary/50">
+      ${c.icon}
+      <span>${c.label}</span>
+    </button>`).join("");
+}
 
 /* ---------------- State ---------------- */
 
@@ -624,6 +662,8 @@ async function loadProducts() {
   }
 
   ALL_PRODUCTS = data || [];
+  buildCategoryBar();
+  populateCategoryOptions();
   renderProducts();
 }
 
@@ -676,7 +716,7 @@ function productCardHTML(p, i = 0) {
   const tags = parseTags(p);
   const delay = Math.min(i, 11) * 70;
   return `
-  <div class="product-card card-in card-hover group flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border bg-surface"
+  <div class="product-card card-in group flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border bg-surface"
        style="animation-delay:${delay}ms"
        onclick='shockThenOpen(event, ${JSON.stringify(p.id)})'>
     <div class="relative aspect-[4/3] w-full overflow-hidden bg-surface2">
@@ -709,14 +749,36 @@ window.shockThenOpen = (evt, id) => {
   openProductModal(id);
 };
 
-/* spotlight que segue o mouse em cima dos cards (efeito de brilho elétrico) */
-document.getElementById("products-grid").addEventListener("mousemove", (e) => {
+/* spotlight elétrico + inclinação 3D (tilt) que seguem o mouse em cima dos cards */
+const productsGridEl = document.getElementById("products-grid");
+
+productsGridEl.addEventListener("mousemove", (e) => {
   const card = e.target.closest(".product-card");
+  document.querySelectorAll(".product-card.tilt").forEach((c) => { if (c !== card) resetTilt(c); });
   if (!card) return;
+
   const rect = card.getBoundingClientRect();
-  card.style.setProperty("--x", `${e.clientX - rect.left}px`);
-  card.style.setProperty("--y", `${e.clientY - rect.top}px`);
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  card.style.setProperty("--x", `${x}px`);
+  card.style.setProperty("--y", `${y}px`);
+
+  const rx = ((x / rect.width) - 0.5) * 12;
+  const ry = ((y / rect.height) - 0.5) * -12;
+  card.style.setProperty("--rx", `${rx}deg`);
+  card.style.setProperty("--ry", `${ry}deg`);
+  card.classList.add("tilt");
 });
+
+productsGridEl.addEventListener("mouseleave", () => {
+  document.querySelectorAll(".product-card.tilt").forEach(resetTilt);
+});
+
+function resetTilt(card) {
+  card.classList.remove("tilt");
+  card.style.removeProperty("--rx");
+  card.style.removeProperty("--ry");
+}
 
 /* ---------------- Product detail modal ---------------- */
 
@@ -1271,7 +1333,7 @@ document.getElementById("product-form").onsubmit = async (e) => {
   const payload = {
     name,
     description: document.getElementById("f-description").value,
-    category: document.getElementById("f-category").value || null,
+    category: document.getElementById("f-category").value.trim() || null,
     tags: parseCommaList(document.getElementById("f-tags").value),
     features: parseCommaList(document.getElementById("f-features").value),
     type,
