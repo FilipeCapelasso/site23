@@ -31,6 +31,10 @@
   .card-hover:hover{transform:translateY(-4px);border-color:rgba(124,92,255,.55);
     box-shadow:0 16px 44px -14px rgba(124,92,255,.4)}
   .bg-grid-fade{background:radial-gradient(circle at 50% 0%, rgba(124,92,255,.20), transparent 62%)}
+  body.has-custom-bg::before{content:"";position:fixed;inset:0;z-index:-2;background-image:var(--site-bg-image);
+    background-size:cover;background-position:center;background-attachment:fixed}
+  body.has-custom-bg::after{content:"";position:fixed;inset:0;z-index:-1;background:rgba(8,9,12,var(--site-bg-overlay,0.85))}
+  #hero-overlay{background:linear-gradient(90deg, rgba(8,9,12,.95) 15%, rgba(8,9,12,.55) 55%, rgba(8,9,12,.25) 100%)}
   .bg-noise{background-image:radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px);background-size:3px 3px}
   @keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(124,92,255,.45)}50%{box-shadow:0 0 0 8px rgba(124,92,255,0)}}
   .pulse-glow{animation:pulseGlow 2.4s infinite}
@@ -85,13 +89,20 @@
     </div>
   </header>
 
-  <section id="top" class="relative overflow-hidden bg-grid-fade border-b border-border">
-    <div class="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-20 md:grid-cols-2">
-      <div>
+  <section id="hero-section" class="relative overflow-hidden bg-grid-fade border-b border-border bg-cover bg-center">
+    <div id="hero-overlay" class="pointer-events-none absolute inset-0"></div>
+    <div id="hero-fallback-art" class="pointer-events-none absolute inset-y-0 right-0 hidden w-1/2 items-center justify-center md:flex">
+      <div class="relative flex aspect-square w-full max-w-md items-center justify-center rounded-3xl border border-border bg-surface/60">
+        <div class="absolute -inset-8 -z-10 rounded-full bg-primary/20 blur-3xl"></div>
+        <span class="font-display text-7xl font-bold text-white/10">NOVASTORE</span>
+      </div>
+    </div>
+    <div class="relative mx-auto max-w-6xl px-4 py-20 md:py-28">
+      <div class="max-w-xl">
         <span class="mb-4 inline-block rounded-full border border-primary/40 bg-primary/10 px-4 py-1 text-xs font-bold uppercase tracking-wider lilac">
           Sua loja de produtos digitais
         </span>
-        <h1 class="max-w-xl font-display text-4xl font-bold uppercase leading-[1.05] md:text-6xl">
+        <h1 class="font-display text-4xl font-bold uppercase leading-[1.05] md:text-6xl">
           Jogue sem limites <span class="gradient-text">com a NovaStore</span>
         </h1>
         <p class="mt-5 max-w-md text-muted md:text-lg">
@@ -104,12 +115,6 @@
         </div>
         <div class="mt-9 flex flex-wrap items-center gap-4">
           <a href="#catalogo" class="rounded-xl bg-primary px-7 py-3.5 font-bold text-white shadow-glow hover:bg-primaryhover">Ver catálogo</a>
-        </div>
-      </div>
-      <div class="relative hidden md:block">
-        <div class="absolute -inset-8 rounded-full bg-primary/20 blur-3xl"></div>
-        <div class="relative flex aspect-square items-center justify-center rounded-3xl border border-border bg-surface/60">
-          <span class="font-display text-7xl font-bold text-white/10">NOVASTORE</span>
         </div>
       </div>
     </div>
@@ -177,19 +182,70 @@
     </header>
 
     <main class="mx-auto max-w-5xl px-4 py-10">
-      <div class="mb-6 flex items-center justify-between">
-        <h1 class="font-display text-2xl font-bold uppercase">Produtos</h1>
-        <button onclick="openForm()" class="rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">+ Novo produto</button>
+      <div class="mb-8 flex gap-2 border-b border-border">
+        <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="admin-tab-btn border-b-2 border-primary px-4 py-3 text-sm font-bold text-white">Produtos</button>
+        <button id="admin-tab-btn-appearance" onclick="switchAdminTab('appearance')" class="admin-tab-btn border-b-2 border-transparent px-4 py-3 text-sm font-bold text-muted hover:text-white">Aparência do site</button>
       </div>
 
-      <div class="overflow-x-auto rounded-2xl border border-border bg-surface">
-        <table class="w-full text-left text-sm">
-          <thead class="border-b border-border text-muted">
-            <tr><th class="px-4 py-3">Produto</th><th class="px-4 py-3">Jogo</th><th class="px-4 py-3">Tipo</th><th class="px-4 py-3">Preço</th><th class="px-4 py-3">Status</th><th class="px-4 py-3 text-right">Ações</th></tr>
-          </thead>
-          <tbody id="products-table"></tbody>
-        </table>
-      </div>
+      <section id="admin-tab-products">
+        <div class="mb-6 flex items-center justify-between">
+          <h1 class="font-display text-2xl font-bold uppercase">Produtos</h1>
+          <button onclick="openForm()" class="rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">+ Novo produto</button>
+        </div>
+
+        <div class="overflow-x-auto rounded-2xl border border-border bg-surface">
+          <table class="w-full text-left text-sm">
+            <thead class="border-b border-border text-muted">
+              <tr><th class="px-4 py-3">Produto</th><th class="px-4 py-3">Jogo</th><th class="px-4 py-3">Tipo</th><th class="px-4 py-3">Preço</th><th class="px-4 py-3">Status</th><th class="px-4 py-3 text-right">Ações</th></tr>
+            </thead>
+            <tbody id="products-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="admin-tab-appearance" class="hidden">
+        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Aparência do site</h1>
+        <div id="appearance-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+        <div id="appearance-success" class="hidden mb-4 rounded-lg bg-accent/10 px-3 py-2 text-sm text-accent"></div>
+
+        <div class="flex flex-col gap-8">
+
+          <div class="rounded-2xl border border-border bg-surface p-6">
+            <h2 class="mb-1 font-display text-lg font-bold uppercase">Banner do topo (Hero)</h2>
+            <p class="mb-4 text-sm text-muted">Imagem larga que aparece no topo do site, atrás do texto de destaque. Recomendado: imagem larga e grande, mínimo 1600×700px.</p>
+            <div class="flex flex-col items-start gap-4 sm:flex-row">
+              <div id="hero-image-preview" class="flex h-32 w-full max-w-xs items-center justify-center overflow-hidden rounded-lg border border-border bg-surface2 text-xs text-muted sm:w-72">Sem imagem</div>
+              <div class="flex flex-col gap-2">
+                <input type="file" id="hero-image-input" accept="image/*" class="text-sm text-muted" />
+                <p id="hero-upload-status" class="text-xs text-muted"></p>
+                <button type="button" onclick="removeHeroImage()" class="self-start text-xs font-bold text-red-400 hover:underline">Remover imagem</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-border bg-surface p-6">
+            <h2 class="mb-1 font-display text-lg font-bold uppercase">Plano de fundo do site</h2>
+            <p class="mb-4 text-sm text-muted">Imagem de fundo aplicada em todas as páginas da loja, atrás do conteúdo (textura, cenário ou arte escura).</p>
+            <div class="flex flex-col items-start gap-4 sm:flex-row">
+              <div id="bg-image-preview" class="flex h-32 w-full max-w-xs items-center justify-center overflow-hidden rounded-lg border border-border bg-surface2 text-xs text-muted sm:w-72">Sem imagem</div>
+              <div class="flex flex-col gap-2">
+                <input type="file" id="bg-image-input" accept="image/*" class="text-sm text-muted" />
+                <p id="bg-upload-status" class="text-xs text-muted"></p>
+                <button type="button" onclick="removeBgImage()" class="self-start text-xs font-bold text-red-400 hover:underline">Remover imagem</button>
+              </div>
+            </div>
+            <div class="mt-5">
+              <label class="mb-1 flex items-center justify-between text-xs font-semibold text-muted">
+                <span>Intensidade do escurecimento (overlay)</span>
+                <span id="bg-overlay-value">85%</span>
+              </label>
+              <input type="range" id="bg-overlay-input" min="0" max="100" value="85" class="w-full accent-primary" />
+            </div>
+          </div>
+
+          <button id="appearance-save" onclick="saveSiteSettings()" class="self-start rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">Salvar aparência</button>
+        </div>
+      </section>
     </main>
   </div>
 </div>
@@ -362,6 +418,10 @@ let cart = JSON.parse(localStorage.getItem("cart") || "[]");
 let currentImageUrl = "";
 let editingId = null;
 
+let SITE_SETTINGS = { hero_image_url: null, background_image_url: null, background_overlay: 0.85 };
+let currentHeroUrl = "";
+let currentBgUrl = "";
+
 function route() {
   if (location.hash === "#admin") {
     document.getElementById("view-store").classList.add("hidden");
@@ -375,6 +435,152 @@ function route() {
 window.addEventListener("hashchange", route);
 window.goToAdmin = () => { location.hash = "#admin"; };
 window.goToStore = () => { location.hash = ""; };
+
+/* ---------------- Site-wide appearance (background + hero banner) ---------------- */
+
+async function loadSiteSettings() {
+  try {
+    const { data, error } = await supabase.from("site_settings").select("*").eq("id", 1).maybeSingle();
+    if (error) throw error;
+    if (data) SITE_SETTINGS = data;
+  } catch (err) {
+    console.warn("Configurações de aparência não carregadas (tabela site_settings pode não existir ainda):", err.message || err);
+  }
+  applySiteSettings(SITE_SETTINGS);
+}
+
+function applySiteSettings(s) {
+  const body = document.body;
+  if (s.background_image_url) {
+    document.documentElement.style.setProperty("--site-bg-image", `url("${s.background_image_url}")`);
+    document.documentElement.style.setProperty("--site-bg-overlay", String(s.background_overlay ?? 0.85));
+    body.classList.add("has-custom-bg");
+  } else {
+    body.classList.remove("has-custom-bg");
+  }
+
+  const heroSection = document.getElementById("hero-section");
+  const heroFallback = document.getElementById("hero-fallback-art");
+  if (s.hero_image_url) {
+    heroSection.style.backgroundImage = `url("${s.hero_image_url}")`;
+    heroFallback.classList.add("hidden");
+  } else {
+    heroSection.style.backgroundImage = "";
+    heroFallback.classList.remove("hidden");
+  }
+}
+
+window.switchAdminTab = (tab) => {
+  const isProducts = tab === "products";
+  document.getElementById("admin-tab-products").classList.toggle("hidden", !isProducts);
+  document.getElementById("admin-tab-appearance").classList.toggle("hidden", isProducts);
+  document.getElementById("admin-tab-btn-products").classList.toggle("border-primary", isProducts);
+  document.getElementById("admin-tab-btn-products").classList.toggle("text-white", isProducts);
+  document.getElementById("admin-tab-btn-products").classList.toggle("border-transparent", !isProducts);
+  document.getElementById("admin-tab-btn-products").classList.toggle("text-muted", !isProducts);
+  document.getElementById("admin-tab-btn-appearance").classList.toggle("border-primary", !isProducts);
+  document.getElementById("admin-tab-btn-appearance").classList.toggle("text-white", !isProducts);
+  document.getElementById("admin-tab-btn-appearance").classList.toggle("border-transparent", isProducts);
+  document.getElementById("admin-tab-btn-appearance").classList.toggle("text-muted", isProducts);
+  if (!isProducts) populateAppearanceForm();
+};
+
+function populateAppearanceForm() {
+  currentHeroUrl = SITE_SETTINGS.hero_image_url || "";
+  currentBgUrl = SITE_SETTINGS.background_image_url || "";
+  const overlayPct = Math.round((SITE_SETTINGS.background_overlay ?? 0.85) * 100);
+  document.getElementById("hero-image-preview").innerHTML = currentHeroUrl ? `<img src="${currentHeroUrl}" class="h-full w-full object-cover" />` : "Sem imagem";
+  document.getElementById("bg-image-preview").innerHTML = currentBgUrl ? `<img src="${currentBgUrl}" class="h-full w-full object-cover" />` : "Sem imagem";
+  document.getElementById("bg-overlay-input").value = overlayPct;
+  document.getElementById("bg-overlay-value").textContent = overlayPct + "%";
+  document.getElementById("appearance-error").classList.add("hidden");
+  document.getElementById("appearance-success").classList.add("hidden");
+}
+
+document.getElementById("bg-overlay-input").addEventListener("input", (e) => {
+  document.getElementById("bg-overlay-value").textContent = e.target.value + "%";
+});
+
+async function uploadSiteAsset(file, prefix) {
+  const path = `${prefix}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "")}`;
+  const { error } = await supabase.storage.from("site-assets").upload(path, file, { upsert: true });
+  if (error) throw error;
+  const { data } = supabase.storage.from("site-assets").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+document.getElementById("hero-image-input").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById("hero-upload-status");
+  statusEl.textContent = "Enviando imagem...";
+  try {
+    currentHeroUrl = await uploadSiteAsset(file, "hero");
+    document.getElementById("hero-image-preview").innerHTML = `<img src="${currentHeroUrl}" class="h-full w-full object-cover" />`;
+    statusEl.textContent = "Imagem enviada ✓";
+  } catch (err) {
+    statusEl.textContent = "Erro no upload: " + err.message;
+  }
+};
+
+document.getElementById("bg-image-input").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById("bg-upload-status");
+  statusEl.textContent = "Enviando imagem...";
+  try {
+    currentBgUrl = await uploadSiteAsset(file, "background");
+    document.getElementById("bg-image-preview").innerHTML = `<img src="${currentBgUrl}" class="h-full w-full object-cover" />`;
+    statusEl.textContent = "Imagem enviada ✓";
+  } catch (err) {
+    statusEl.textContent = "Erro no upload: " + err.message;
+  }
+};
+
+window.removeHeroImage = () => {
+  currentHeroUrl = "";
+  document.getElementById("hero-image-preview").innerHTML = "Sem imagem";
+  document.getElementById("hero-upload-status").textContent = "";
+};
+
+window.removeBgImage = () => {
+  currentBgUrl = "";
+  document.getElementById("bg-image-preview").innerHTML = "Sem imagem";
+  document.getElementById("bg-upload-status").textContent = "";
+};
+
+window.saveSiteSettings = async () => {
+  const btn = document.getElementById("appearance-save");
+  const errEl = document.getElementById("appearance-error");
+  const okEl = document.getElementById("appearance-success");
+  errEl.classList.add("hidden");
+  okEl.classList.add("hidden");
+  btn.disabled = true;
+  btn.textContent = "Salvando...";
+
+  const overlay = Number(document.getElementById("bg-overlay-input").value) / 100;
+  const payload = {
+    id: 1,
+    hero_image_url: currentHeroUrl || null,
+    background_image_url: currentBgUrl || null,
+    background_overlay: overlay,
+  };
+
+  const { error } = await supabase.from("site_settings").upsert(payload);
+  btn.disabled = false;
+  btn.textContent = "Salvar aparência";
+
+  if (error) {
+    errEl.textContent = "Erro ao salvar: " + error.message;
+    errEl.classList.remove("hidden");
+    return;
+  }
+
+  SITE_SETTINGS = payload;
+  applySiteSettings(SITE_SETTINGS);
+  okEl.textContent = "Aparência salva com sucesso ✓";
+  okEl.classList.remove("hidden");
+};
 
 async function loadProducts() {
   const { data, error } = await supabase
@@ -981,6 +1187,7 @@ document.getElementById("product-form").onsubmit = async (e) => {
 };
 
 route();
+loadSiteSettings();
 loadProducts().then(renderCart);
 </script>
 </body>
