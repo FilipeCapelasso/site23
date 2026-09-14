@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NOVASTORE | Catálogo digital</title>
+<meta name="description" content="Produtos e assinaturas com pagamento via Pix." />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: {
+        bg:"#08090c", surface:"#111318", surface2:"#181b22", border:"#23262f",
+        primary:"#7c5cff", primaryhover:"#6a47ff", accent:"#00e6a8", muted:"#8b8fa3",
+      },
+      boxShadow: { glow: "0 0 40px -10px rgba(124,92,255,0.45)" },
+    }},
+  };
+</script>
+<style>
+  body{background:#08090c;color:#f1f2f6;font-family:Inter,system-ui,sans-serif}
+  ::-webkit-scrollbar{width:10px} ::-webkit-scrollbar-track{background:#0c0d11}
+  ::-webkit-scrollbar-thumb{background:#2a2d38;border-radius:8px}
+  .glass{background:rgba(17,19,24,.7);backdrop-filter:blur(14px)}
+  .gradient-text{background:linear-gradient(90deg,#a78bfa,#7c5cff 40%,#00e6a8 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .card-hover{transition:.25s ease}
+  .card-hover:hover{transform:translateY(-4px);border-color:rgba(124,92,255,.5);
+    box-shadow:0 12px 40px -12px rgba(124,92,255,.35)}
+  .bg-grid-fade{background:radial-gradient(circle at 50% 0%, rgba(124,92,255,.18), transparent 60%)}
+  @keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(124,92,255,.45)}50%{box-shadow:0 0 0 8px rgba(124,92,255,0)}}
+  .pulse-glow{animation:pulseGlow 2.4s infinite}
+  .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .modal-overlay{background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
+  .lilac{color:#a78bfa}
+</style>
+</head>
+<body class="min-h-screen">
+
+<script>
+  window.SUPABASE_URL = "https://SEU-PROJETO.supabase.co";
+  window.SUPABASE_ANON_KEY = "SUA_CHAVE_ANON_PUBLICA_AQUI";
+  window.CRIAR_PIX_URL = "https://SEU-PROJETO.supabase.co/functions/v1/criar-pix";
+</script>
+
+<div id="view-store">
+
+  <header class="sticky top-0 z-40 glass border-b border-border">
+    <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+      <a href="#" class="text-xl font-extrabold tracking-tight">
+        <span class="gradient-text">NOVA</span><span class="text-white">STORE</span>
+      </a>
+      <nav class="hidden items-center gap-8 text-sm font-medium text-muted md:flex">
+        <button onclick="filterType(null)" class="hover:text-white">Todos</button>
+        <button onclick="filterType('UNICO')" class="hover:text-white">Produtos</button>
+        <button onclick="filterType('ASSINATURA')" class="hover:text-white">Assinaturas</button>
+      </nav>
+      <button onclick="openCart()" class="relative flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium hover:border-primary/60">
+        🛒 <span class="hidden sm:inline">Carrinho</span>
+        <span id="cart-count" class="absolute -right-2 -top-2 hidden h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white pulse-glow">0</span>
+      </button>
+    </div>
+  </header>
+
+  <section class="relative overflow-hidden bg-grid-fade">
+    <div class="mx-auto flex max-w-6xl flex-col items-center px-4 py-24 text-center">
+      <span class="mb-4 rounded-full border border-primary/40 bg-primary/10 px-4 py-1 text-xs font-semibold lilac">
+        Pagamento instantâneo via Pix
+      </span>
+      <h1 class="max-w-3xl text-4xl font-extrabold leading-tight md:text-6xl">
+        Produtos e assinaturas <span class="gradient-text">de verdade</span>, entregues na hora.
+      </h1>
+      <p class="mt-5 max-w-xl text-muted md:text-lg">
+        Catálogo moderno, planos flexíveis (dias avulsos ou mensal) e liberação automática assim que o pagamento é confirmado.
+      </p>
+      <div class="mt-8 flex flex-wrap items-center justify-center gap-4">
+        <a href="#catalogo" class="rounded-xl bg-primary px-7 py-3.5 font-bold text-white shadow-glow hover:bg-primaryhover">Ver catálogo</a>
+        <button onclick="filterType('ASSINATURA')" class="rounded-xl border border-border bg-surface px-7 py-3.5 font-bold text-white hover:border-primary/60">Ver assinaturas</button>
+      </div>
+    </div>
+  </section>
+
+  <main id="catalogo" class="mx-auto max-w-6xl px-4 pb-24">
+    <div class="mb-8 flex items-end justify-between">
+      <h2 class="text-2xl font-extrabold">Catálogo</h2>
+    </div>
+    <div id="loading" class="text-muted">Carregando produtos...</div>
+    <div id="products-grid" class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4"></div>
+    <div id="empty-state" class="hidden text-muted">
+      Nenhum produto encontrado. Cadastre produtos na
+      <button onclick="goToAdmin()" class="lilac underline">área administrativa</button>.
+    </div>
+  </main>
+
+  <footer class="border-t border-border bg-surface py-10">
+    <div class="mx-auto max-w-6xl px-4 text-sm text-muted flex items-center justify-between">
+      <div>
+        <p class="mb-1 font-bold text-white">NOVASTORE</p>
+        <p>© <span id="year"></span> Todos os direitos reservados.</p>
+      </div>
+      <button onclick="goToAdmin()" class="text-xs text-muted/50 hover:text-muted">área administrativa</button>
+    </div>
+  </footer>
+</div>
+
+<div id="view-admin" class="hidden">
+
+  <div id="admin-login-screen" class="flex min-h-screen items-center justify-center px-4">
+    <form id="login-form" class="w-full max-w-sm rounded-2xl border border-border bg-surface p-8">
+      <div class="mb-6 text-center">
+        <div class="mb-3 text-3xl">🔒</div>
+        <h1 class="text-xl font-extrabold">Painel Administrativo</h1>
+        <p class="text-sm text-muted">Entre com sua conta Supabase</p>
+      </div>
+      <div id="login-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+      <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
+      <input required type="email" id="login-email" class="mb-4 w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      <label class="mb-1 block text-xs font-semibold text-muted">Senha</label>
+      <input required type="password" id="login-password" class="mb-6 w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      <button class="w-full rounded-lg bg-primary py-2.5 font-bold text-white hover:bg-primaryhover">Entrar</button>
+      <p class="mt-4 text-center text-xs text-muted">Crie o usuário admin em: Supabase → Authentication → Users → Add user</p>
+      <button type="button" onclick="goToStore()" class="mt-3 block w-full text-center text-xs text-muted hover:text-white">← Voltar para a loja</button>
+    </form>
+  </div>
+
+  <div id="admin-panel-screen" class="hidden">
+    <header class="flex items-center justify-between border-b border-border bg-surface px-6 py-4">
+      <button onclick="goToStore()" class="text-lg font-extrabold"><span class="gradient-text">NOVA</span>STORE
+        <span class="ml-2 rounded bg-primary/20 px-2 py-0.5 text-[10px] font-bold lilac">ADMIN</span>
+      </button>
+      <button onclick="logoutAdmin()" class="text-sm font-medium text-muted hover:text-white">Sair</button>
+    </header>
+
+    <main class="mx-auto max-w-5xl px-4 py-10">
+      <div class="mb-6 flex items-center justify-between">
+        <h1 class="text-2xl font-extrabold">Produtos</h1>
+        <button onclick="openForm()" class="rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">+ Novo produto</button>
+      </div>
+
+      <div class="overflow-x-auto rounded-2xl border border-border bg-surface">
+        <table class="w-full text-left text-sm">
+          <thead class="border-b border-border text-muted">
+            <tr><th class="px-4 py-3">Produto</th><th class="px-4 py-3">Tipo</th><th class="px-4 py-3">Preço</th><th class="px-4 py-3">Status</th><th class="px-4 py-3 text-right">Ações</th></tr>
+          </thead>
+          <tbody id="products-table"></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div id="form-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeForm()">
+  <div class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-surface p-6">
+    <div class="mb-5 flex items-center justify-between">
+      <h2 id="form-title" class="text-xl font-extrabold">Novo produto</h2>
+      <button onclick="closeForm()" class="text-2xl text-muted hover:text-white leading-none">✕</button>
+    </div>
+    <div id="form-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+
+    <form id="product-form" class="flex flex-col gap-4">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Nome</label>
+          <input required id="f-name" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Categoria</label>
+          <input id="f-category" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-xs font-semibold text-muted">Descrição</label>
+        <textarea required id="f-description" rows="3" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary"></textarea>
+      </div>
+
+      <div>
+        <label class="mb-2 block text-xs font-semibold text-muted">Imagem principal</label>
+        <div class="flex items-center gap-4">
+          <div id="image-preview" class="h-24 w-24 overflow-hidden rounded-lg border border-border bg-surface2"></div>
+          <input type="file" id="f-image" accept="image/*" class="text-sm text-muted" />
+        </div>
+        <p id="upload-status" class="mt-1 text-xs text-muted"></p>
+      </div>
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Tipo de venda</label>
+          <select id="f-type" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary">
+            <option value="UNICO">Compra única</option>
+            <option value="ASSINATURA">Assinatura (planos por dias)</option>
+          </select>
+        </div>
+        <div id="price-field">
+          <label class="mb-1 block text-xs font-semibold text-muted">Preço (R$)</label>
+          <input type="number" step="0.01" min="0" id="f-price" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div id="stock-field">
+          <label class="mb-1 block text-xs font-semibold text-muted">Estoque (vazio=ilimitado)</label>
+          <input type="number" min="0" id="f-stock" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+      </div>
+
+      <div id="plans-section" class="hidden">
+        <div class="mb-2 flex items-center justify-between">
+          <label class="text-xs font-semibold text-muted">Planos (dias e preço de cada um)</label>
+          <button type="button" onclick="addPlanRow()" class="text-xs font-bold hover:underline lilac">+ Adicionar plano</button>
+        </div>
+        <div id="plans-list" class="flex flex-col gap-3"></div>
+      </div>
+
+      <div class="flex items-center gap-6">
+        <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" id="f-featured" /> Destacar na home</label>
+        <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" id="f-active" checked /> Produto ativo</label>
+      </div>
+
+      <button id="form-submit" class="mt-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">Salvar produto</button>
+    </form>
+  </div>
+</div>
+
+<div id="product-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeProductModal()">
+  <div class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-surface p-6" id="product-modal-content"></div>
+</div>
+
+<div id="cart-drawer" class="fixed inset-0 z-50 hidden justify-end">
+  <div class="absolute inset-0 modal-overlay" onclick="closeCart()"></div>
+  <div class="relative flex h-full w-full max-w-md flex-col border-l border-border bg-surface shadow-2xl">
+    <div class="flex items-center justify-between border-b border-border px-5 py-4">
+      <h2 class="text-lg font-bold">Seu carrinho</h2>
+      <button onclick="closeCart()" class="text-muted hover:text-white text-xl leading-none">✕</button>
+    </div>
+    <div id="cart-items" class="flex-1 overflow-y-auto px-5 py-4"></div>
+    <div id="cart-offers" class="px-5"></div>
+    <div id="cart-footer" class="hidden border-t border-border px-5 py-4">
+      <div class="mb-3 flex items-center justify-between text-sm">
+        <span class="text-muted">Total</span>
+        <span id="cart-total" class="text-xl font-extrabold text-white"></span>
+      </div>
+      <button onclick="openCheckout()" class="block w-full rounded-xl bg-primary py-3 text-center font-bold text-white shadow-glow hover:bg-primaryhover">
+        Finalizar compra via Pix
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="checkout-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeCheckout()">
+  <div class="w-full max-w-md rounded-2xl border border-border bg-surface p-6" id="checkout-content"></div>
+</div>
+
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const supabase = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+document.getElementById("year").textContent = new Date().getFullYear();
+
+const fmt = (v) => Number(v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+let ALL_PRODUCTS = [];
+let currentFilter = null;
+let cart = JSON.parse(localStorage.getItem("cart") || "[]");
+let currentImageUrl = "";
+let editingId = null;
+
+function route() {
+  if (location.hash === "#admin") {
+    document.getElementById("view-store").classList.add("hidden");
+    document.getElementById("view-admin").classList.remove("hidden");
+    checkAdminSession();
+  } else {
+    document.getElementById("view-admin").classList.add("hidden");
+    document.getElementById("view-store").classList.remove("hidden");
+  }
+}
+window.addEventListener("hashchange", route);
+window.goToAdmin = () => { location.hash = "#admin"; };
+window.goToStore = () => { location.hash = ""; };
+
+async function loadProducts() {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("active", true)
+    .order("featured", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  document.getElementById("loading").classList.add("hidden");
+
+  if (error) {
+    document.getElementById("products-grid").innerHTML =
+      `<p class="text-red-400 col-span-full">Erro ao carregar produtos: ${error.message}. Confira as credenciais do Supabase no topo do arquivo.</p>`;
+    return;
+  }
+
+  ALL_PRODUCTS = data || [];
+  renderProducts();
+}
+
+window.filterType = (type) => { currentFilter = type; renderProducts(); };
+
+function renderProducts() {
+  const grid = document.getElementById("products-grid");
+  const list = currentFilter ? ALL_PRODUCTS.filter((p) => p.type === currentFilter) : ALL_PRODUCTS;
+  document.getElementById("empty-state").classList.toggle("hidden", list.length !== 0);
+  grid.innerHTML = list.map(productCardHTML).join("");
+}
+
+function minPlanPrice(product) {
+  if (!product.plans || product.plans.length === 0) return null;
+  return Math.min(...product.plans.map((p) => Number(p.price)));
+}
+
+function productCardHTML(p) {
+  const price = p.type === "ASSINATURA" ? minPlanPrice(p) : p.price;
+  return `
+  <div class="card-hover group flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border bg-surface" onclick='openProductModal(${JSON.stringify(p.id)})'>
+    <div class="relative aspect-[4/3] w-full overflow-hidden bg-surface2">
+      ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />` : `<div class="flex h-full items-center justify-center text-muted">Sem imagem</div>`}
+      ${p.category ? `<span class="absolute left-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-semibold text-white backdrop-blur">${p.category}</span>` : ""}
+      ${p.type === "ASSINATURA" ? `<span class="absolute right-3 top-3 rounded-full bg-primary px-2.5 py-1 text-[11px] font-bold text-white">Assinatura</span>` : ""}
+    </div>
+    <div class="flex flex-1 flex-col gap-2 p-4">
+      <h3 class="font-bold leading-tight">${p.name}</h3>
+      <p class="line-clamp-2 text-sm text-muted">${p.description || ""}</p>
+      <div class="mt-auto flex items-center justify-between pt-2">
+        <div>
+          ${p.type === "ASSINATURA" ? `<span class="text-[11px] text-muted">a partir de</span>` : ""}
+          <p class="text-lg font-extrabold text-accent">${price != null ? fmt(price) : "Consultar"}</p>
+        </div>
+        <span class="rounded-lg border border-primary/40 px-3 py-1.5 text-xs font-bold lilac group-hover:bg-primary group-hover:text-white">Ver mais</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+window.openProductModal = (id) => {
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  if (!p) return;
+
+  const plansHTML = (p.plans || []).map((plan, i) => `
+    <button data-plan-index="${i}" onclick="selectPlan(${JSON.stringify(id)}, ${i})"
+      class="plan-btn rounded-lg border border-border bg-surface2 px-3 py-2.5 text-left text-sm hover:border-primary/50">
+      <p class="font-bold">${plan.name}</p>
+      <p class="text-xs text-accent">${fmt(plan.price)}</p>
+    </button>`).join("");
+
+  document.getElementById("product-modal-content").innerHTML = `
+    <div class="mb-4 flex items-start justify-between">
+      <h2 class="text-2xl font-extrabold pr-4">${p.name}</h2>
+      <button onclick="closeProductModal()" class="text-muted hover:text-white text-2xl leading-none">✕</button>
+    </div>
+    ${p.image_url ? `<img src="${p.image_url}" class="mb-4 w-full rounded-xl aspect-video object-cover" />` : ""}
+    <p class="mb-5 text-muted leading-relaxed">${p.description || ""}</p>
+    ${p.type === "ASSINATURA"
+      ? `<p class="mb-2 text-sm font-semibold text-muted">Escolha o plano</p>
+         <div id="plans-grid" class="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">${plansHTML}</div>`
+      : ""}
+    <div id="modal-price" class="mb-4 text-3xl font-extrabold text-accent">
+      ${p.type === "ASSINATURA" ? (p.plans?.[0] ? fmt(p.plans[0].price) : "Selecione um plano") : fmt(p.price)}
+    </div>
+    <button onclick="addToCartFromModal(${JSON.stringify(id)})" class="w-full rounded-xl bg-primary py-3.5 font-bold text-white shadow-glow hover:bg-primaryhover">
+      Adicionar ao carrinho
+    </button>
+  `;
+
+  window._selectedPlan = p.type === "ASSINATURA" ? 0 : null;
+  document.getElementById("product-modal").classList.remove("hidden");
+  document.getElementById("product-modal").classList.add("flex");
+};
+
+window.selectPlan = (id, index) => {
+  window._selectedPlan = index;
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  document.getElementById("modal-price").textContent = fmt(p.plans[index].price);
+  document.querySelectorAll(".plan-btn").forEach((btn, i) => {
+    btn.classList.toggle("border-primary", i === index);
+    btn.classList.toggle("bg-primary/15", i === index);
+  });
+};
+
+window.closeProductModal = () => {
+  document.getElementById("product-modal").classList.add("hidden");
+  document.getElementById("product-modal").classList.remove("flex");
+};
+
+window.addToCartFromModal = (id) => {
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  if (p.type === "ASSINATURA") {
+    const plan = p.plans[window._selectedPlan ?? 0];
+    addToCart({ key: `${p.id}-${window._selectedPlan}`, productId: p.id, planId: String(window._selectedPlan),
+      name: p.name, planName: plan.name, price: plan.price, image: p.image_url });
+  } else {
+    addToCart({ key: p.id, productId: p.id, name: p.name, price: p.price, image: p.image_url });
+  }
+  closeProductModal();
+  openCart();
+};
+
+function saveCart() { localStorage.setItem("cart", JSON.stringify(cart)); renderCart(); }
+
+function addToCart(item, qty = 1) {
+  const existing = cart.find((i) => i.key === item.key);
+  if (existing) existing.quantity += qty; else cart.push({ ...item, quantity: qty });
+  saveCart();
+}
+
+window.updateQty = (key, delta) => {
+  const item = cart.find((i) => i.key === key);
+  if (!item) return;
+  item.quantity = Math.max(1, item.quantity + delta);
+  saveCart();
+};
+
+window.removeFromCart = (key) => { cart = cart.filter((i) => i.key !== key); saveCart(); };
+function cartTotal() { return cart.reduce((s, i) => s + i.price * i.quantity, 0); }
+
+async function renderCart() {
+  const countEl = document.getElementById("cart-count");
+  const count = cart.reduce((s, i) => s + i.quantity, 0);
+  countEl.textContent = count;
+  countEl.classList.toggle("hidden", count === 0);
+  countEl.classList.toggle("flex", count > 0);
+
+  const itemsEl = document.getElementById("cart-items");
+  const footerEl = document.getElementById("cart-footer");
+
+  if (cart.length === 0) {
+    itemsEl.innerHTML = `<div class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted py-10">
+      <p class="font-medium">Seu carrinho está vazio</p><p class="text-sm">Adicione um produto para começar.</p></div>`;
+    footerEl.classList.add("hidden");
+  } else {
+    itemsEl.innerHTML = cart.map((i) => `
+      <div class="mb-3 flex gap-3 rounded-xl border border-border bg-surface2 p-3">
+        <div class="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-bg">
+          ${i.image ? `<img src="${i.image}" class="h-full w-full object-cover" />` : ""}
+        </div>
+        <div class="flex flex-1 flex-col justify-between">
+          <div>
+            <p class="text-sm font-semibold leading-tight">${i.name}</p>
+            ${i.planName ? `<p class="text-xs lilac">${i.planName}</p>` : ""}
+          </div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <button onclick="updateQty('${i.key}',-1)" class="rounded-md border border-border px-1.5 text-muted hover:text-white">-</button>
+              <span class="w-4 text-center text-sm">${i.quantity}</span>
+              <button onclick="updateQty('${i.key}',1)" class="rounded-md border border-border px-1.5 text-muted hover:text-white">+</button>
+            </div>
+            <span class="text-sm font-bold text-accent">${fmt(i.price * i.quantity)}</span>
+          </div>
+        </div>
+        <button onclick="removeFromCart('${i.key}')" class="self-start text-muted hover:text-red-400">🗑</button>
+      </div>`).join("");
+    footerEl.classList.remove("hidden");
+    document.getElementById("cart-total").textContent = fmt(cartTotal());
+  }
+
+  await renderOffers();
+}
+
+async function renderOffers() {
+  const offersEl = document.getElementById("cart-offers");
+  if (cart.length === 0 || ALL_PRODUCTS.length === 0) { offersEl.innerHTML = ""; return; }
+  const shuffled = [...ALL_PRODUCTS].sort(() => Math.random() - 0.5).slice(0, 2);
+  offersEl.innerHTML = `
+    <div class="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
+      <div class="mb-3 flex items-center gap-2 text-sm font-bold lilac">✨ Oferta especial pra você</div>
+      <div class="flex flex-col gap-3">
+        ${shuffled.map((p) => {
+          const price = p.type === "ASSINATURA" ? minPlanPrice(p) : p.price;
+          return `
+          <div class="flex items-center gap-3 rounded-lg border border-border bg-surface2 p-2">
+            <div class="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-bg">
+              ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover" />` : ""}
+            </div>
+            <div class="flex-1">
+              <p class="text-xs font-semibold leading-tight">${p.name}</p>
+              ${price != null ? `<p class="text-xs text-accent">${fmt(price)}</p>` : ""}
+            </div>
+            <button onclick='quickAdd(${JSON.stringify(p.id)})' class="rounded-md bg-primary px-2 py-1 text-xs font-bold text-white hover:bg-primaryhover">+ Add</button>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`;
+}
+
+window.quickAdd = (id) => {
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  if (!p) return;
+  if (p.type === "ASSINATURA" && p.plans?.length) {
+    addToCart({ key: `${p.id}-0`, productId: p.id, planId: "0", name: p.name, planName: p.plans[0].name, price: p.plans[0].price, image: p.image_url });
+  } else if (p.price != null) {
+    addToCart({ key: p.id, productId: p.id, name: p.name, price: p.price, image: p.image_url });
+  }
+};
+
+window.openCart = () => { document.getElementById("cart-drawer").classList.remove("hidden"); document.getElementById("cart-drawer").classList.add("flex"); };
+window.closeCart = () => { document.getElementById("cart-drawer").classList.add("hidden"); document.getElementById("cart-drawer").classList.remove("flex"); };
+
+window.openCheckout = () => {
+  closeCart();
+  document.getElementById("checkout-content").innerHTML = `
+    <h2 class="mb-5 text-2xl font-extrabold">Finalizar compra</h2>
+    <div class="mb-5 rounded-xl border border-border bg-surface2 p-4 flex justify-between text-sm">
+      <span class="text-muted">${cart.reduce((s, i) => s + i.quantity, 0)} item(ns)</span>
+      <span class="font-bold text-accent">${fmt(cartTotal())}</span>
+    </div>
+    <div id="checkout-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+    <form id="checkout-form" class="flex flex-col gap-4">
+      <div>
+        <label class="mb-1 block text-xs font-semibold text-muted">Nome completo</label>
+        <input required id="checkout-name" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      </div>
+      <div>
+        <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
+        <input required type="email" id="checkout-email" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      </div>
+      <button id="checkout-submit" class="mt-2 rounded-xl bg-primary py-3.5 font-bold text-white shadow-glow hover:bg-primaryhover">Gerar Pix e pagar</button>
+    </form>
+  `;
+  document.getElementById("checkout-form").onsubmit = submitCheckout;
+  document.getElementById("checkout-modal").classList.remove("hidden");
+  document.getElementById("checkout-modal").classList.add("flex");
+};
+
+window.closeCheckout = () => { document.getElementById("checkout-modal").classList.add("hidden"); document.getElementById("checkout-modal").classList.remove("flex"); };
+
+async function submitCheckout(e) {
+  e.preventDefault();
+  const btn = document.getElementById("checkout-submit");
+  const errEl = document.getElementById("checkout-error");
+  errEl.classList.add("hidden");
+  btn.disabled = true;
+  btn.textContent = "Gerando Pix...";
+
+  const name = document.getElementById("checkout-name").value;
+  const email = document.getElementById("checkout-email").value;
+
+  try {
+    const res = await fetch(window.CRIAR_PIX_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name, email,
+        items: cart.map((i) => ({ productId: i.productId, planId: i.planId ?? null, name: i.name, planName: i.planName ?? null, price: i.price, quantity: i.quantity })),
+      }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      errEl.textContent = data.error || "Erro ao gerar o Pix.";
+      errEl.classList.remove("hidden");
+      btn.disabled = false;
+      btn.textContent = "Gerar Pix e pagar";
+      return;
+    }
+
+    cart = [];
+    saveCart();
+
+    document.getElementById("checkout-content").innerHTML = `
+      <div class="text-center">
+        <div class="mb-4 text-4xl">📱</div>
+        <h2 class="mb-2 text-2xl font-extrabold">Pague com Pix para confirmar</h2>
+        <p class="mb-6 text-sm text-muted">Escaneie o QR Code ou copie o código. A liberação é automática após a confirmação.</p>
+        ${data.qrCodeBase64 ? `<img src="data:image/png;base64,${data.qrCodeBase64}" class="mx-auto mb-6 w-56 rounded-xl border border-border bg-white p-3" />` : ""}
+        ${data.qrCode ? `<button onclick="copyPixCode(this, '${data.qrCode.replace(/'/g, "\\'")}')" class="mx-auto flex items-center gap-2 rounded-lg border border-border bg-surface2 px-4 py-2.5 text-sm font-semibold text-muted hover:border-primary/60">📋 Copiar código Pix</button>` : ""}
+        <p class="mt-6 text-xs text-muted">Pedido #${data.orderId.slice(0, 8).toUpperCase()}</p>
+        <button onclick="closeCheckout()" class="mt-6 w-full rounded-xl border border-border py-3 font-bold text-muted hover:text-white">Fechar</button>
+      </div>`;
+  } catch (err) {
+    errEl.textContent = "Erro de conexão ao gerar o Pix.";
+    errEl.classList.remove("hidden");
+    btn.disabled = false;
+    btn.textContent = "Gerar Pix e pagar";
+  }
+}
+
+window.copyPixCode = (btn, code) => {
+  navigator.clipboard.writeText(code);
+  btn.textContent = "✓ Copiado!";
+  setTimeout(() => (btn.textContent = "📋 Copiar código Pix"), 2000);
+};
+
+async function checkAdminSession() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) showAdminPanel(); else showAdminLogin();
+}
+
+function showAdminLogin() {
+  document.getElementById("admin-login-screen").classList.remove("hidden");
+  document.getElementById("admin-panel-screen").classList.add("hidden");
+}
+
+function showAdminPanel() {
+  document.getElementById("admin-login-screen").classList.add("hidden");
+  document.getElementById("admin-panel-screen").classList.remove("hidden");
+  loadAdminProducts();
+}
+
+document.getElementById("login-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("login-email").value;
+  const password = document.getElementById("login-password").value;
+  const errEl = document.getElementById("login-error");
+  errEl.classList.add("hidden");
+
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) { errEl.textContent = "E-mail ou senha inválidos."; errEl.classList.remove("hidden"); return; }
+  showAdminPanel();
+};
+
+window.logoutAdmin = async () => { await supabase.auth.signOut(); showAdminLogin(); };
+
+async function loadAdminProducts() {
+  const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false });
+  const tbody = document.getElementById("products-table");
+
+  if (error) { tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-6 text-center text-red-400">Erro: ${error.message}</td></tr>`; return; }
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-6 text-center text-muted">Nenhum produto cadastrado.</td></tr>`; return; }
+
+  tbody.innerHTML = data.map((p) => {
+    const price = p.type === "ASSINATURA"
+      ? (p.plans?.length ? `a partir de ${fmt(Math.min(...p.plans.map(pl=>pl.price)))}` : "sem planos")
+      : fmt(p.price);
+    return `
+    <tr class="border-b border-border/60 last:border-0">
+      <td class="flex items-center gap-3 px-4 py-3">
+        <div class="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-surface2">
+          ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover" />` : ""}
+        </div>
+        <span class="font-semibold">${p.name}</span>
+      </td>
+      <td class="px-4 py-3">${p.type === "ASSINATURA" ? `<span class="rounded-full bg-primary/15 px-2.5 py-1 text-xs font-bold lilac">Assinatura</span>` : `<span class="rounded-full bg-surface2 px-2.5 py-1 text-xs font-bold text-muted">Único</span>`}</td>
+      <td class="px-4 py-3 font-semibold text-accent">${price}</td>
+      <td class="px-4 py-3"><span class="rounded-full px-2.5 py-1 text-xs font-bold ${p.active ? "bg-accent/15 text-accent" : "bg-red-500/15 text-red-400"}">${p.active ? "Ativo" : "Inativo"}</span></td>
+      <td class="px-4 py-3 text-right">
+        <button onclick='editProduct(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="mr-3 text-xs font-bold hover:underline lilac">Editar</button>
+        <button onclick="deleteProduct('${p.id}','${p.name.replace(/'/g,"\\'")}')" class="text-xs font-bold text-red-400 hover:underline">Excluir</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+window.deleteProduct = async (id, name) => {
+  if (!confirm(`Excluir "${name}"? Essa ação não pode ser desfeita.`)) return;
+  const { error } = await supabase.from("products").delete().eq("id", id);
+  if (error) alert("Erro ao excluir: " + error.message);
+  loadAdminProducts();
+};
+
+document.getElementById("f-type").onchange = (e) => {
+  const isSub = e.target.value === "ASSINATURA";
+  document.getElementById("plans-section").classList.toggle("hidden", !isSub);
+  document.getElementById("price-field").classList.toggle("hidden", isSub);
+  document.getElementById("stock-field").classList.toggle("hidden", isSub);
+};
+
+window.addPlanRow = (plan = { name: "", durationDays: 30, price: 0, recurring: false }) => {
+  const div = document.createElement("div");
+  div.className = "plan-row grid grid-cols-1 items-end gap-2 rounded-lg border border-border bg-surface2 p-3 sm:grid-cols-[2fr_1fr_1fr_auto_auto]";
+  div.innerHTML = `
+    <div><label class="mb-1 block text-[10px] text-muted">Nome do plano</label>
+      <input class="plan-name w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm outline-none focus:border-primary" value="${plan.name}" placeholder="ex: 7 dias" /></div>
+    <div><label class="mb-1 block text-[10px] text-muted">Dias</label>
+      <input type="number" min="1" class="plan-days w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm outline-none focus:border-primary" value="${plan.durationDays}" /></div>
+    <div><label class="mb-1 block text-[10px] text-muted">Preço (R$)</label>
+      <input type="number" step="0.01" min="0" class="plan-price w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm outline-none focus:border-primary" value="${plan.price}" /></div>
+    <label class="flex items-center gap-1.5 whitespace-nowrap pb-2 text-[11px] text-muted">
+      <input type="checkbox" class="plan-recurring" ${plan.recurring ? "checked" : ""}/> Recorrente</label>
+    <button type="button" onclick="this.closest('.plan-row').remove()" class="mb-1 flex h-9 w-9 items-center justify-center rounded-md border border-border text-red-400 hover:bg-red-500/10">✕</button>
+  `;
+  document.getElementById("plans-list").appendChild(div);
+};
+
+function collectPlans() {
+  return [...document.querySelectorAll(".plan-row")].map((row) => ({
+    name: row.querySelector(".plan-name").value,
+    durationDays: Number(row.querySelector(".plan-days").value),
+    price: Number(row.querySelector(".plan-price").value),
+    recurring: row.querySelector(".plan-recurring").checked,
+  })).filter((p) => p.name);
+}
+
+window.openForm = () => {
+  editingId = null;
+  currentImageUrl = "";
+  document.getElementById("form-title").textContent = "Novo produto";
+  document.getElementById("product-form").reset();
+  document.getElementById("plans-list").innerHTML = "";
+  document.getElementById("image-preview").innerHTML = "";
+  document.getElementById("upload-status").textContent = "";
+  document.getElementById("f-type").dispatchEvent(new Event("change"));
+  document.getElementById("form-error").classList.add("hidden");
+  document.getElementById("form-modal").classList.remove("hidden");
+  document.getElementById("form-modal").classList.add("flex");
+};
+
+window.closeForm = () => { document.getElementById("form-modal").classList.add("hidden"); document.getElementById("form-modal").classList.remove("flex"); };
+
+window.editProduct = (p) => {
+  editingId = p.id;
+  currentImageUrl = p.image_url || "";
+  document.getElementById("form-title").textContent = "Editar produto";
+  document.getElementById("f-name").value = p.name;
+  document.getElementById("f-category").value = p.category || "";
+  document.getElementById("f-description").value = p.description || "";
+  document.getElementById("f-type").value = p.type;
+  document.getElementById("f-price").value = p.price ?? "";
+  document.getElementById("f-stock").value = p.stock ?? "";
+  document.getElementById("f-featured").checked = !!p.featured;
+  document.getElementById("f-active").checked = !!p.active;
+  document.getElementById("image-preview").innerHTML = p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover" />` : "";
+  document.getElementById("f-type").dispatchEvent(new Event("change"));
+  document.getElementById("plans-list").innerHTML = "";
+  (p.plans || []).forEach((plan) => addPlanRow(plan));
+  document.getElementById("form-error").classList.add("hidden");
+  document.getElementById("form-modal").classList.remove("hidden");
+  document.getElementById("form-modal").classList.add("flex");
+};
+
+document.getElementById("f-image").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById("upload-status");
+  statusEl.textContent = "Enviando imagem...";
+
+  const path = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "")}`;
+  const { error } = await supabase.storage.from("product-images").upload(path, file, { upsert: true });
+  if (error) { statusEl.textContent = "Erro no upload: " + error.message; return; }
+
+  const { data } = supabase.storage.from("product-images").getPublicUrl(path);
+  currentImageUrl = data.publicUrl;
+  document.getElementById("image-preview").innerHTML = `<img src="${currentImageUrl}" class="h-full w-full object-cover" />`;
+  statusEl.textContent = "Imagem enviada ✓";
+};
+
+function slugify(text) {
+  return text.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+document.getElementById("product-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("form-error");
+  errEl.classList.add("hidden");
+
+  const type = document.getElementById("f-type").value;
+  const name = document.getElementById("f-name").value;
+
+  const payload = {
+    name,
+    description: document.getElementById("f-description").value,
+    category: document.getElementById("f-category").value || null,
+    type,
+    price: type === "UNICO" ? Number(document.getElementById("f-price").value) || 0 : null,
+    stock: type === "UNICO" && document.getElementById("f-stock").value !== "" ? Number(document.getElementById("f-stock").value) : null,
+    image_url: currentImageUrl || null,
+    plans: type === "ASSINATURA" ? collectPlans() : [],
+    featured: document.getElementById("f-featured").checked,
+    active: document.getElementById("f-active").checked,
+  };
+
+  let error;
+  if (editingId) {
+    ({ error } = await supabase.from("products").update(payload).eq("id", editingId));
+  } else {
+    payload.slug = slugify(name) + "-" + Date.now().toString(36);
+    ({ error } = await supabase.from("products").insert(payload));
+  }
+
+  if (error) { errEl.textContent = "Erro ao salvar: " + error.message; errEl.classList.remove("hidden"); return; }
+
+  closeForm();
+  loadAdminProducts();
+  loadProducts();
+};
+
+route();
+loadProducts().then(renderCart);
+</script>
+</body>
+</html>
