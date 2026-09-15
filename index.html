@@ -38,20 +38,6 @@
   .bg-noise{background-image:radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px);background-size:3px 3px}
   @keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(124,92,255,.45)}50%{box-shadow:0 0 0 8px rgba(124,92,255,0)}}
   .pulse-glow{animation:pulseGlow 2.4s infinite}
-  @keyframes ctaGlow{0%,100%{box-shadow:0 0 22px 2px rgba(124,92,255,.55),0 0 0 0 rgba(0,230,168,0)}50%{box-shadow:0 0 34px 8px rgba(124,92,255,.85),0 0 14px 2px rgba(0,230,168,.35)}}
-  .glow-cta{animation:ctaGlow 2.2s ease-in-out infinite}
-  @keyframes floatSlow{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
-  .float-slow{animation:floatSlow 4.5s ease-in-out infinite}
-  @keyframes badgeShine{0%{background-position:-120% 0}100%{background-position:220% 0}}
-  .badge-shine{background:linear-gradient(110deg,#ff5c5c 0%,#ff8a5c 35%,#ff5c5c 60%,#ff8a5c 100%);background-size:220% 100%;animation:badgeShine 2.8s linear infinite}
-  .badge-hot{background:linear-gradient(110deg,#00e6a8 0%,#38ffcf 35%,#00e6a8 60%,#38ffcf 100%);background-size:220% 100%;animation:badgeShine 2.8s linear infinite}
-  .badge-last{background:linear-gradient(110deg,#ffb020 0%,#ffd76a 35%,#ffb020 60%,#ffd76a 100%);background-size:220% 100%;animation:badgeShine 2.8s linear infinite}
-  .hero-fade-up{opacity:0;animation:cardIn .8s cubic-bezier(.16,.9,.3,1) forwards}
-  .section-title-underline{position:relative}
-  .section-title-underline::after{content:"";position:absolute;left:0;bottom:-10px;width:56px;height:3px;border-radius:99px;background:linear-gradient(90deg,#7c5cff,#00e6a8)}
-  .faq-item[open] summary .faq-chevron{transform:rotate(45deg)}
-  .faq-item summary{list-style:none}
-  .faq-item summary::-webkit-details-marker{display:none}
   .line-clamp-1{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
   .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .modal-overlay{background:rgba(4,4,7,.75);backdrop-filter:blur(6px)}
@@ -124,76 +110,6 @@
   /* transições mais suaves nos botões de categoria e cards */
   .cat-btn{transition:background-color .2s ease, border-color .2s ease, color .2s ease, transform .15s ease}
   .cat-btn:active{transform:scale(.94)}
-
-  /* ---------- NovaStore visual refresh ---------- */
-  :root{color-scheme:dark}
-  html{scroll-behavior:smooth}
-  body{overflow-x:hidden;background:
-    radial-gradient(circle at 15% -5%,rgba(124,92,255,.13),transparent 28%),
-    radial-gradient(circle at 90% 8%,rgba(0,230,168,.055),transparent 22%),#08090c}
-  body::selection{background:rgba(124,92,255,.38);color:#fff}
-  .glass{background:rgba(10,11,16,.72);border-color:rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.18)}
-  header.sticky{backdrop-filter:blur(18px) saturate(145%);box-shadow:0 10px 35px rgba(0,0,0,.20)}
-  header.sticky a{transition:transform .2s ease,filter .2s ease}
-  header.sticky a:hover{transform:translateY(-1px);filter:brightness(1.08)}
-  header.sticky nav a{position:relative;transition:color .2s ease}
-  header.sticky nav a::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:2px;border-radius:999px;background:#7c5cff;transform:scaleX(0);transform-origin:center;transition:transform .2s ease}
-  header.sticky nav a:hover::after,header.sticky nav a.text-white::after{transform:scaleX(1)}
-  #hero-section{min-height:360px;box-shadow:inset 0 -90px 90px -80px rgba(124,92,255,.22)}
-  #hero-section::before{content:"";position:absolute;inset:0;pointer-events:none;background:
-    radial-gradient(circle at 75% 25%,rgba(124,92,255,.22),transparent 30%),
-    linear-gradient(180deg,rgba(4,5,8,.04),rgba(4,5,8,.28) 72%,rgba(4,5,8,.8))}
-  #category-bar{padding-top:2px;scrollbar-width:none}
-  #category-bar::-webkit-scrollbar{display:none}
-  .cat-btn{min-width:88px;position:relative;overflow:hidden;backdrop-filter:blur(10px);box-shadow:0 8px 24px rgba(0,0,0,.12)}
-  .cat-btn::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.045),transparent 55%);pointer-events:none}
-  .cat-btn:hover{transform:translateY(-2px);background:#151821;border-color:rgba(124,92,255,.55);color:#f4f1ff;box-shadow:0 10px 26px rgba(0,0,0,.2)}
-  .cat-btn.is-active{box-shadow:0 10px 28px rgba(124,92,255,.32),inset 0 0 0 1px rgba(255,255,255,.08)}
-  #search-input{height:46px;background:rgba(17,19,24,.82);border-color:rgba(255,255,255,.08);box-shadow:0 10px 28px rgba(0,0,0,.16);transition:border-color .2s ease,box-shadow .2s ease,background .2s ease}
-  #search-input:hover{background:rgba(22,24,31,.9);border-color:rgba(124,92,255,.32)}
-  #search-input:focus{background:rgba(19,20,27,.96);box-shadow:0 0 0 3px rgba(124,92,255,.12),0 12px 30px rgba(0,0,0,.2)}
-  #products-grid{align-items:stretch}
-  .product-card{border-color:rgba(255,255,255,.07)!important;background:linear-gradient(180deg,rgba(20,22,29,.97),rgba(12,13,18,.98));box-shadow:0 12px 28px rgba(0,0,0,.16)}
-  .product-card:hover{box-shadow:0 26px 60px rgba(0,0,0,.34),0 0 0 1px rgba(124,92,255,.10)}
-  .product-card .aspect-\[1\/1\]{background:linear-gradient(135deg,#171923,#0d0e13);}
-  .product-card h3{letter-spacing:.025em;text-wrap:balance}
-  .product-card button{box-shadow:0 9px 22px rgba(124,92,255,.16);transition:transform .16s ease,box-shadow .2s ease,background .2s ease}
-  .product-card button:hover{box-shadow:0 12px 28px rgba(124,92,255,.28);transform:translateY(-1px)}
-  #empty-state{backdrop-filter:blur(10px);box-shadow:0 14px 40px rgba(0,0,0,.14)}
-  footer{background:linear-gradient(180deg,rgba(17,19,24,.94),rgba(8,9,12,1));box-shadow:0 -20px 50px rgba(0,0,0,.16)}
-
-  #product-modal,#form-modal,#checkout-modal{z-index:60}
-  #product-modal-content,#form-modal>div,#checkout-content{box-shadow:0 30px 90px rgba(0,0,0,.58),0 0 0 1px rgba(255,255,255,.035)}
-  #product-modal-content{background:linear-gradient(135deg,rgba(18,20,27,.98),rgba(12,13,18,.985))}
-  #product-modal-content .modal-image-frame{box-shadow:0 18px 46px rgba(0,0,0,.30)}
-  #product-modal-content .modal-image-frame img{filter:saturate(1.06) contrast(1.03)}
-  #product-modal-content .purchase-badge{box-shadow:0 10px 30px rgba(0,230,168,.08)}
-  .plan-card{background:linear-gradient(180deg,rgba(27,29,38,.92),rgba(20,22,29,.92));box-shadow:0 8px 22px rgba(0,0,0,.12)}
-  .plan-card:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,0,0,.2)}
-  .plan-card.is-selected{box-shadow:0 12px 32px rgba(124,92,255,.18),inset 0 0 0 1px rgba(124,92,255,.65)}
-  #product-modal-content .bg-surface2\/60{background:linear-gradient(180deg,rgba(25,27,35,.65),rgba(15,16,22,.76))}
-  #product-modal-content button[onclick="closeProductModal()"]{transition:transform .16s ease,background .16s ease,color .16s ease}
-  #product-modal-content button[onclick="closeProductModal()"]:hover{transform:rotate(90deg) scale(1.04);color:#fff}
-
-  /* Admin visual refresh */
-  #view-admin header{background:rgba(14,15,20,.88);backdrop-filter:blur(14px)}
-  #view-admin .rounded-2xl.border{box-shadow:0 16px 42px rgba(0,0,0,.18)}
-  #view-admin input,#view-admin select,#view-admin textarea{transition:border-color .2s ease,box-shadow .2s ease,background .2s ease}
-  #view-admin input:hover,#view-admin select:hover,#view-admin textarea:hover{border-color:rgba(124,92,255,.34)}
-  #view-admin input:focus,#view-admin select:focus,#view-admin textarea:focus{box-shadow:0 0 0 3px rgba(124,92,255,.1)}
-  #view-admin table tbody tr{transition:background .18s ease}
-  #view-admin table tbody tr:hover{background:rgba(124,92,255,.045)}
-
-  @media(max-width:767px){
-    #hero-section{min-height:320px}
-    #catalogo{padding-top:2rem;padding-bottom:3rem}
-    .product-card{border-radius:1rem!important}
-    .product-card h3{font-size:1.05rem;line-height:1.15}
-    .product-card .p-5{padding:1rem}
-    .product-card .text-2xl{font-size:1.25rem}
-    .cat-btn{min-width:82px;padding-left:1rem;padding-right:1rem}
-  }
-
 </style>
 </head>
 <body class="min-h-screen bg-noise">
@@ -230,65 +146,16 @@
     </div>
   </header>
 
-  <section id="hero-section" class="relative min-h-[520px] overflow-hidden bg-grid-fade border-b border-border bg-cover bg-center sm:min-h-[560px] md:min-h-[640px] lg:min-h-[700px]">
+  <section id="hero-section" class="relative h-[320px] overflow-hidden bg-grid-fade border-b border-border bg-cover bg-center sm:h-[420px] md:h-[560px] lg:h-[640px]">
     <div id="hero-overlay" class="pointer-events-none absolute inset-0"></div>
-    <div class="relative z-10 mx-auto flex h-full max-w-6xl flex-col items-center justify-center gap-6 px-4 py-24 text-center sm:py-28">
-      <span class="hero-fade-up inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-4 py-1.5 text-xs font-bold uppercase tracking-wide lilac backdrop-blur" style="animation-delay:.05s">
-        ⚡ Entrega 100% automática • Disponível 24h
-      </span>
-      <h1 class="hero-fade-up max-w-3xl font-display text-4xl font-black uppercase leading-[1.05] tracking-tight text-white sm:text-5xl md:text-6xl" style="animation-delay:.15s">
-        As Melhores <span class="gradient-text">Contas e Assinaturas</span> com Entrega Automática
-      </h1>
-      <p class="hero-fade-up max-w-xl text-base font-medium text-muted sm:text-lg" style="animation-delay:.25s">
-        Compre com segurança via Pix e receba na hora. Milhares de clientes satisfeitos, suporte 24/7 e garantia em todos os produtos.
-      </p>
-      <div class="hero-fade-up flex flex-col gap-3 pt-2 sm:flex-row" style="animation-delay:.35s">
-        <a href="#catalogo" class="glow-cta btn-press inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-8 py-4 text-base font-bold text-white hover:bg-primaryhover">
-          🚀 Explorar Catálogo
-        </a>
-        <a href="#por-que" class="btn-press inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-black/30 px-8 py-4 text-base font-bold text-white backdrop-blur hover:border-primary/60">
-          Ver benefícios
-        </a>
-      </div>
-      <div class="hero-fade-up mt-4 flex flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs font-semibold text-muted sm:text-sm" style="animation-delay:.45s">
-        <span class="flex items-center gap-1.5">✅ Pagamento seguro</span>
-        <span class="flex items-center gap-1.5">⚡ Liberação imediata</span>
-        <span class="flex items-center gap-1.5">🎧 Suporte 24/7</span>
-      </div>
-    </div>
   </section>
 
-  <section id="por-que" class="border-b border-border bg-surface py-10">
-    <div class="mx-auto grid max-w-6xl grid-cols-1 gap-6 px-4 sm:grid-cols-3">
-      <div class="flex items-center gap-4 rounded-2xl border border-border bg-surface2/60 p-5">
-        <span class="float-slow flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-2xl">🎧</span>
-        <div>
-          <p class="font-display text-base font-bold uppercase text-white">Suporte 24/7</p>
-          <p class="text-sm text-muted">Time pronto para te ajudar a qualquer hora do dia.</p>
-        </div>
-      </div>
-      <div class="flex items-center gap-4 rounded-2xl border border-border bg-surface2/60 p-5">
-        <span class="float-slow flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-2xl" style="animation-delay:.3s">🛡️</span>
-        <div>
-          <p class="font-display text-base font-bold uppercase text-white">Pagamento Seguro via Pix</p>
-          <p class="text-sm text-muted">Transações protegidas e liberação automática após confirmação.</p>
-        </div>
-      </div>
-      <div class="flex items-center gap-4 rounded-2xl border border-border bg-surface2/60 p-5">
-        <span class="float-slow flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-2xl" style="animation-delay:.6s">⚡</span>
-        <div>
-          <p class="font-display text-base font-bold uppercase text-white">Entrega Imediata</p>
-          <p class="text-sm text-muted">Receba seu produto na hora, sem espera, direto no seu e-mail ou painel.</p>
-        </div>
-      </div>
-    </div>
-  </section>
 
-  <main id="catalogo" class="mx-auto max-w-[2100px] px-4 py-16 sm:px-8 lg:px-14 xl:px-20">
+  <main id="catalogo" class="mx-auto max-w-[2100px] px-4 py-14 sm:px-8 lg:px-14 xl:px-20">
 
     <div id="category-bar" class="cat-scroll mb-8 flex gap-2 overflow-x-auto pb-2"></div>
 
-    <div class="mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex items-center gap-2 text-lg font-display font-bold uppercase tracking-wide">
         <span class="lilac">🔥</span> Produtos em destaque
       </div>
@@ -305,96 +172,6 @@
       <button onclick="goToAdmin()" class="lilac underline">Cadastre produtos na área administrativa</button>.
     </div>
   </main>
-
-  <section id="depoimentos" class="border-y border-border bg-surface py-16">
-    <div class="mx-auto max-w-6xl px-4">
-      <div class="mb-10 text-center">
-        <h2 class="section-title-underline inline-block font-display text-2xl font-bold uppercase tracking-wide text-white sm:text-3xl">O que dizem nossos clientes</h2>
-        <p class="mx-auto mt-5 max-w-lg text-sm text-muted">Milhares de compras entregues automaticamente, com segurança e satisfação garantida.</p>
-      </div>
-      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <div class="card-hover rounded-2xl border border-border bg-surface2/60 p-6">
-          <div class="mb-3 text-accent">★★★★★</div>
-          <p class="mb-5 text-sm leading-relaxed text-muted">"Comprei e recebi o acesso em menos de 2 minutos. Nunca vi entrega tão rápida, virei cliente fiel da loja."</p>
-          <div class="flex items-center gap-3">
-            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-bold text-white">L</span>
-            <div>
-              <p class="text-sm font-bold text-white">Lucas M.</p>
-              <p class="text-xs text-muted">Compra verificada</p>
-            </div>
-          </div>
-        </div>
-        <div class="card-hover rounded-2xl border border-border bg-surface2/60 p-6">
-          <div class="mb-3 text-accent">★★★★★</div>
-          <p class="mb-5 text-sm leading-relaxed text-muted">"Suporte respondeu rápido quando tive uma dúvida sobre o plano. Pagamento via Pix é super prático e seguro."</p>
-          <div class="flex items-center gap-3">
-            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-bold text-white">A</span>
-            <div>
-              <p class="text-sm font-bold text-white">Ana P.</p>
-              <p class="text-xs text-muted">Compra verificada</p>
-            </div>
-          </div>
-        </div>
-        <div class="card-hover rounded-2xl border border-border bg-surface2/60 p-6">
-          <div class="mb-3 text-accent">★★★★★</div>
-          <p class="mb-5 text-sm leading-relaxed text-muted">"Já é a terceira vez que compro aqui. Preço justo, entrega automática e site muito bem organizado."</p>
-          <div class="flex items-center gap-3">
-            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-bold text-white">R</span>
-            <div>
-              <p class="text-sm font-bold text-white">Rafael S.</p>
-              <p class="text-xs text-muted">Compra verificada</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="faq" class="py-16">
-    <div class="mx-auto max-w-3xl px-4">
-      <div class="mb-10 text-center">
-        <h2 class="section-title-underline inline-block font-display text-2xl font-bold uppercase tracking-wide text-white sm:text-3xl">Perguntas frequentes</h2>
-        <p class="mx-auto mt-5 max-w-lg text-sm text-muted">Ainda com dúvidas? Aqui estão as respostas mais comuns antes de finalizar sua compra.</p>
-      </div>
-      <div class="flex flex-col gap-3">
-        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5" open>
-          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
-            Como recebo meu produto após o pagamento?
-            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
-          </summary>
-          <p class="mt-3 text-sm leading-relaxed text-muted">A liberação é automática assim que o pagamento via Pix é confirmado. Você recebe o acesso na hora, direto por e-mail ou no seu painel.</p>
-        </details>
-        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5">
-          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
-            O pagamento via Pix é seguro?
-            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
-          </summary>
-          <p class="mt-3 text-sm leading-relaxed text-muted">Sim. Todas as transações são processadas de forma segura e criptografada, e a liberação do produto só ocorre após a confirmação do pagamento.</p>
-        </details>
-        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5">
-          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
-            E se eu tiver problemas com o produto?
-            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
-          </summary>
-          <p class="mt-3 text-sm leading-relaxed text-muted">Nosso suporte está disponível 24/7 para resolver qualquer problema ou dúvida sobre sua compra rapidamente.</p>
-        </details>
-        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5">
-          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
-            Posso comprar mais de um produto de uma vez?
-            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
-          </summary>
-          <p class="mt-3 text-sm leading-relaxed text-muted">Sim! Você pode adicionar quantos produtos quiser ao carrinho e finalizar tudo em um único pagamento via Pix.</p>
-        </details>
-        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5">
-          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
-            As assinaturas renovam automaticamente?
-            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
-          </summary>
-          <p class="mt-3 text-sm leading-relaxed text-muted">Depende do plano escolhido. As condições de cada assinatura estão detalhadas na página do produto antes da compra.</p>
-        </details>
-      </div>
-    </div>
-  </section>
 
   <footer class="border-t border-border bg-surface py-10">
     <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-sm text-muted sm:flex-row">
@@ -948,34 +725,19 @@ function parseFeatures(p) {
   return [];
 }
 
-function scarcityBadge(p, i = 0) {
-  // Distribui as tags de urgência de forma determinística entre os cards
-  const pool = [
-    { label: "🔥 Mais vendido", cls: "badge-hot" },
-    { label: "⏳ Oferta limitada", cls: "badge-shine" },
-    { label: "⚡ Últimas unidades", cls: "badge-last" },
-  ];
-  const seed = (String(p.id).length + i) % 5;
-  if (seed === 3) return null; // nem todo card precisa de badge
-  const pick = pool[(String(p.id).length + i) % pool.length];
-  return pick;
-}
-
 function productCardHTML(p, i = 0) {
   const price = p.type === "ASSINATURA" ? minPlanPrice(p) : p.price;
   const cat = categoryMeta(p.category);
   const tags = parseTags(p);
   const delay = Math.min(i, 11) * 70;
-  const badge = scarcityBadge(p, i);
   return `
-  <div class="product-card card-in group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border bg-surface"
+  <div class="product-card card-in group flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border bg-surface"
        style="animation-delay:${delay}ms"
        onclick='shockThenOpen(event, ${JSON.stringify(p.id)})'>
-    ${badge ? `<span class="${badge.cls} absolute left-3 top-3 z-10 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide text-black shadow-lg">${badge.label}</span>` : ""}
     <div class="relative aspect-[1/1] w-full overflow-hidden bg-surface2">
       ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />` : `<div class="flex h-full items-center justify-center text-muted">Sem imagem</div>`}
       <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
-      ${cat ? `<span class="absolute left-3 ${badge ? "top-11" : "top-3"} flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white backdrop-blur">${cat.icon}${cat.label}</span>` : ""}
+      ${cat ? `<span class="absolute left-3 top-3 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white backdrop-blur">${cat.icon}${cat.label}</span>` : ""}
       ${p.type === "ASSINATURA" ? `<span class="absolute right-3 top-3 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white">Assinatura</span>` : ""}
     </div>
     <div class="flex flex-1 flex-col gap-2.5 p-5">
@@ -983,8 +745,8 @@ function productCardHTML(p, i = 0) {
       ${tags.length ? `<p class="line-clamp-1 text-sm font-medium text-muted">${tags.join(" • ")}</p>` : `<p class="line-clamp-2 text-sm text-muted">${p.description || ""}</p>`}
       <div class="mt-auto pt-3">
         <p class="text-2xl font-extrabold text-white">${p.type === "ASSINATURA" ? `<span class="mr-1 text-xs font-medium text-muted">a partir de</span>` : ""}${price != null ? fmt(price) : "Consultar"}</p>
-        <button onclick='event.stopPropagation(); shockThenOpen(event, ${JSON.stringify(p.id)})' class="glow-cta btn-press mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-3 text-sm font-bold text-white hover:bg-primaryhover">
-          Comprar agora <span>→</span>
+        <button onclick='event.stopPropagation(); shockThenOpen(event, ${JSON.stringify(p.id)})' class="btn-press mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-3 text-sm font-bold text-white hover:bg-primaryhover">
+          Ver detalhes <span>→</span>
         </button>
       </div>
     </div>
@@ -1114,7 +876,7 @@ window.openProductModal = (id) => {
         </div>
 
         <div class="flex flex-col gap-2.5">
-          <button onclick='buyNowFromModal(${JSON.stringify(id)})' class="glow-cta w-full rounded-xl bg-primary py-3.5 font-bold text-white hover:bg-primaryhover active:scale-[0.98] transition-transform">
+          <button onclick='buyNowFromModal(${JSON.stringify(id)})' class="w-full rounded-xl bg-primary py-3.5 font-bold text-white shadow-glow hover:bg-primaryhover active:scale-[0.98] transition-transform">
             Comprar agora
           </button>
           <button onclick='addToCartFromModal(${JSON.stringify(id)})' class="flex w-full items-center justify-center gap-2 rounded-xl border border-border py-3 font-bold text-white hover:border-primary/60 active:scale-[0.98] transition-transform">
@@ -1132,7 +894,6 @@ window.openProductModal = (id) => {
   `;
 
   window._selectedPlan = isSub ? 0 : null;
-  window._productModalClosing = false;
   const overlay = document.getElementById("product-modal");
   const content = document.getElementById("product-modal-content");
   overlay.classList.remove("hidden", "modal-fade-out");
@@ -1151,28 +912,17 @@ window.selectPlan = (id, index) => {
 };
 
 window.closeProductModal = () => {
-  if (window._productModalClosing) return;
-  window._productModalClosing = true;
   const content = document.getElementById("product-modal-content");
   const overlay = document.getElementById("product-modal");
-
-  // Evita estados de animação presos e garante que o card aberto volte à grade
-  // sem alterar a categoria ou a busca atuais.
   content.classList.remove("modal-pop-in");
   content.classList.add("modal-pop-out");
   overlay.classList.add("modal-fade-out");
-  document.querySelectorAll(".product-card.tilt").forEach(resetTilt);
-
   setTimeout(() => {
     overlay.classList.add("hidden");
     overlay.classList.remove("flex", "modal-fade-out");
     content.classList.remove("modal-pop-out");
-
-    // Re-renderiza somente a apresentação atual da loja. Isso corrige o caso
-    // em que o card fica invisível após fechar pelo X, sem limpar filtros.
-    renderProducts();
-    window._productModalClosing = false;
   }, 160);
+  document.querySelectorAll(".product-card.tilt").forEach(resetTilt);
 };
 
 function cartItemFromProduct(p) {
