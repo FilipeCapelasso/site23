@@ -274,19 +274,24 @@
           🛒 <span class="hidden sm:inline">Carrinho</span>
           <span id="cart-count" class="absolute -right-2 -top-2 hidden h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white pulse-glow">0</span>
         </button>
-        <button onclick="openChatModal()" title="Meus chats" class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60">
-          💬
-          <span id="chat-unread-dot" class="pulse-glow absolute right-1.5 top-1.5 hidden h-2.5 w-2.5 rounded-full bg-accent"></span>
+        <button onclick="openGlobalChatModal()" title="Chat Global" class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60">
+          🌐
         </button>
         <div class="relative">
           <button id="btn-login" onclick="openAuthModal('login')" class="rounded-full bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primaryhover">Login</button>
           <button id="btn-user" onclick="toggleUserMenu()" class="hidden items-center gap-2 rounded-full border border-border bg-surface py-1.5 pl-1.5 pr-3 hover:border-primary/60">
-            <span id="user-avatar" class="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-xs font-black text-white">?</span>
+            <span class="relative shrink-0">
+              <span id="user-avatar" class="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-xs font-black text-white">?</span>
+              <span id="profile-unread-dot" class="pulse-glow absolute -right-0.5 -top-0.5 hidden h-2.5 w-2.5 rounded-full bg-accent ring-2 ring-surface"></span>
+            </span>
             <span id="user-first-name" class="text-sm font-semibold text-white"></span>
             <span class="text-[10px] text-muted">▾</span>
           </button>
           <div id="user-menu" class="absolute right-0 top-[calc(100%+10px)] z-50 hidden w-48 rounded-xl border border-border bg-surface p-2 shadow-2xl">
-            <button onclick="toggleUserMenu(true); openChatModal();" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-muted hover:bg-white/5 hover:text-white">💬 Meus chats</button>
+            <button onclick="toggleUserMenu(true); openChatModal();" class="relative flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted hover:bg-white/5 hover:text-white">
+              <span>💬 Meus chats</span>
+              <span id="menu-chat-unread-badge" class="hidden min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
+            </button>
             <button onclick="logoutUser()" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-muted hover:bg-white/5 hover:text-white">🚪 Sair</button>
           </div>
         </div>
@@ -484,6 +489,9 @@
       <div class="mb-8 flex gap-2 border-b border-border">
         <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="admin-tab-btn border-b-2 border-primary px-4 py-3 text-sm font-bold text-white">Produtos</button>
         <button id="admin-tab-btn-conversas" onclick="switchAdminTab('conversas')" class="admin-tab-btn border-b-2 border-transparent px-4 py-3 text-sm font-bold text-muted hover:text-white">Conversas</button>
+        <button id="admin-tab-btn-mensagens" onclick="switchAdminTab('mensagens')" class="admin-tab-btn relative border-b-2 border-transparent px-4 py-3 text-sm font-bold text-muted hover:text-white">Mensagens
+          <span id="admin-mensagens-unread-badge" class="hidden absolute -right-2 -top-1 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
+        </button>
         <button id="admin-tab-btn-appearance" onclick="switchAdminTab('appearance')" class="admin-tab-btn border-b-2 border-transparent px-4 py-3 text-sm font-bold text-muted hover:text-white">Aparência do site</button>
       </div>
 
@@ -514,6 +522,22 @@
             <div class="flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted">
               <span class="text-3xl">💬</span>
               Selecione uma conversa à esquerda para ver os dados da compra e responder ao cliente.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="admin-tab-mensagens" class="hidden">
+        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Mensagens</h1>
+        <p class="mb-6 text-sm text-muted">Chat privado (1-para-1) com cada cliente. Use para suporte, entrega de produtos e qualquer contato direto.</p>
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
+          <div class="overflow-hidden rounded-2xl border border-border bg-surface">
+            <div id="admin-mensagens-list" class="max-h-[65vh] overflow-y-auto"></div>
+          </div>
+          <div id="admin-mensagens-detail" class="flex min-h-[65vh] flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+            <div class="flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted">
+              <span class="text-3xl">💬</span>
+              Selecione um cliente à esquerda para ver e responder à conversa.
             </div>
           </div>
         </div>
@@ -736,6 +760,20 @@
   </div>
 </div>
 
+<div id="global-chat-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeGlobalChatModal()">
+  <div class="flex h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+    <div class="flex items-center gap-2 border-b border-border px-5 py-4">
+      <div class="flex flex-1 items-center gap-2 truncate font-display text-lg font-bold uppercase">🌐 Chat Global</div>
+      <button onclick="closeGlobalChatModal()" class="shrink-0 text-xl leading-none text-muted hover:text-white">✕</button>
+    </div>
+    <div id="global-chat-messages" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
+    <form id="global-chat-form" class="flex items-center gap-2 border-t border-border p-3">
+      <input id="global-chat-input" autocomplete="off" maxlength="500" placeholder="Digite sua mensagem para a comunidade..." class="flex-1 rounded-full border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary" />
+      <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white hover:bg-primaryhover">➤</button>
+    </form>
+  </div>
+</div>
+
 <script type="module">
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -764,7 +802,7 @@ async function handleAuthChange(session) {
     CURRENT_PROFILE = null;
   }
   renderAuthUI();
-  updateChatUnreadDot();
+  updatePrivateUnreadBadge();
 }
 
 function renderAuthUI() {
@@ -883,113 +921,73 @@ document.getElementById("auth-form-register").onsubmit = async (e) => {
 };
 
 /* =========================================================================
-   CHAT DO CLIENTE ("Meus chats") — lista de pedidos pagos + conversa
+   CHAT PRIVADO ("Meus chats") — conversa 1-para-1 entre o cliente logado
+   e o admin da loja (tabela chat_privado). Uma única thread contínua.
    ========================================================================= */
 
-let chatRealtimeChannel = null;
-let currentChatOrderId = null;
+let privadoRealtimeChannel = null;   // canal aberto enquanto o modal está visível
+let privadoBadgeChannel = null;      // canal em segundo plano pra manter o badge atualizado
 
 window.openChatModal = async () => {
   if (!CURRENT_USER) { openAuthModal("login"); return; }
+  document.getElementById("chat-modal-title").textContent = "Meus chats";
   document.getElementById("chat-modal").classList.remove("hidden");
   document.getElementById("chat-modal").classList.add("flex");
-  await renderChatConversationList();
-};
 
-window.closeChatModal = () => {
-  document.getElementById("chat-modal").classList.add("hidden");
-  document.getElementById("chat-modal").classList.remove("flex");
-  if (chatRealtimeChannel) { supabase.removeChannel(chatRealtimeChannel); chatRealtimeChannel = null; }
-  currentChatOrderId = null;
-  updateChatUnreadDot();
-};
-
-async function renderChatConversationList() {
-  document.getElementById("chat-modal-title").textContent = "Meus chats";
-  const body = document.getElementById("chat-modal-body");
-  body.innerHTML = `<div class="p-6 text-sm text-muted">Carregando conversas...</div>`;
-
-  const { data: orders, error } = await supabase
-    .from("orders")
-    .select("id, items, total, status, created_at")
-    .eq("customer_id", CURRENT_USER.id)
-    .eq("status", "PAGO")
-    .order("created_at", { ascending: false });
-
-  if (error) {
-    body.innerHTML = `<div class="p-6 text-sm text-red-400">Erro ao carregar suas conversas.</div>`;
-    return;
-  }
-
-  if (!orders || !orders.length) {
-    body.innerHTML = `
-      <div class="flex h-full flex-col items-center justify-center gap-3 p-10 text-center">
-        <span class="text-4xl">💬</span>
-        <p class="font-semibold text-white">Nenhuma conversa ainda</p>
-        <p class="text-sm text-muted">Assim que sua compra for confirmada, nossa equipe entra em contato por aqui com a entrega do seu produto.</p>
-      </div>`;
-    return;
-  }
-
-  const withLast = await Promise.all(orders.map(async (o) => {
-    const { data: msgs } = await supabase.from("messages").select("*").eq("order_id", o.id).order("created_at", { ascending: false }).limit(1);
-    return { order: o, last: (msgs && msgs[0]) || null };
-  }));
-
-  body.innerHTML = withLast.map(({ order, last }) => {
-    const productName = (order.items && order.items[0] && order.items[0].name) || "Pedido";
-    const preview = last ? escapeHTML(last.message_text) : "Aguardando mensagem da nossa equipe...";
-    return `
-    <button onclick='openChatThread(${JSON.stringify(order.id)})' class="flex w-full items-center gap-3 border-b border-border/60 px-5 py-4 text-left hover:bg-white/5">
-      <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black text-white">N</span>
-      <span class="min-w-0 flex-1">
-        <span class="flex items-center justify-between gap-2">
-          <span class="truncate text-sm font-bold text-white">${escapeHTML(productName)}</span>
-          <span class="shrink-0 text-[10px] text-muted">${fmt(order.total)}</span>
-        </span>
-        <span class="block truncate text-xs text-muted">${preview}</span>
-      </span>
-    </button>`;
-  }).join("");
-}
-
-window.openChatThread = async (orderId) => {
-  currentChatOrderId = orderId;
-  document.getElementById("chat-modal-title").innerHTML = `<button onclick="renderChatConversationList()" class="text-muted hover:text-white">←</button> Suporte NovaStore`;
   const body = document.getElementById("chat-modal-body");
   body.innerHTML = `
     <div class="flex h-full flex-1 flex-col">
       <div id="chat-thread-messages" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
       <form id="chat-thread-form" class="flex items-center gap-2 border-t border-border p-3">
-        <input id="chat-thread-input" autocomplete="off" placeholder="Digite sua mensagem..." class="flex-1 rounded-full border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary" />
+        <input id="chat-thread-input" autocomplete="off" maxlength="500" placeholder="Digite sua mensagem..." class="flex-1 rounded-full border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary" />
         <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white hover:bg-primaryhover">➤</button>
       </form>
     </div>`;
-  document.getElementById("chat-thread-form").onsubmit = (e) => { e.preventDefault(); sendCustomerChatMessage(orderId); };
-  await loadChatMessages(orderId);
-  subscribeToChat(orderId);
+  document.getElementById("chat-thread-form").onsubmit = (e) => { e.preventDefault(); sendPrivateChatMessage(); };
+
+  await loadPrivateChatMessages();
+  subscribeToPrivateChat();
 };
 
-async function loadChatMessages(orderId) {
-  const { data: msgs } = await supabase.from("messages").select("*").eq("order_id", orderId).order("created_at", { ascending: true });
-  renderChatMessages(msgs || []);
+window.closeChatModal = () => {
+  document.getElementById("chat-modal").classList.add("hidden");
+  document.getElementById("chat-modal").classList.remove("flex");
+  if (privadoRealtimeChannel) { supabase.removeChannel(privadoRealtimeChannel); privadoRealtimeChannel = null; }
+};
 
-  const unreadIds = (msgs || []).filter((m) => m.sender_id !== CURRENT_USER.id && !m.read_at).map((m) => m.id);
-  if (unreadIds.length) {
-    await supabase.from("messages").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
-    updateChatUnreadDot();
+async function loadPrivateChatMessages() {
+  if (!CURRENT_USER) return;
+  const { data: msgs, error } = await supabase
+    .from("chat_privado")
+    .select("*")
+    .eq("customer_id", CURRENT_USER.id)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    const el = document.getElementById("chat-thread-messages");
+    if (el) el.innerHTML = `<div class="p-6 text-sm text-red-400">Erro ao carregar sua conversa.</div>`;
+    return;
   }
+
+  renderPrivateChatMessages(msgs || []);
+
+  // marca como lidas as mensagens do admin que ainda não foram lidas
+  const unreadIds = (msgs || []).filter((m) => m.sender_role === "admin" && !m.read_at).map((m) => m.id);
+  if (unreadIds.length) {
+    await supabase.from("chat_privado").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
+  }
+  updatePrivateUnreadBadge();
 }
 
-function renderChatMessages(msgs) {
+function renderPrivateChatMessages(msgs) {
   const el = document.getElementById("chat-thread-messages");
   if (!el) return;
   if (!msgs.length) {
-    el.innerHTML = `<div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted"><span class="text-3xl">📦</span>Assim que liberarmos seu produto, a mensagem aparece aqui.</div>`;
+    el.innerHTML = `<div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted"><span class="text-3xl">💬</span>Envie uma mensagem e a equipe da NovaStore te responde por aqui.</div>`;
     return;
   }
   el.innerHTML = msgs.map((m) => {
-    const mine = m.sender_id === CURRENT_USER.id;
+    const mine = m.sender_role === "client";
     return `<div class="flex ${mine ? "justify-end" : "justify-start"}">
       <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${mine ? "bg-primary text-white" : "bg-surface2 text-white"}">
         ${escapeHTML(m.message_text)}
@@ -999,49 +997,143 @@ function renderChatMessages(msgs) {
   el.scrollTop = el.scrollHeight;
 }
 
-async function sendCustomerChatMessage(orderId) {
+async function sendPrivateChatMessage() {
   const input = document.getElementById("chat-thread-input");
   const text = input.value.trim();
-  if (!text) return;
+  if (!text || !CURRENT_USER) return;
   input.value = "";
-  const { error } = await supabase.from("messages").insert({
-    order_id: orderId,
+  const { error } = await supabase.from("chat_privado").insert({
+    customer_id: CURRENT_USER.id,
     sender_id: CURRENT_USER.id,
-    receiver_id: null,
+    sender_role: "client",
     message_text: text,
   });
   if (error) alert("Erro ao enviar mensagem: " + error.message);
 }
 
-function subscribeToChat(orderId) {
-  if (chatRealtimeChannel) supabase.removeChannel(chatRealtimeChannel);
-  chatRealtimeChannel = supabase
-    .channel(`chat-${orderId}`)
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `order_id=eq.${orderId}` }, () => loadChatMessages(orderId))
+function subscribeToPrivateChat() {
+  if (!CURRENT_USER) return;
+  if (privadoRealtimeChannel) supabase.removeChannel(privadoRealtimeChannel);
+  privadoRealtimeChannel = supabase
+    .channel(`chat-privado-${CURRENT_USER.id}`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_privado", filter: `customer_id=eq.${CURRENT_USER.id}` }, () => loadPrivateChatMessages())
     .subscribe();
 }
 
-async function updateChatUnreadDot() {
-  const dot = document.getElementById("chat-unread-dot");
-  if (!dot) return;
-  if (!CURRENT_USER) { dot.classList.add("hidden"); return; }
+/* mantém o badge (bolinha vermelha no perfil + contador em "Meus chats")
+   atualizado mesmo com o modal fechado */
+async function updatePrivateUnreadBadge() {
+  const dot = document.getElementById("profile-unread-dot");
+  const badge = document.getElementById("menu-chat-unread-badge");
+  if (!dot || !badge) return;
 
-  const { data: orders } = await supabase.from("orders").select("id").eq("customer_id", CURRENT_USER.id);
-  if (!orders || !orders.length) { dot.classList.add("hidden"); return; }
+  if (!CURRENT_USER) { dot.classList.add("hidden"); badge.classList.add("hidden"); return; }
 
-  const ids = orders.map((o) => o.id);
   const { count } = await supabase
-    .from("messages")
+    .from("chat_privado")
     .select("id", { count: "exact", head: true })
-    .in("order_id", ids)
-    .is("read_at", null)
-    .neq("sender_id", CURRENT_USER.id);
+    .eq("customer_id", CURRENT_USER.id)
+    .eq("sender_role", "admin")
+    .is("read_at", null);
 
-  dot.classList.toggle("hidden", !count);
+  const hasUnread = !!count;
+  dot.classList.toggle("hidden", !hasUnread);
+  badge.classList.toggle("hidden", !hasUnread);
+  if (hasUnread) badge.textContent = count > 9 ? "9+" : String(count);
 }
 
-supabase.auth.onAuthStateChange((_event, session) => { handleAuthChange(session); });
-supabase.auth.getSession().then(({ data: { session } }) => handleAuthChange(session));
+function subscribeToPrivateBadge() {
+  if (privadoBadgeChannel) { supabase.removeChannel(privadoBadgeChannel); privadoBadgeChannel = null; }
+  if (!CURRENT_USER) return;
+  privadoBadgeChannel = supabase
+    .channel(`chat-privado-badge-${CURRENT_USER.id}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "chat_privado", filter: `customer_id=eq.${CURRENT_USER.id}` }, () => updatePrivateUnreadBadge())
+    .subscribe();
+}
+
+/* =========================================================================
+   CHAT GLOBAL — sala pública em tempo real (tabela chat_global), aberta
+   pelo ícone 🌐 no header. Visível a qualquer usuário autenticado.
+   ========================================================================= */
+
+let globalChatChannel = null;
+const GLOBAL_CHAT_LIMIT = 100;
+
+window.openGlobalChatModal = async () => {
+  if (!CURRENT_USER) { openAuthModal("login"); return; }
+  document.getElementById("global-chat-modal").classList.remove("hidden");
+  document.getElementById("global-chat-modal").classList.add("flex");
+  document.getElementById("global-chat-form").onsubmit = (e) => { e.preventDefault(); sendGlobalChatMessage(); };
+  await loadGlobalChatMessages();
+  subscribeToGlobalChat();
+};
+
+window.closeGlobalChatModal = () => {
+  document.getElementById("global-chat-modal").classList.add("hidden");
+  document.getElementById("global-chat-modal").classList.remove("flex");
+  if (globalChatChannel) { supabase.removeChannel(globalChatChannel); globalChatChannel = null; }
+};
+
+async function loadGlobalChatMessages() {
+  const { data: msgs, error } = await supabase
+    .from("chat_global")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(GLOBAL_CHAT_LIMIT);
+
+  const el = document.getElementById("global-chat-messages");
+  if (error) { el.innerHTML = `<div class="p-6 text-sm text-red-400">Erro ao carregar o chat global.</div>`; return; }
+  renderGlobalChatMessages((msgs || []).reverse());
+}
+
+function renderGlobalChatMessages(msgs) {
+  const el = document.getElementById("global-chat-messages");
+  if (!el) return;
+  if (!msgs.length) {
+    el.innerHTML = `<div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted"><span class="text-3xl">🌐</span>Seja o primeiro a mandar uma mensagem na comunidade!</div>`;
+    return;
+  }
+  el.innerHTML = msgs.map((m) => {
+    const mine = m.sender_id === CURRENT_USER?.id;
+    return `<div class="flex ${mine ? "justify-end" : "justify-start"}">
+      <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${mine ? "bg-primary text-white" : "bg-surface2 text-white"}">
+        ${mine ? "" : `<p class="mb-0.5 text-[11px] font-bold ${m.sender_role === "admin" ? "text-accent" : "lilac"}">${escapeHTML(m.sender_name)}${m.sender_role === "admin" ? " · Equipe" : ""}</p>`}
+        ${escapeHTML(m.message_text)}
+      </div>
+    </div>`;
+  }).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendGlobalChatMessage() {
+  const input = document.getElementById("global-chat-input");
+  const text = input.value.trim();
+  if (!text || !CURRENT_USER) return;
+  input.value = "";
+  const senderName = CURRENT_PROFILE?.full_name || CURRENT_USER.email.split("@")[0];
+  const { error } = await supabase.from("chat_global").insert({
+    sender_id: CURRENT_USER.id,
+    sender_name: senderName,
+    sender_role: CURRENT_PROFILE?.role === "admin" ? "admin" : "client",
+    message_text: text,
+  });
+  if (error) alert("Erro ao enviar mensagem: " + error.message);
+}
+
+function subscribeToGlobalChat() {
+  if (globalChatChannel) supabase.removeChannel(globalChatChannel);
+  globalChatChannel = supabase
+    .channel("chat-global-room")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_global" }, (payload) => {
+      const el = document.getElementById("global-chat-messages");
+      const currentlyOpen = el && !document.getElementById("global-chat-modal").classList.contains("hidden");
+      if (currentlyOpen) loadGlobalChatMessages();
+    })
+    .subscribe();
+}
+
+supabase.auth.onAuthStateChange((_event, session) => { handleAuthChange(session); subscribeToPrivateBadge(); });
+supabase.auth.getSession().then(({ data: { session } }) => { handleAuthChange(session); subscribeToPrivateBadge(); });
 
 /* ---------------- Game categories (used for filter bar, card tags, and admin select) ---------------- */
 
@@ -1173,7 +1265,7 @@ function applySiteSettings(s) {
 }
 
 window.switchAdminTab = (tab) => {
-  const tabs = ["products", "conversas", "appearance"];
+  const tabs = ["products", "conversas", "mensagens", "appearance"];
   tabs.forEach((t) => {
     const isActive = t === tab;
     document.getElementById(`admin-tab-${t}`).classList.toggle("hidden", !isActive);
@@ -1185,6 +1277,7 @@ window.switchAdminTab = (tab) => {
   });
   if (tab === "appearance") populateAppearanceForm();
   if (tab === "conversas") loadAdminConversas();
+  if (tab === "mensagens") loadAdminMensagens();
 };
 
 function populateAppearanceForm() {
@@ -2186,6 +2279,158 @@ function subscribeAdminChat(orderId) {
   adminChatRealtimeChannel = supabase
     .channel(`admin-chat-${orderId}`)
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `order_id=eq.${orderId}` }, () => loadAdminChatMessages(orderId))
+    .subscribe();
+}
+
+/* =========================================================================
+   PAINEL ADMIN — ABA "MENSAGENS": chat privado 1-para-1 com cada cliente
+   (tabela chat_privado). Independente de pedidos — serve pra suporte,
+   entrega de produto, ou qualquer contato direto com o cliente.
+   ========================================================================= */
+
+let ADMIN_MENSAGENS_CLIENTES = [];
+let currentAdminMensagemCustomerId = null;
+let adminMensagemRealtimeChannel = null;
+let adminMensagensListChannel = null;
+
+async function loadAdminMensagens() {
+  const list = document.getElementById("admin-mensagens-list");
+  list.innerHTML = `<div class="p-4 text-sm text-muted">Carregando conversas...</div>`;
+
+  // pega todas as mensagens privadas, mais recentes primeiro, pra montar a lista de clientes
+  const { data: msgs, error } = await supabase
+    .from("chat_privado")
+    .select("customer_id, sender_role, message_text, read_at, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) { list.innerHTML = `<div class="p-4 text-sm text-red-400">Erro: ${error.message}</div>`; return; }
+
+  const byCustomer = new Map();
+  for (const m of msgs || []) {
+    if (!byCustomer.has(m.customer_id)) {
+      byCustomer.set(m.customer_id, { last: m, unread: 0 });
+    }
+    if (m.sender_role === "client" && !m.read_at) byCustomer.get(m.customer_id).unread++;
+  }
+
+  const customerIds = [...byCustomer.keys()];
+  updateAdminMensagensTabBadge([...byCustomer.values()].reduce((sum, c) => sum + c.unread, 0));
+
+  if (!customerIds.length) {
+    list.innerHTML = `<div class="p-4 text-sm text-muted">Nenhuma mensagem ainda.</div>`;
+    ADMIN_MENSAGENS_CLIENTES = [];
+    subscribeAdminMensagensList();
+    return;
+  }
+
+  const { data: profiles } = await supabase.from("profiles").select("id, full_name, avatar_url").in("id", customerIds);
+  const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+
+  ADMIN_MENSAGENS_CLIENTES = customerIds.map((id) => ({
+    id,
+    name: profileMap.get(id)?.full_name || "Cliente",
+    ...byCustomer.get(id),
+  }));
+
+  list.innerHTML = ADMIN_MENSAGENS_CLIENTES.map((c) => `
+    <button onclick='openAdminMensagem(${JSON.stringify(c.id)})' data-customer-id="${c.id}" class="admin-mensagem-item block w-full border-b border-border/60 px-4 py-3.5 text-left hover:bg-white/5">
+      <div class="flex items-center justify-between gap-2">
+        <span class="truncate text-sm font-bold text-white">${escapeHTML(c.name)}</span>
+        ${c.unread ? `<span class="shrink-0 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">${c.unread > 9 ? "9+" : c.unread}</span>` : ""}
+      </div>
+      <p class="truncate text-xs text-muted">${escapeHTML(c.last.message_text)}</p>
+    </button>`).join("");
+
+  subscribeAdminMensagensList();
+}
+
+function updateAdminMensagensTabBadge(count) {
+  const badge = document.getElementById("admin-mensagens-unread-badge");
+  if (!badge) return;
+  badge.classList.toggle("hidden", !count);
+  if (count) badge.textContent = count > 9 ? "9+" : String(count);
+}
+
+window.openAdminMensagem = async (customerId) => {
+  currentAdminMensagemCustomerId = customerId;
+  document.querySelectorAll(".admin-mensagem-item").forEach((el) => el.classList.toggle("bg-white/5", el.dataset.customerId === customerId));
+  const client = ADMIN_MENSAGENS_CLIENTES.find((c) => c.id === customerId);
+  const detail = document.getElementById("admin-mensagens-detail");
+
+  detail.innerHTML = `
+    <div class="border-b border-border p-4">
+      <p class="text-sm font-bold text-white">${escapeHTML(client?.name || "Cliente")}</p>
+    </div>
+    <div id="admin-mensagem-messages" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
+    <form id="admin-mensagem-form" class="flex items-center gap-2 border-t border-border p-3">
+      <input id="admin-mensagem-input" autocomplete="off" maxlength="500" placeholder="Digite a mensagem..." class="flex-1 rounded-full border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary" />
+      <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white hover:bg-primaryhover">➤</button>
+    </form>
+  `;
+  document.getElementById("admin-mensagem-form").onsubmit = (e) => { e.preventDefault(); sendAdminMensagem(customerId); };
+  await loadAdminMensagemThread(customerId);
+  subscribeAdminMensagemThread(customerId);
+};
+
+async function loadAdminMensagemThread(customerId) {
+  const { data: msgs } = await supabase.from("chat_privado").select("*").eq("customer_id", customerId).order("created_at", { ascending: true });
+  renderAdminMensagemThread(msgs || []);
+
+  const unreadIds = (msgs || []).filter((m) => m.sender_role === "client" && !m.read_at).map((m) => m.id);
+  if (unreadIds.length) {
+    await supabase.from("chat_privado").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
+  }
+}
+
+function renderAdminMensagemThread(msgs) {
+  const el = document.getElementById("admin-mensagem-messages");
+  if (!el) return;
+  if (!msgs.length) {
+    el.innerHTML = `<div class="flex h-full items-center justify-center p-6 text-center text-sm text-muted">Nenhuma mensagem ainda. Envie a primeira mensagem abaixo.</div>`;
+    return;
+  }
+  el.innerHTML = msgs.map((m) => {
+    const fromTeam = m.sender_role === "admin";
+    return `<div class="flex ${fromTeam ? "justify-end" : "justify-start"}">
+      <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${fromTeam ? "bg-primary text-white" : "bg-surface2 text-white"}">
+        ${escapeHTML(m.message_text)}
+      </div>
+    </div>`;
+  }).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendAdminMensagem(customerId) {
+  const input = document.getElementById("admin-mensagem-input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const { error } = await supabase.from("chat_privado").insert({
+    customer_id: customerId,
+    sender_id: session.user.id,
+    sender_role: "admin",
+    message_text: text,
+  });
+  if (error) alert("Erro ao enviar mensagem: " + error.message);
+}
+
+function subscribeAdminMensagemThread(customerId) {
+  if (adminMensagemRealtimeChannel) supabase.removeChannel(adminMensagemRealtimeChannel);
+  adminMensagemRealtimeChannel = supabase
+    .channel(`admin-mensagem-${customerId}`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_privado", filter: `customer_id=eq.${customerId}` }, () => loadAdminMensagemThread(customerId))
+    .subscribe();
+}
+
+/* mantém a lista da esquerda e o badge da aba atualizados em tempo real
+   enquanto o admin está no painel, mesmo sem estar dentro de uma conversa */
+function subscribeAdminMensagensList() {
+  if (adminMensagensListChannel) { supabase.removeChannel(adminMensagensListChannel); adminMensagensListChannel = null; }
+  adminMensagensListChannel = supabase
+    .channel("admin-mensagens-list")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_privado" }, () => loadAdminMensagens())
     .subscribe();
 }
 
