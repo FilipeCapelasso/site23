@@ -234,7 +234,6 @@
   .plan-row{transition:.15s ease}
   .plan-row.is-selected{border-color:#7c5cff;background:rgba(124,92,255,.12);box-shadow:0 0 0 1px #7c5cff inset}
   .plan-row.is-selected .plan-radio{background:#7c5cff;border-color:#7c5cff}
-  #related-products-grid .product-card{border-color:rgba(255,255,255,.07)!important}
 
   /* ---------------- Dropdown customizado de planos ---------------- */
   .plan-dropdown-item.is-selected{background:rgba(124,92,255,.14)}
@@ -1020,6 +1019,30 @@ function productCardHTML(p, i = 0) {
   </div>`;
 }
 
+/* card minimalista (padrão "Collapse") usado na seção de produtos relacionados:
+   imagem grande centralizada + título/preço abaixo, sem descrições ou botões */
+function relatedProductCardHTML(p, i = 0) {
+  const price = p.type === "ASSINATURA" ? minPlanPrice(p) : p.price;
+  const cat = categoryMeta(p.category);
+  const delay = Math.min(i, 11) * 70;
+  return `
+  <a href="javascript:void(0)" onclick='goToProductPage(${JSON.stringify(p.id)})'
+     class="card-in group block cursor-pointer transition-transform duration-300 ease-out hover:scale-105"
+     style="animation-delay:${delay}ms">
+    <div class="flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-2xl bg-zinc-900 p-6">
+      ${p.image_url
+        ? `<img src="${p.image_url}" class="h-full w-full object-contain" />`
+        : `<div class="flex h-full w-full items-center justify-center text-muted">Sem imagem</div>`}
+    </div>
+    <div class="mt-4 text-left">
+      ${cat ? `<p class="mb-1 text-xs font-bold uppercase tracking-wide text-orange-400">${cat.label}</p>` : ""}
+      <h3 class="font-display text-lg font-extrabold uppercase leading-tight text-white sm:text-xl">${p.name}</h3>
+      <p class="mt-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">A partir de</p>
+      <p class="text-xl font-bold text-primary sm:text-2xl">${price != null ? fmt(price) : "Consultar"}</p>
+    </div>
+  </a>`;
+}
+
 /* efeito de "choque" no card ao clicar, antes de abrir o produto */
 window.shockThenOpen = (evt, id) => {
   const card = evt.currentTarget?.closest?.(".product-card") || evt.target.closest(".product-card");
@@ -1212,9 +1235,12 @@ function renderProductPage(p) {
 
       ${related.length ? `
         <div class="mt-16">
-          <h2 class="section-title-underline mb-6 inline-block font-display text-xl font-bold uppercase tracking-wide text-white">${relatedTitle}</h2>
-          <div id="related-products-grid" class="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-            ${related.map((x, i) => productCardHTML(x, i)).join("")}
+          <div class="mb-8 flex items-center gap-5">
+            <h2 class="shrink-0 font-display text-xl font-bold uppercase tracking-wide text-white sm:text-2xl">${relatedTitle}</h2>
+            <div class="h-px flex-1 bg-border"></div>
+          </div>
+          <div id="related-products-grid" class="grid grid-cols-1 gap-6 sm:gap-8 md:grid-cols-2 lg:grid-cols-3">
+            ${related.map((x, i) => relatedProductCardHTML(x, i)).join("")}
           </div>
         </div>
       ` : ""}
