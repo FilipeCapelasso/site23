@@ -236,6 +236,14 @@
   .plan-row.is-selected .plan-radio{background:#7c5cff;border-color:#7c5cff}
   #related-products-grid .product-card{border-color:rgba(255,255,255,.07)!important}
 
+  /* ---------------- Dropdown customizado de planos ---------------- */
+  .plan-dropdown-item.is-selected{background:rgba(124,92,255,.14)}
+  .plan-dropdown-scroll{scrollbar-width:thin;scrollbar-color:#3f3f46 transparent}
+  .plan-dropdown-scroll::-webkit-scrollbar{width:6px}
+  .plan-dropdown-scroll::-webkit-scrollbar-track{background:transparent}
+  .plan-dropdown-scroll::-webkit-scrollbar-thumb{background:#3f3f46;border-radius:99px}
+  .plan-dropdown-scroll::-webkit-scrollbar-thumb:hover{background:#52525b}
+
 </style>
 </head>
 <body class="min-h-screen bg-noise">
@@ -1071,15 +1079,53 @@ function renderProductPage(p) {
   const plans = p.plans || [];
   const id = p.id;
 
-  const plansHTML = plans.map((plan, i) => `
-    <button type="button" data-plan-index="${i}" onclick='selectPlan(${JSON.stringify(id)}, ${i})'
-      class="plan-row ${i === 0 ? "is-selected" : ""} flex w-full items-center justify-between rounded-xl border border-border bg-surface2 p-3.5 text-left hover:border-primary/50">
-      <span class="flex items-center gap-2.5">
-        <span class="plan-radio flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border"></span>
-        <span class="text-sm font-bold">${plan.name}</span>
+  const planIconHTML = (plan) => {
+    if (plan.icon_url) return `<img src="${plan.icon_url}" class="h-full w-full object-cover" />`;
+    if (p.image_url) return `<img src="${p.image_url}" class="h-full w-full object-cover" />`;
+    return `<div class="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary to-[#4b2fd6] text-xs font-black text-white">${(plan.name || "?").charAt(0)}</div>`;
+  };
+
+  const planOptionHTML = (plan, i) => `
+    <button type="button" data-plan-index="${i}" onclick='selectPlanOption(${JSON.stringify(id)}, ${i})'
+      class="plan-dropdown-item ${i === 0 ? "is-selected" : ""} flex w-full items-center gap-3 border-b border-border/60 p-3 text-left last:border-b-0 hover:bg-white/5">
+      <span class="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-surface2">${planIconHTML(plan)}</span>
+      <span class="min-w-0 flex-1">
+        <span class="flex items-center gap-2">
+          <span class="truncate text-sm font-bold text-white">${plan.name}</span>
+          ${plan.oldPrice ? `<span class="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">Oferta</span>` : (plan.badge ? `<span class="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">${plan.badge}</span>` : "")}
+        </span>
+        <span class="block truncate text-xs text-muted">${plan.subtitle || p.name}</span>
       </span>
-      <span class="text-base font-extrabold text-white">${fmt(plan.price)}</span>
-    </button>`).join("");
+      <span class="flex shrink-0 flex-col items-end leading-tight">
+        ${plan.oldPrice ? `<span class="text-[11px] text-muted line-through">${fmt(plan.oldPrice)}</span>` : ""}
+        <span class="text-sm font-bold text-white">${fmt(plan.price)}</span>
+      </span>
+      <span class="plan-check-icon ${i === 0 ? "" : "invisible"} ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white">✓</span>
+    </button>`;
+
+  const firstPlan = plans[0] || {};
+  const planDropdownHTML = plans.length ? `
+    <div>
+      <p class="mb-2.5 text-xs font-bold uppercase tracking-wide text-muted">Escolha o plano</p>
+      <div class="relative" id="plan-dropdown">
+        <button type="button" onclick="togglePlanDropdown()" id="plan-dropdown-trigger"
+          class="flex w-full items-center gap-3 rounded-xl border-2 border-primary/70 bg-zinc-900 p-3 text-left transition-colors hover:border-primary">
+          <span class="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-surface2">${planIconHTML(firstPlan)}</span>
+          <span class="min-w-0 flex-1">
+            <span id="plan-trigger-title" class="block truncate text-sm font-bold text-white">${firstPlan.name || ""}</span>
+            <span id="plan-trigger-subtitle" class="block truncate text-xs text-muted">${firstPlan.subtitle || p.name}</span>
+          </span>
+          <span id="plan-trigger-price" class="shrink-0 font-display text-base font-bold lilac">${fmt(firstPlan.price)}</span>
+          <svg id="plan-dropdown-chevron" class="h-4 w-4 shrink-0 text-muted transition-transform duration-200" viewBox="0 0 20 20" fill="none">
+            <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div id="plan-dropdown-menu" class="plan-dropdown-scroll absolute left-0 right-0 top-[calc(100%+8px)] z-30 hidden max-h-64 overflow-y-auto rounded-xl border border-border bg-zinc-900 shadow-2xl">
+          ${plans.map((plan, i) => planOptionHTML(plan, i)).join("")}
+        </div>
+      </div>
+    </div>
+  ` : "";
 
   const featuresListHTML = features.length ? `
     <div class="mb-5">
@@ -1140,12 +1186,7 @@ function renderProductPage(p) {
           <h1 class="font-display text-2xl font-bold uppercase leading-tight sm:text-3xl">${p.name}</h1>
           ${tags.length ? `<div class="flex flex-wrap gap-2">${tags.map((t) => `<span class="tag-chip rounded-full px-2.5 py-1 text-[11px] font-bold">${t}</span>`).join("")}</div>` : ""}
 
-          ${isSub ? `
-            <div>
-              <p class="mb-2.5 text-xs font-bold uppercase tracking-wide text-muted">Escolha o plano</p>
-              <div id="page-plans-list" class="flex flex-col gap-2.5">${plansHTML}</div>
-            </div>
-          ` : ""}
+          ${isSub ? planDropdownHTML : ""}
 
           <div class="border-t border-border pt-5">
             <p class="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Total</p>
@@ -1189,13 +1230,55 @@ window.switchProductTab = (tab) => {
   document.querySelectorAll("[data-tab-panel]").forEach((panel) => panel.classList.toggle("hidden", panel.dataset.tabPanel !== tab));
 };
 
-window.selectPlan = (id, index) => {
-  window._selectedPlan = index;
+window.togglePlanDropdown = () => {
+  const menu = document.getElementById("plan-dropdown-menu");
+  if (!menu) return;
+  if (menu.classList.contains("hidden")) openPlanDropdown(); else closePlanDropdown();
+};
+
+function openPlanDropdown() {
+  const menu = document.getElementById("plan-dropdown-menu");
+  const chevron = document.getElementById("plan-dropdown-chevron");
+  if (menu) menu.classList.remove("hidden");
+  if (chevron) chevron.style.transform = "rotate(180deg)";
+}
+
+function closePlanDropdown() {
+  const menu = document.getElementById("plan-dropdown-menu");
+  const chevron = document.getElementById("plan-dropdown-chevron");
+  if (menu) menu.classList.add("hidden");
+  if (chevron) chevron.style.transform = "";
+}
+
+// fecha o dropdown de planos se o clique for fora dele
+document.addEventListener("click", (e) => {
+  const dropdown = document.getElementById("plan-dropdown");
+  if (!dropdown) return;
+  if (!dropdown.contains(e.target)) closePlanDropdown();
+});
+
+window.selectPlanOption = (id, index) => {
   const p = ALL_PRODUCTS.find((x) => x.id === id);
-  document.getElementById("page-price").textContent = fmt(p.plans[index].price);
-  document.querySelectorAll(".plan-row").forEach((row, i) => {
-    row.classList.toggle("is-selected", i === index);
+  const plan = p.plans[index];
+  window._selectedPlan = index;
+
+  const titleEl = document.getElementById("plan-trigger-title");
+  const subtitleEl = document.getElementById("plan-trigger-subtitle");
+  const priceEl = document.getElementById("plan-trigger-price");
+  if (titleEl) titleEl.textContent = plan.name;
+  if (subtitleEl) subtitleEl.textContent = plan.subtitle || p.name;
+  if (priceEl) priceEl.textContent = fmt(plan.price);
+
+  document.getElementById("page-price").textContent = fmt(plan.price);
+
+  document.querySelectorAll(".plan-dropdown-item").forEach((item, i) => {
+    const isSelected = i === index;
+    item.classList.toggle("is-selected", isSelected);
+    const check = item.querySelector(".plan-check-icon");
+    if (check) check.classList.toggle("invisible", !isSelected);
   });
+
+  closePlanDropdown();
 };
 
 /* mostra a página do produto, esconde a vitrine, rola pro topo e atualiza a URL */
