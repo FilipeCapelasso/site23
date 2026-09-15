@@ -1,3 +1,291 @@
+SQL 1:
+
+-- =====================================================================
+-- NOVASTORE — AUTENTICAÇÃO DE CLIENTES, PERFIS (ROLE) E CHAT DE ENTREGA (v3)
+-- =====================================================================
+-- Rode este script DEPOIS do script principal que já criou as tabelas
+-- products / site_settings / orders / a função criar_pix.
+-- Ele é aditivo e seguro de rodar de novo: cria o que falta, atualiza
+-- funções com CREATE OR REPLACE e nunca apaga dados existentes.
+--
+-- O que este script adiciona:
+--   1) Tabela public.profiles  (nome, avatar, role: 'client' | 'admin')
+--      criada automaticamente para todo novo usuário que se cadastra.
+--   2) Coluna orders.customer_id, ligando cada pedido à conta do cliente
+--      que comprou (necessário para o chat e pra corrigir o acesso aos
+--      pedidos, que antes era liberado pra qualquer usuário logado).
+--   3) Tabela public.messages — o chat entre cliente e loja, por pedido.
+--   4) Função criar_pix atualizada para gravar o customer_id do pedido.
+--   5) Regras de segurança (RLS) coerentes com o novo modelo de acesso.
+-- =====================================================================
+
+create extension if not exists pgcrypto;
+
+
+-- =====================================================================
+-- 1) PROFILES — perfil de cada usuário (nome, avatar, role)
+-- =====================================================================
+create table if not exists public.profiles (
+  id          uuid primary key references auth.users(id) on delete cascade,
+  full_name   text,
+  avatar_url  text,
+  role        text not null default 'client' check (role in ('admin','client')),
+  created_at  timestamptz default now()
+);
+
+alter table public.profiles enable row level security;
+
+-- função auxiliar (SECURITY DEFINER) usada nas policies abaixo pra checar
+-- se o usuário logado é admin, sem cair em recursão de RLS na própria tabela
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists(
+    select 1 from public.profiles where id = auth.uid() and role = 'admin'
+  );
+$$;
+
+revoke all on function public.is_admin() from public;
+grant execute on function public.is_admin() to anon, authenticated;
+
+drop policy if exists "users read own profile" on public.profiles;
+create policy "users read own profile" on public.profiles
+  for select using (auth.uid() = id or public.is_admin());
+
+drop policy if exists "users update own profile" on public.profiles;
+create policy "users update own profile" on public.profiles
+  for update using (auth.uid() = id or public.is_admin());
+
+-- não existe policy pública de insert: o perfil é criado automaticamente
+-- pela trigger abaixo (que roda como SECURITY DEFINER e ignora RLS)
+
+-- cria o profile assim que alguém se cadastra (supabase.auth.signUp)
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, full_name, avatar_url, role)
+  values (
+    new.id,
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+    new.raw_user_meta_data->>'avatar_url',
+    'client'
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+
+-- =====================================================================
+-- 2) ORDERS — liga cada pedido à conta do cliente + corrige as regras
+--    de acesso (antes, qualquer usuário autenticado podia ver TODOS os
+--    pedidos; agora só o admin real, ou o próprio dono do pedido).
+-- =====================================================================
+alter table public.orders add column if not exists customer_id uuid references auth.users(id);
+create index if not exists idx_orders_customer_id on public.orders (customer_id);
+
+drop policy if exists "admin can view orders" on public.orders;
+drop policy if exists "customers read own orders" on public.orders;
+drop policy if exists "orders select" on public.orders;
+create policy "orders select" on public.orders
+  for select using (public.is_admin() or auth.uid() = customer_id);
+
+drop policy if exists "admin can update orders" on public.orders;
+drop policy if exists "orders update" on public.orders;
+create policy "orders update" on public.orders
+  for update using (public.is_admin());
+
+
+-- =====================================================================
+-- 3) CRIAR_PIX — mesma função de antes, agora também gravando o
+--    customer_id (quando o cliente estiver logado no momento da compra)
+-- =====================================================================
+create or replace function public.criar_pix(p_name text, p_email text, p_items jsonb, p_customer_id uuid default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_token        text;
+  v_total        numeric;
+  v_order_id     uuid;
+  v_expires_at   timestamptz := now() + interval '30 minutes';
+  v_first_name   text;
+  v_last_name    text;
+  v_payload      jsonb;
+  v_response     http_response;
+  v_mp           jsonb;
+  v_qr_code      text;
+  v_qr_base64    text;
+  v_mp_id        text;
+begin
+  if p_name is null or p_email is null or p_items is null or jsonb_array_length(p_items) = 0 then
+    return jsonb_build_object('error', 'Dados incompletos para gerar o Pix.');
+  end if;
+
+  select coalesce(sum((item->>'price')::numeric * coalesce((item->>'quantity')::numeric, 1)), 0)
+  into v_total
+  from jsonb_array_elements(p_items) as item;
+
+  if v_total <= 0 then
+    return jsonb_build_object('error', 'Valor do pedido inválido.');
+  end if;
+
+  v_token := public.mp_get_token();
+  if v_token is null or v_token = '' then
+    return jsonb_build_object('error', 'Token do Mercado Pago não configurado. Cadastre o segredo "mp_access_token" no Vault do Supabase.');
+  end if;
+
+  insert into public.orders (customer_name, customer_email, customer_id, items, total, status, expires_at)
+  values (p_name, p_email, p_customer_id, p_items, v_total, 'PENDENTE', v_expires_at)
+  returning id into v_order_id;
+
+  v_first_name := split_part(trim(p_name), ' ', 1);
+  v_last_name  := nullif(trim(substr(trim(p_name), length(v_first_name) + 1)), '');
+  if v_last_name is null then v_last_name := v_first_name; end if;
+
+  v_payload := jsonb_build_object(
+    'transaction_amount', round(v_total, 2),
+    'description', 'Pedido NovaStore #' || left(v_order_id::text, 8),
+    'payment_method_id', 'pix',
+    'payer', jsonb_build_object('email', p_email, 'first_name', v_first_name, 'last_name', v_last_name),
+    'external_reference', v_order_id::text,
+    'date_of_expiration', to_char(v_expires_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS".000Z"')
+  );
+
+  begin
+    select * into v_response from http((
+      'POST',
+      'https://api.mercadopago.com/v1/payments',
+      ARRAY[
+        http_header('Authorization', 'Bearer ' || v_token),
+        http_header('X-Idempotency-Key', v_order_id::text)
+      ],
+      'application/json',
+      v_payload::text
+    )::http_request);
+  exception when others then
+    update public.orders set status = 'CANCELADO' where id = v_order_id;
+    return jsonb_build_object('error', 'Erro de conexão com o Mercado Pago: ' || sqlerrm);
+  end;
+
+  if v_response.status < 200 or v_response.status >= 300 then
+    update public.orders set status = 'CANCELADO' where id = v_order_id;
+    return jsonb_build_object(
+      'error',
+      coalesce((v_response.content::jsonb ->> 'message'), 'Erro ao gerar cobrança Pix no Mercado Pago (status ' || v_response.status || ').')
+    );
+  end if;
+
+  v_mp := v_response.content::jsonb;
+  v_qr_code   := v_mp #>> '{point_of_interaction,transaction_data,qr_code}';
+  v_qr_base64 := v_mp #>> '{point_of_interaction,transaction_data,qr_code_base64}';
+  v_mp_id     := v_mp ->> 'id';
+
+  if v_qr_code is null then
+    update public.orders set status = 'CANCELADO' where id = v_order_id;
+    return jsonb_build_object('error', 'O Mercado Pago não retornou um QR code Pix.');
+  end if;
+
+  update public.orders
+  set mp_payment_id = v_mp_id,
+      pix_qr_code = v_qr_code,
+      pix_qr_code_base64 = v_qr_base64
+  where id = v_order_id;
+
+  return jsonb_build_object(
+    'orderId', v_order_id,
+    'qrCode', v_qr_code,
+    'qrCodeBase64', v_qr_base64,
+    'expiresAt', v_expires_at
+  );
+end;
+$$;
+
+revoke all on function public.criar_pix(text, text, jsonb, uuid) from public;
+grant execute on function public.criar_pix(text, text, jsonb, uuid) to anon, authenticated;
+
+
+-- =====================================================================
+-- 4) MESSAGES — chat entre cliente e loja, atrelado a um pedido pago
+-- =====================================================================
+create table if not exists public.messages (
+  id            uuid primary key default gen_random_uuid(),
+  order_id      uuid not null references public.orders(id) on delete cascade,
+  sender_id     uuid references auth.users(id),
+  receiver_id   uuid references auth.users(id),
+  message_text  text not null,
+  read_at       timestamptz,
+  created_at    timestamptz default now()
+);
+
+create index if not exists idx_messages_order_id on public.messages (order_id, created_at);
+
+alter table public.messages enable row level security;
+
+-- cliente só lê mensagens de pedidos que são dele; admin lê tudo
+drop policy if exists "participants read messages" on public.messages;
+create policy "participants read messages" on public.messages
+  for select using (
+    public.is_admin()
+    or exists (select 1 from public.orders o where o.id = messages.order_id and o.customer_id = auth.uid())
+  );
+
+-- cliente só envia mensagem em nome dele mesmo, em pedido que é dele; admin envia em qualquer um
+drop policy if exists "participants send messages" on public.messages;
+create policy "participants send messages" on public.messages
+  for insert with check (
+    sender_id = auth.uid()
+    and (
+      public.is_admin()
+      or exists (select 1 from public.orders o where o.id = messages.order_id and o.customer_id = auth.uid())
+    )
+  );
+
+-- permite marcar mensagens como lidas (read_at) pelos participantes da conversa
+drop policy if exists "participants update messages read status" on public.messages;
+create policy "participants update messages read status" on public.messages
+  for update using (
+    public.is_admin()
+    or exists (select 1 from public.orders o where o.id = messages.order_id and o.customer_id = auth.uid())
+  );
+
+-- habilita realtime (mensagens aparecem na hora, sem precisar recarregar)
+do $$
+begin
+  alter publication supabase_realtime add table public.messages;
+exception when others then
+  raise notice 'Tabela messages já estava no publication de realtime, ou o publication tem outro nome (%).', sqlerrm;
+end $$;
+
+
+-- =====================================================================
+-- 5) ÚLTIMO PASSO (manual): promover sua conta a administrador
+-- =====================================================================
+-- 1. Crie sua conta normalmente pelo site (botão "Login" → aba "Criar conta").
+-- 2. Depois, rode isto aqui trocando pelo e-mail que você cadastrou:
+--
+--   update public.profiles set role = 'admin'
+--   where id = (select id from auth.users where email = 'filipecapelasso1@gmail.com');
+--
+-- A partir daí, essa conta consegue entrar em /#admin normalmente — contas
+-- sem role = 'admin' são bloqueadas e deslogadas automaticamente ao tentar.
+-- =====================================================================
+
+SQL 2:
 -- =====================================================================
 -- NOVASTORE — SCRIPT SQL COMPLETO E AUTOSSUFICIENTE (v2)
 -- =====================================================================
@@ -471,7 +759,7 @@ create policy "admin delete site-assets" on storage.objects
 --     Value: seu Access Token de produção do Mercado Pago
 --
 -- OPÇÃO B — por SQL, rodando isto aqui (troque SEU_TOKEN_AQUI):
---   select vault.create_secret('SEU_TOKEN_AQUI', 'mp_access_token');
+--   select vault.create_secret('APP_USR-4856290854903668-032123-5fff247030e782e3b58c16e065294408-2514178336', 'mp_access_token');
 --
 -- Depois de cadastrar o token, o Pix já funciona sozinho — não precisa
 -- rodar mais nada.
