@@ -545,6 +545,7 @@
           <span id="admin-mensagens-unread-badge" class="hidden absolute -right-2 -top-1 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
         </button>
         <button id="admin-tab-btn-appearance" onclick="switchAdminTab('appearance')" class="admin-tab-btn border-b-2 border-transparent px-4 py-3 text-sm font-bold text-muted hover:text-white">Aparência do site</button>
+        <button id="admin-tab-btn-anunciantes" onclick="switchAdminTab('anunciantes')" class="admin-tab-btn border-b-2 border-transparent px-4 py-3 text-sm font-bold text-muted hover:text-white">Anunciantes</button>
       </div>
 
       <section id="admin-tab-products">
@@ -680,7 +681,62 @@
           <button id="appearance-save" onclick="saveSiteSettings()" class="self-start rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">Salvar aparência</button>
         </div>
       </section>
+
+      <section id="admin-tab-anunciantes" class="hidden">
+        <div class="mb-6 flex items-center justify-between">
+          <h1 class="font-display text-2xl font-bold uppercase">Anunciantes</h1>
+          <button onclick="openAnuncianteForm()" class="rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">+ Novo Anunciante</button>
+        </div>
+        <p class="mb-6 text-sm text-muted">Cada anunciante tem um código de indicação (ex: <span class="text-white font-semibold">#4854</span>). Quando um cliente usa esse código no checkout, a venda entra no histórico abaixo e o cliente ganha um cupom de R$ 20,00 para a próxima compra.</p>
+
+        <div class="overflow-x-auto rounded-2xl border border-border bg-surface">
+          <table class="w-full text-left text-sm">
+            <thead class="border-b border-border text-muted">
+              <tr><th class="px-4 py-3">Código</th><th class="px-4 py-3">Nome do Anunciante</th><th class="px-4 py-3">Total de Vendas</th><th class="px-4 py-3 text-right">Ações</th></tr>
+            </thead>
+            <tbody id="anunciantes-table"></tbody>
+          </table>
+        </div>
+      </section>
     </main>
+  </div>
+</div>
+
+<div id="anunciante-form-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeAnuncianteForm()">
+  <div class="w-full max-w-sm rounded-2xl border border-border bg-surface p-6">
+    <h2 class="mb-5 font-display text-xl font-bold uppercase">Novo Anunciante</h2>
+    <div id="anunciante-form-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+    <form id="anunciante-form" class="flex flex-col gap-4">
+      <div>
+        <label class="mb-1 block text-xs font-semibold text-muted">Nome do Anunciante</label>
+        <input required id="an-nome" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      </div>
+      <div>
+        <label class="mb-1 block text-xs font-semibold text-muted">Código (ex: #4854)</label>
+        <input required id="an-codigo" placeholder="#4854" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      </div>
+      <div class="mt-2 flex gap-3">
+        <button type="button" onclick="closeAnuncianteForm()" class="flex-1 rounded-xl border border-border py-3 font-bold text-muted hover:text-white">Cancelar</button>
+        <button id="anunciante-form-submit" class="flex-1 rounded-xl bg-primary py-3 font-bold text-white hover:bg-primaryhover">Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="anunciante-historico-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeAnuncianteHistorico()">
+  <div class="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-surface p-6">
+    <div class="mb-5 flex items-center justify-between">
+      <h2 class="font-display text-xl font-bold uppercase" id="historico-anunciante-title">Histórico de Vendas</h2>
+      <button onclick="closeAnuncianteHistorico()" class="text-muted hover:text-white">✕</button>
+    </div>
+    <div class="overflow-x-auto rounded-xl border border-border">
+      <table class="w-full text-left text-sm">
+        <thead class="border-b border-border bg-surface2 text-muted">
+          <tr><th class="px-3 py-2">Produto</th><th class="px-3 py-2">Valor</th><th class="px-3 py-2">Cliente</th><th class="px-3 py-2">Data/Hora</th></tr>
+        </thead>
+        <tbody id="anunciante-historico-table"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -937,6 +993,12 @@ async function handleAuthChange(session) {
   }
   renderAuthUI();
   updatePrivateUnreadBadge();
+}
+
+async function refreshCurrentProfile() {
+  if (!CURRENT_USER) return;
+  const { data } = await supabase.from("profiles").select("*").eq("id", CURRENT_USER.id).maybeSingle();
+  CURRENT_PROFILE = data || null;
 }
 
 function renderAuthUI() {
@@ -2242,7 +2304,7 @@ function stopLightningEffect() {
 }
 
 window.switchAdminTab = (tab) => {
-  const tabs = ["products", "conversas", "mensagens", "appearance"];
+  const tabs = ["products", "conversas", "mensagens", "appearance", "anunciantes"];
   tabs.forEach((t) => {
     const isActive = t === tab;
     document.getElementById(`admin-tab-${t}`).classList.toggle("hidden", !isActive);
@@ -2255,6 +2317,7 @@ window.switchAdminTab = (tab) => {
   if (tab === "appearance") populateAppearanceForm();
   if (tab === "conversas") loadAdminConversas();
   if (tab === "mensagens") loadAdminMensagens();
+  if (tab === "anunciantes") loadAdminAnunciantes();
 };
 
 function populateAppearanceForm() {
@@ -2928,9 +2991,19 @@ async function renderCart() {
 
 async function renderOffers() {
   const offersEl = document.getElementById("cart-offers");
-  if (cart.length === 0 || ALL_PRODUCTS.length === 0) { offersEl.innerHTML = ""; return; }
+  if (cart.length === 0) { offersEl.innerHTML = ""; return; }
+
+  let cupomHTML = "";
+  if (CURRENT_PROFILE?.tem_cupom_proxima_compra) {
+    const elegivel = cartTotal() >= 100;
+    cupomHTML = elegivel
+      ? `<div class="mb-4 rounded-xl border border-accent/40 bg-accent/5 p-3 text-sm font-semibold text-accent">🎟️ Você tem um cupom de R$ 20,00! Ele pode ser aplicado no checkout.</div>`
+      : `<div class="mb-4 rounded-xl border border-accent/40 bg-accent/5 p-3 text-xs text-accent">Você tem um cupom de R$ 20,00 disponível para compras a partir de R$ 100,00.</div>`;
+  }
+
+  if (ALL_PRODUCTS.length === 0) { offersEl.innerHTML = cupomHTML; return; }
   const shuffled = [...ALL_PRODUCTS].sort(() => Math.random() - 0.5).slice(0, 2);
-  offersEl.innerHTML = `
+  offersEl.innerHTML = cupomHTML + `
     <div class="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
       <div class="mb-3 flex items-center gap-2 text-sm font-bold lilac">✨ Oferta especial pra você</div>
       <div class="flex flex-col gap-3">
@@ -2972,13 +3045,17 @@ window.openCheckout = () => {
     return;
   }
   closeCart();
+  appliedAnuncianteCode = null;
   const prefName = CURRENT_PROFILE?.full_name || "";
   const prefEmail = CURRENT_USER.email || "";
+  const total = cartTotal();
+  const temCupom = !!CURRENT_PROFILE?.tem_cupom_proxima_compra;
+  const cupomElegivel = temCupom && total >= 100;
   document.getElementById("checkout-content").innerHTML = `
     <h2 class="mb-5 font-display text-2xl font-bold uppercase">Finalizar compra</h2>
     <div class="mb-5 rounded-xl border border-border bg-surface2 p-4 flex justify-between text-sm">
       <span class="text-muted">${cart.reduce((s, i) => s + i.quantity, 0)} item(ns)</span>
-      <span class="font-bold text-white">${fmt(cartTotal())}</span>
+      <span class="font-bold text-white">${fmt(total)}</span>
     </div>
     <div id="checkout-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
     <form id="checkout-form" class="flex flex-col gap-4">
@@ -2990,6 +3067,23 @@ window.openCheckout = () => {
         <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
         <input required type="email" id="checkout-email" value="${escapeHTML(prefEmail)}" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
       </div>
+      <div class="rounded-lg border border-border bg-surface2 p-3">
+        <label class="mb-1 block text-xs font-semibold text-muted">Código do Anunciante / Indicação (Ex: #4854)</label>
+        <div class="flex gap-2">
+          <input id="checkout-anunciante-code" placeholder="#4854" class="flex-1 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary" />
+          <button type="button" onclick="applyAnuncianteCode()" class="btn-press shrink-0 rounded-lg border border-primary/50 px-4 text-sm font-bold text-primary hover:bg-primary/10">Aplicar</button>
+        </div>
+        <p id="anunciante-code-status" class="mt-1.5 min-h-[14px] text-xs"></p>
+      </div>
+      ${temCupom ? `
+      <div class="rounded-lg border border-accent/40 bg-accent/5 p-3">
+        ${cupomElegivel ? `
+          <label class="flex items-center gap-2 text-sm font-semibold text-accent">
+            <input type="checkbox" id="checkout-usar-cupom" class="h-4 w-4 accent-accent" />
+            Usar meu cupom de R$ 20,00 de desconto nesta compra
+          </label>` : `
+          <p class="text-xs text-accent">🎟️ Você tem um cupom de R$ 20,00 disponível para compras a partir de R$ 100,00.</p>`}
+      </div>` : ""}
       <p class="text-[11px] text-muted">A entrega do produto e o suporte pós-compra acontecem pelo chat (ícone 💬 no topo do site), vinculado à sua conta.</p>
       <button id="checkout-submit" class="magnetic-btn mt-2 rounded-xl bg-primary py-3.5 font-bold text-white shadow-glow hover:bg-primaryhover"><span>Gerar Pix e pagar</span></button>
     </form>
@@ -2997,6 +3091,35 @@ window.openCheckout = () => {
   document.getElementById("checkout-form").onsubmit = submitCheckout;
   document.getElementById("checkout-modal").classList.remove("hidden");
   document.getElementById("checkout-modal").classList.add("flex");
+};
+
+let appliedAnuncianteCode = null;
+
+window.applyAnuncianteCode = async () => {
+  const input = document.getElementById("checkout-anunciante-code");
+  const statusEl = document.getElementById("anunciante-code-status");
+  let code = input.value.trim();
+  if (!code) {
+    appliedAnuncianteCode = null;
+    statusEl.textContent = "";
+    return;
+  }
+  if (!code.startsWith("#")) code = "#" + code;
+
+  statusEl.textContent = "Verificando...";
+  statusEl.className = "mt-1.5 min-h-[14px] text-xs text-muted";
+
+  const { data, error } = await supabase.from("anunciantes").select("codigo,nome").eq("codigo", code).maybeSingle();
+
+  if (error || !data) {
+    appliedAnuncianteCode = null;
+    statusEl.textContent = "Código não encontrado.";
+    statusEl.className = "mt-1.5 min-h-[14px] text-xs text-red-400";
+    return;
+  }
+  appliedAnuncianteCode = data.codigo;
+  statusEl.textContent = `Código aplicado! Indicado por ${data.nome}.`;
+  statusEl.className = "mt-1.5 min-h-[14px] text-xs text-accent";
 };
 
 window.closeCheckout = () => {
@@ -3015,6 +3138,7 @@ async function submitCheckout(e) {
 
   const name = document.getElementById("checkout-name").value;
   const email = document.getElementById("checkout-email").value;
+  const usarCupom = document.getElementById("checkout-usar-cupom")?.checked || false;
 
   try {
     const { data, error } = await supabase.rpc("criar_pix", {
@@ -3022,6 +3146,8 @@ async function submitCheckout(e) {
       p_email: email,
       p_items: cart.map((i) => ({ productId: i.productId, planId: i.planId ?? null, name: i.name, planName: i.planName ?? null, price: i.price, quantity: i.quantity })),
       p_customer_id: CURRENT_USER?.id || null,
+      p_anunciante_codigo: appliedAnuncianteCode,
+      p_usar_cupom: usarCupom,
     });
 
     if (error || (data && data.error)) {
@@ -3094,6 +3220,7 @@ function startPaymentPolling(orderId) {
       if (status === "PAGO") {
         clearInterval(paymentPollTimer);
         paymentPollTimer = null;
+        refreshCurrentProfile();
         const ticket = getTicketForOrder(orderId);
         document.getElementById("checkout-content").innerHTML = `
           <div class="text-center">
@@ -3485,6 +3612,104 @@ window.deleteProduct = async (id, name) => {
   const { error } = await supabase.from("products").delete().eq("id", id);
   if (error) alert("Erro ao excluir: " + error.message);
   loadAdminProducts();
+};
+
+/* =========================================================================
+   ANUNCIANTES (código de indicação / cupom de R$20)
+   ========================================================================= */
+
+async function loadAdminAnunciantes() {
+  const { data, error } = await supabase.from("anunciantes").select("*").order("created_at", { ascending: false });
+  const tbody = document.getElementById("anunciantes-table");
+
+  if (error) { tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-6 text-center text-red-400">Erro: ${error.message}</td></tr>`; return; }
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-6 text-center text-muted">Nenhum anunciante cadastrado.</td></tr>`; return; }
+
+  tbody.innerHTML = data.map((a) => `
+    <tr class="border-b border-border/60 last:border-0">
+      <td class="px-4 py-3 font-mono font-bold lilac">${escapeHTML(a.codigo)}</td>
+      <td class="px-4 py-3 font-semibold">${escapeHTML(a.nome)}</td>
+      <td class="px-4 py-3 font-bold text-white">${a.total_vendas ?? 0}</td>
+      <td class="px-4 py-3 text-right whitespace-nowrap">
+        <button onclick="openAnuncianteHistorico('${a.id}','${escapeHTML(a.nome).replace(/'/g,"\\'")}')" class="mr-3 text-xs font-bold hover:underline lilac">📋 Histórico</button>
+        <button onclick="deleteAnunciante('${a.id}','${escapeHTML(a.nome).replace(/'/g,"\\'")}')" class="text-xs font-bold text-red-400 hover:underline">Excluir</button>
+      </td>
+    </tr>`).join("");
+}
+
+window.openAnuncianteForm = () => {
+  document.getElementById("anunciante-form").reset();
+  document.getElementById("anunciante-form-error").classList.add("hidden");
+  document.getElementById("anunciante-form-modal").classList.remove("hidden");
+  document.getElementById("anunciante-form-modal").classList.add("flex");
+};
+
+window.closeAnuncianteForm = () => {
+  document.getElementById("anunciante-form-modal").classList.add("hidden");
+  document.getElementById("anunciante-form-modal").classList.remove("flex");
+};
+
+document.getElementById("anunciante-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("anunciante-form-error");
+  errEl.classList.add("hidden");
+  const btn = document.getElementById("anunciante-form-submit");
+  const nome = document.getElementById("an-nome").value.trim();
+  let codigo = document.getElementById("an-codigo").value.trim();
+  if (!codigo.startsWith("#")) codigo = "#" + codigo;
+
+  btn.disabled = true;
+  btn.textContent = "Salvando...";
+  const { error } = await supabase.from("anunciantes").insert({ nome, codigo });
+  btn.disabled = false;
+  btn.textContent = "Salvar";
+
+  if (error) {
+    errEl.textContent = error.message.includes("duplicate") || error.code === "23505"
+      ? "Já existe um anunciante com esse código."
+      : "Erro ao salvar: " + error.message;
+    errEl.classList.remove("hidden");
+    return;
+  }
+  closeAnuncianteForm();
+  loadAdminAnunciantes();
+};
+
+window.deleteAnunciante = async (id, nome) => {
+  if (!confirm(`Excluir o anunciante "${nome}"? O histórico de vendas dele também será apagado. Essa ação não pode ser desfeita.`)) return;
+  const { error } = await supabase.from("anunciantes").delete().eq("id", id);
+  if (error) alert("Erro ao excluir: " + error.message);
+  loadAdminAnunciantes();
+};
+
+window.openAnuncianteHistorico = async (anuncianteId, nome) => {
+  document.getElementById("historico-anunciante-title").textContent = `Histórico — ${nome}`;
+  const tbody = document.getElementById("anunciante-historico-table");
+  tbody.innerHTML = `<tr><td colspan="4" class="px-3 py-6 text-center text-muted">Carregando...</td></tr>`;
+  document.getElementById("anunciante-historico-modal").classList.remove("hidden");
+  document.getElementById("anunciante-historico-modal").classList.add("flex");
+
+  const { data, error } = await supabase
+    .from("historico_vendas_anunciantes")
+    .select("*")
+    .eq("anunciante_id", anuncianteId)
+    .order("created_at", { ascending: false });
+
+  if (error) { tbody.innerHTML = `<tr><td colspan="4" class="px-3 py-6 text-center text-red-400">Erro: ${error.message}</td></tr>`; return; }
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="4" class="px-3 py-6 text-center text-muted">Nenhuma venda registrada ainda.</td></tr>`; return; }
+
+  tbody.innerHTML = data.map((v) => `
+    <tr class="border-b border-border/60 last:border-0">
+      <td class="px-3 py-2">${escapeHTML(v.produto_nome)}</td>
+      <td class="px-3 py-2 font-semibold text-white">${fmt(v.valor_compra)}</td>
+      <td class="px-3 py-2 text-muted">${escapeHTML(v.cliente_nome || "—")}</td>
+      <td class="px-3 py-2 text-muted">${new Date(v.created_at).toLocaleString("pt-BR")}</td>
+    </tr>`).join("");
+};
+
+window.closeAnuncianteHistorico = () => {
+  document.getElementById("anunciante-historico-modal").classList.add("hidden");
+  document.getElementById("anunciante-historico-modal").classList.remove("flex");
 };
 
 document.getElementById("f-type").onchange = (e) => {
