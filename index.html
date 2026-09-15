@@ -137,6 +137,13 @@
   #hero-section::before{content:"";position:absolute;inset:0;pointer-events:none;background:
     radial-gradient(circle at 75% 25%,rgba(124,92,255,.22),transparent 30%),
     linear-gradient(180deg,rgba(4,5,8,.04),rgba(4,5,8,.28) 72%,rgba(4,5,8,.8))}
+  #depoimentos{overflow:hidden}
+  .depoimentos-fade{-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+  .depoimentos-track{animation:depoimentosScroll 90s linear infinite}
+  .depoimentos-track:hover{animation-play-state:paused}
+  @keyframes depoimentosScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .depoimento-card{width:300px;flex:none}
+  @media(max-width:640px){.depoimentos-track{animation-duration:60s}.depoimento-card{width:260px}}
   #category-bar{padding-top:2px;scrollbar-width:none}
   #category-bar::-webkit-scrollbar{display:none}
   .cat-btn{min-width:88px;position:relative;overflow:hidden;backdrop-filter:blur(10px);box-shadow:0 8px 24px rgba(0,0,0,.12)}
@@ -358,40 +365,10 @@
         <h2 class="section-title-underline inline-block font-display text-2xl font-bold uppercase tracking-wide text-white sm:text-3xl">O que dizem nossos clientes</h2>
         <p class="mx-auto mt-5 max-w-lg text-sm text-muted">Milhares de compras entregues automaticamente, com segurança e satisfação garantida.</p>
       </div>
-      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <div class="card-hover rounded-2xl border border-border bg-surface2/60 p-6">
-          <div class="mb-3 text-accent">★★★★★</div>
-          <p class="mb-5 text-sm leading-relaxed text-muted">"Comprei e recebi o acesso em menos de 2 minutos. Nunca vi entrega tão rápida, virei cliente fiel da loja."</p>
-          <div class="flex items-center gap-3">
-            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-bold text-white">L</span>
-            <div>
-              <p class="text-sm font-bold text-white">Lucas M.</p>
-              <p class="text-xs text-muted">Compra verificada</p>
-            </div>
-          </div>
-        </div>
-        <div class="card-hover rounded-2xl border border-border bg-surface2/60 p-6">
-          <div class="mb-3 text-accent">★★★★★</div>
-          <p class="mb-5 text-sm leading-relaxed text-muted">"Suporte respondeu rápido quando tive uma dúvida sobre o plano. Pagamento via Pix é super prático e seguro."</p>
-          <div class="flex items-center gap-3">
-            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-bold text-white">A</span>
-            <div>
-              <p class="text-sm font-bold text-white">Ana P.</p>
-              <p class="text-xs text-muted">Compra verificada</p>
-            </div>
-          </div>
-        </div>
-        <div class="card-hover rounded-2xl border border-border bg-surface2/60 p-6">
-          <div class="mb-3 text-accent">★★★★★</div>
-          <p class="mb-5 text-sm leading-relaxed text-muted">"Já é a terceira vez que compro aqui. Preço justo, entrega automática e site muito bem organizado."</p>
-          <div class="flex items-center gap-3">
-            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-bold text-white">R</span>
-            <div>
-              <p class="text-sm font-bold text-white">Rafael S.</p>
-              <p class="text-xs text-muted">Compra verificada</p>
-            </div>
-          </div>
-        </div>
+    </div>
+    <div class="depoimentos-fade relative overflow-hidden">
+      <div id="depoimentos-track" class="depoimentos-track flex w-max gap-6 px-4">
+        <div class="p-6 text-sm text-muted">Carregando avaliações...</div>
       </div>
     </div>
   </section>
@@ -1159,6 +1136,275 @@ const GAME_CATEGORIES = [
 ];
 const CATEGORY_MAP = Object.fromEntries(GAME_CATEGORIES.map(c => [c.key, c]));
 
+/* =========================================================================
+   AVALIAÇÕES — depoimentos (marquee na home) + avaliações reais por produto
+   ========================================================================= */
+
+const TESTIMONIALS_SEED = [
+  { name: "Aline Cunha", rating: 5, text: "fiquei com medo no comeco mas foi td certo", cat: null },
+  { name: "Jonathan Pinto", rating: 5, text: "site confiavel, ja indiquei pra uns amigos", cat: "POOFER" },
+  { name: "fefe_rl", rating: 4, text: "tudo certo no final, mas quase desisti da duvida no pix", cat: "WARZONE" },
+  { name: "Felipe Araujo", rating: 5, text: "vim meio desconfiado mas foi tranquilo, valeu a pena", cat: null },
+  { name: "xNexus", rating: 5, text: "suporte respondeu rapido qnd tive duvida, gostei", cat: null },
+  { name: "xXsnip3rXx", rating: 5, text: "fiquei com medo no comeco mas foi td certo", cat: "POOFER" },
+  { name: "Ana Paula", rating: 5, text: "grata pela paciencia no suporte, resolveram meu problema rapidinho", cat: "FIVEM" },
+  { name: "cs_king07", rating: 5, text: "top demais, comprei de noite e ja tava tudo funcionando de manha", cat: "VALORANT" },
+  { name: "Rodrigo Barros", rating: 5, text: "ja é a segunda vez que compro, nunca deu ruim", cat: null },
+  { name: "dxrkmoon", rating: 5, text: "melhor site que ja comprei, recomendo pra geral", cat: "POOFER" },
+  { name: "noobmaster_br", rating: 5, text: "chegou antes do que eu esperava, mandou bem", cat: "FIVEM" },
+  { name: "Juliana Dias", rating: 5, text: "processo bem simples, sem enrolação nenhuma", cat: "CS2" },
+  { name: "Rekt_BR", rating: 5, text: "entrega foi na hora slk, nem deu tempo de ficar ansioso", cat: null },
+  { name: "viihzada", rating: 4, text: "funcionou direitinho, so achei o preço um pouco salgado", cat: null },
+  { name: "G4briel_", rating: 5, text: "preço bom e entrega rapida, virei cliente fixo", cat: "POOFER" },
+  { name: "Everton Guimaraes", rating: 5, text: "cheguei achando que era golpe mas recebi certinho, ate rapido", cat: null },
+  { name: "Roberta Assis", rating: 4, text: "funcionou direitinho, so achei o preço um pouco salgado", cat: "FIVEM" },
+  { name: "kevindev", rating: 5, text: "melhor custo beneficio que achei ate agr", cat: "VALORANT" },
+  { name: "luanzinBR", rating: 4, text: "funcionou direitinho, so achei o preço um pouco salgado", cat: null },
+  { name: "Wesley Andrade", rating: 5, text: "pix caiu e o produto ja tava la, muito bom mesmo", cat: "WARZONE" },
+  { name: "Patricia Azevedo", rating: 5, text: "ja é a segunda vez que compro, nunca deu ruim", cat: "FIVEM" },
+  { name: "Bruno Cavalcanti", rating: 4, text: "bom, só demorou um pouco mais que eu esperava mas resolveu", cat: "UNTURNED" },
+  { name: "Tatiane Borges", rating: 5, text: "cheguei achando que era golpe mas recebi certinho, ate rapido", cat: "VALORANT" },
+  { name: "gabizera", rating: 4, text: "funcionou direitinho, so achei o preço um pouco salgado", cat: "R6S" },
+  { name: "LILY_gg", rating: 5, text: "fiquei com medo no comeco mas foi td certo", cat: "VALORANT" },
+  { name: "Anderson Xavier", rating: 5, text: "site confiavel, ja indiquei pra uns amigos", cat: "VALORANT" },
+  { name: "JhowFPS", rating: 4, text: "produto bom, suporte podia ser mais rapido", cat: "WARZONE" },
+  { name: "Renata Farias", rating: 5, text: "processo bem simples, sem enrolação nenhuma", cat: "WARZONE" },
+  { name: "yagoszn", rating: 5, text: "5 estrelas fácil, entrega automatica funcionando bem", cat: "POOFER" },
+  { name: "Fabio Pereira", rating: 4, text: "entrega ok, só tive uma duvida no comeco", cat: null },
+  { name: "Larissa Gomes", rating: 5, text: "achei mt facil de comprar, site organizado", cat: "DAYZ" },
+  { name: "Otavio Bezerra", rating: 4, text: "tudo certo no final, mas quase desisti da duvida no pix", cat: "VALORANT" },
+  { name: "MC_Kadu", rating: 5, text: "melhor site que ja comprei, recomendo pra geral", cat: "CSGOS" },
+  { name: "liinda_gg", rating: 5, text: "processo bem simples, sem enrolação nenhuma", cat: "R6S" },
+  { name: "Deividszn", rating: 5, text: "cheguei achando que era golpe mas recebi certinho, ate rapido", cat: "VALORANT" },
+  { name: "Sabrina Lopes", rating: 5, text: "top demais, comprei de noite e ja tava tudo funcionando de manha", cat: "R6S" },
+  { name: "lipereis", rating: 5, text: "top demais, comprei de noite e ja tava tudo funcionando de manha", cat: "CSGOS" },
+  { name: "Kaio2007", rating: 5, text: "vim meio desconfiado mas foi tranquilo, valeu a pena", cat: "FORTNITE" },
+  { name: "xshadow77", rating: 5, text: "pix caiu e o produto ja tava la, muito bom mesmo", cat: "FIVEM" },
+  { name: "Vitoria Nunes", rating: 5, text: "fiquei com medo no comeco mas foi td certo", cat: "UNTURNED" },
+  { name: "Carolina Sales", rating: 5, text: "site confiavel, ja indiquei pra uns amigos", cat: "POOFER" },
+  { name: "Caio Rezende", rating: 5, text: "entrega foi na hora slk, nem deu tempo de ficar ansioso", cat: null },
+  { name: "Douglas Fonseca", rating: 5, text: "vale cada centavo, recomendo d+", cat: "POOFER" },
+  { name: "Kelly Ramos", rating: 5, text: "top demais, comprei de noite e ja tava tudo funcionando de manha", cat: null },
+  { name: "Beatriz Moura", rating: 5, text: "entrega foi na hora slk, nem deu tempo de ficar ansioso", cat: "CS2" },
+  { name: "Yaya_Games", rating: 5, text: "nunca tive problema, sempre entrega certinho", cat: "VALORANT" },
+  { name: "AWPmaster", rating: 5, text: "pix caiu e o produto ja tava la, muito bom mesmo", cat: "FIVEM" },
+  { name: "pequenoguerreiro", rating: 5, text: "vale cada centavo, recomendo d+", cat: "WARZONE" },
+  { name: "Eduardo Martins", rating: 5, text: "vim meio desconfiado mas foi tranquilo, valeu a pena", cat: "VALORANT" },
+  { name: "Michele Rangel", rating: 5, text: "processo bem simples, sem enrolação nenhuma", cat: "VALORANT" },
+  { name: "davisz", rating: 5, text: "processo bem simples, sem enrolação nenhuma", cat: "CS2" },
+  { name: "Talita Machado", rating: 4, text: "entrega ok, só tive uma duvida no comeco", cat: "WARZONE" },
+  { name: "Rafael Souza", rating: 5, text: "site confiavel, ja indiquei pra uns amigos", cat: "R6S" },
+  { name: "ghostbr_", rating: 4, text: "bom, só demorou um pouco mais que eu esperava mas resolveu", cat: "WARZONE" },
+  { name: "Fernanda Pires", rating: 5, text: "comprei pra mim e pro meu irmao, os dois vieram certo", cat: "FORTNITE" },
+  { name: "Simone Tavares", rating: 4, text: "tudo certo no final, mas quase desisti da duvida no pix", cat: "FORTNITE" },
+  { name: "tzYuri", rating: 5, text: "processo bem simples, sem enrolação nenhuma", cat: null },
+  { name: "kzk_valo", rating: 5, text: "grata pela paciencia no suporte, resolveram meu problema rapidinho", cat: "R6S" },
+  { name: "Priscila Monteiro", rating: 5, text: "top demais, comprei de noite e ja tava tudo funcionando de manha", cat: "UNTURNED" },
+  { name: "BielzinCS", rating: 5, text: "top demais, comprei de noite e ja tava tudo funcionando de manha", cat: null },
+  { name: "Debora Vieira", rating: 5, text: "top demais, comprei de noite e ja tava tudo funcionando de manha", cat: "UNTURNED" },
+  { name: "Thiago Ferreira", rating: 5, text: "melhor custo beneficio que achei ate agr", cat: "WARZONE" },
+  { name: "Camila Rocha", rating: 5, text: "melhor custo beneficio que achei ate agr", cat: "VALORANT" },
+  { name: "brunno.exe", rating: 4, text: "gostei mas a interface as vezes trava um pouco no cel", cat: "UNTURNED" },
+  { name: "vitin_pro", rating: 5, text: "vim meio desconfiado mas foi tranquilo, valeu a pena", cat: "POOFER" },
+  { name: "Leonardo Castro", rating: 5, text: "fiquei com medo no comeco mas foi td certo", cat: "R6S" },
+  { name: "rapha_ow", rating: 5, text: "top demais, comprei de noite e ja tava tudo funcionando de manha", cat: "UNTURNED" },
+  { name: "Marcos Vinicius", rating: 5, text: "fiquei com medo no comeco mas foi td certo", cat: "UNTURNED" },
+  { name: "marianinha_ff", rating: 5, text: "suporte respondeu rapido qnd tive duvida, gostei", cat: "R6S" },
+  { name: "Natalia Freitas", rating: 5, text: "nunca tive problema, sempre entrega certinho", cat: "R6S" },
+  { name: "Lucas Almeida", rating: 5, text: "grata pela paciencia no suporte, resolveram meu problema rapidinho", cat: null },
+  { name: "nickolasplays", rating: 5, text: "chegou antes do que eu esperava, mandou bem", cat: "CSGOS" },
+  { name: "dark_lobo", rating: 4, text: "gostei mas a interface as vezes trava um pouco no cel", cat: "CS2" },
+  { name: "tuliocs2", rating: 5, text: "fiquei com medo no comeco mas foi td certo", cat: "VALORANT" },
+  { name: "nightwolf99", rating: 5, text: "pix caiu e o produto ja tava la, muito bom mesmo", cat: "FIVEM" },
+  { name: "GuiOficial", rating: 5, text: "achei mt facil de comprar, site organizado", cat: "VALORANT" },
+  { name: "Gabriel Nogueira", rating: 4, text: "tranquilo, teve uma demora pequena na liberação", cat: "FORTNITE" },
+  { name: "valentt", rating: 5, text: "processo bem simples, sem enrolação nenhuma", cat: null },
+];
+
+function testimonialInitial(name) {
+  return (name.trim().charAt(0) || "?").toUpperCase();
+}
+
+function starsHTML(rating) {
+  return "★".repeat(rating) + "☆".repeat(5 - rating);
+}
+
+/* pega um nome de produto real da categoria pra deixar o depoimento fake mais
+   coerente com o catálogo atual; sem categoria ou sem produto correspondente,
+   cai pra um texto genérico */
+function productLabelForCategory(catKey) {
+  if (!catKey) return null;
+  const match = ALL_PRODUCTS.find((p) => (p.category || "").toUpperCase() === catKey);
+  if (match) return match.name;
+  const meta = CATEGORY_MAP[catKey];
+  return meta ? meta.label : null;
+}
+
+function testimonialCardHTML(t) {
+  const productLine = t.product ? `<p class="mb-3 text-[11px] font-bold uppercase tracking-wide lilac">${escapeHTML(t.product)}</p>` : "";
+  return `
+    <div class="depoimento-card card-hover rounded-2xl border border-border bg-surface2/60 p-6">
+      <div class="mb-3 text-accent">${starsHTML(t.rating)}</div>
+      ${productLine}
+      <p class="mb-5 text-sm leading-relaxed text-muted">"${escapeHTML(t.text)}"</p>
+      <div class="flex items-center gap-3">
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-bold text-white">${testimonialInitial(t.name)}</span>
+        <div>
+          <p class="text-sm font-bold text-white">${escapeHTML(t.name)}</p>
+          <p class="text-xs text-muted">Compra verificada</p>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* monta a esteira de depoimentos: avaliações reais (tabela avaliacoes) primeiro,
+   completando com os depoimentos de exemplo — duplica a lista uma vez pra
+   permitir o loop infinito do CSS (translateX -50%) */
+async function renderDepoimentosMarquee() {
+  const track = document.getElementById("depoimentos-track");
+  if (!track) return;
+
+  let realReviews = [];
+  try {
+    const { data } = await supabase
+      .from("avaliacoes")
+      .select("customer_name, rating, comment, products(name)")
+      .order("created_at", { ascending: false })
+      .limit(40);
+    realReviews = (data || []).map((r) => ({
+      name: r.customer_name,
+      rating: r.rating,
+      text: r.comment,
+      product: r.products?.name || null,
+    }));
+  } catch (e) { /* tabela pode não existir ainda — segue só com os de exemplo */ }
+
+  const seedMapped = TESTIMONIALS_SEED.map((t) => ({
+    name: t.name,
+    rating: t.rating,
+    text: t.text,
+    product: productLabelForCategory(t.cat),
+  }));
+
+  const all = [...realReviews, ...seedMapped];
+  const cardsHTML = all.map(testimonialCardHTML).join("");
+  // duplica pra loop contínuo sem "salto" visual
+  track.innerHTML = cardsHTML + cardsHTML;
+}
+
+/* =========================================================================
+   AVALIAÇÃO DO PRODUTO — cliente que comprou pode avaliar na página do produto
+   ========================================================================= */
+
+let selectedReviewRating = 0;
+
+async function loadProductReviewsSection(productId) {
+  const listEl = document.getElementById("product-reviews-list");
+  const formWrap = document.getElementById("product-review-form-wrap");
+  if (!listEl || !formWrap) return;
+
+  const { data: reviews } = await supabase
+    .from("avaliacoes")
+    .select("*")
+    .eq("product_id", productId)
+    .order("created_at", { ascending: false });
+
+  renderProductReviewsList(reviews || []);
+  await renderProductReviewForm(productId, reviews || []);
+}
+
+function renderProductReviewsList(reviews) {
+  const listEl = document.getElementById("product-reviews-list");
+  if (!listEl) return;
+  if (!reviews.length) {
+    listEl.innerHTML = `<p class="text-sm text-muted">Ainda não há avaliações para este produto. Seja o primeiro a avaliar!</p>`;
+    return;
+  }
+  const avg = (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1);
+  listEl.innerHTML = `
+    <div class="mb-5 flex items-center gap-2">
+      <span class="text-accent">${starsHTML(Math.round(avg))}</span>
+      <span class="text-sm font-bold text-white">${avg}</span>
+      <span class="text-xs text-muted">(${reviews.length} avaliação${reviews.length > 1 ? "ões" : ""})</span>
+    </div>
+    <div class="flex flex-col gap-4">
+      ${reviews.map((r) => `
+        <div class="rounded-xl border border-border bg-surface2/60 p-4">
+          <div class="mb-1.5 flex items-center justify-between gap-2">
+            <span class="text-sm font-bold text-white">${escapeHTML(r.customer_name)}</span>
+            <span class="text-accent text-xs">${starsHTML(r.rating)}</span>
+          </div>
+          <p class="text-sm text-muted">${escapeHTML(r.comment)}</p>
+        </div>`).join("")}
+    </div>`;
+}
+
+/* mostra o formulário só se: usuário logado + comprou (pedido PAGO com esse
+   productId) — a RLS do banco também garante isso, aqui é só UX */
+async function renderProductReviewForm(productId, existingReviews) {
+  const formWrap = document.getElementById("product-review-form-wrap");
+  if (!formWrap) return;
+
+  if (!CURRENT_USER) {
+    formWrap.innerHTML = `<p class="mt-6 text-sm text-muted">Faça login e compre este produto para deixar sua avaliação.</p>`;
+    return;
+  }
+
+  const myReview = existingReviews.find((r) => r.customer_id === CURRENT_USER.id);
+
+  const { data: orders } = await supabase.from("orders").select("items").eq("customer_id", CURRENT_USER.id).eq("status", "PAGO");
+  const purchased = (orders || []).some((o) => (o.items || []).some((it) => it.productId === productId));
+
+  if (!purchased) {
+    formWrap.innerHTML = `<p class="mt-6 text-sm text-muted">Disponível após a compra deste produto.</p>`;
+    return;
+  }
+
+  selectedReviewRating = myReview?.rating || 0;
+
+  formWrap.innerHTML = `
+    <div class="mt-6 rounded-xl border border-border bg-surface2/60 p-5">
+      <p class="mb-3 text-sm font-bold text-white">${myReview ? "Editar sua avaliação" : "Avalie este produto"}</p>
+      <div id="review-star-picker" class="mb-3 flex gap-1 text-2xl"></div>
+      <textarea id="review-comment-input" maxlength="300" placeholder="Conte como foi sua experiência..." class="mb-3 w-full rounded-lg border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary" rows="3">${myReview ? escapeHTML(myReview.comment) : ""}</textarea>
+      <button id="review-submit-btn" class="rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">${myReview ? "Atualizar avaliação" : "Enviar avaliação"}</button>
+    </div>`;
+
+  renderStarPicker();
+  document.getElementById("review-submit-btn").onclick = () => submitProductReview(productId);
+}
+
+function renderStarPicker() {
+  const picker = document.getElementById("review-star-picker");
+  if (!picker) return;
+  picker.innerHTML = [1, 2, 3, 4, 5].map((n) => `
+    <button type="button" data-star="${n}" class="review-star-btn transition-transform hover:scale-110 ${n <= selectedReviewRating ? "text-accent" : "text-muted"}">★</button>
+  `).join("");
+  picker.querySelectorAll(".review-star-btn").forEach((btn) => {
+    btn.onclick = () => { selectedReviewRating = Number(btn.dataset.star); renderStarPicker(); };
+  });
+}
+
+async function submitProductReview(productId) {
+  const comment = document.getElementById("review-comment-input").value.trim();
+  if (!selectedReviewRating) { alert("Selecione de 1 a 5 estrelas."); return; }
+  if (!comment) { alert("Escreva um comentário rápido sobre o produto."); return; }
+
+  const customerName = CURRENT_PROFILE?.full_name || CURRENT_USER.email.split("@")[0];
+  const { error } = await supabase.from("avaliacoes").upsert({
+    customer_id: CURRENT_USER.id,
+    product_id: productId,
+    customer_name: customerName,
+    rating: selectedReviewRating,
+    comment,
+  }, { onConflict: "customer_id,product_id" });
+
+  if (error) { alert("Erro ao enviar avaliação: " + error.message); return; }
+  await loadProductReviewsSection(productId);
+  renderDepoimentosMarquee();
+}
+
+
 /* funciona para QUALQUER categoria — conhecida ou digitada na hora pelo admin */
 function categoryMeta(key) {
   if (!key) return null;
@@ -1719,11 +1965,21 @@ function renderProductPage(p) {
           </div>
         </div>
       ` : ""}
+
+      <div class="mt-16 max-w-2xl">
+        <div class="mb-6 flex items-center gap-5">
+          <h2 class="shrink-0 font-display text-xl font-bold uppercase tracking-wide text-white sm:text-2xl">Avaliações</h2>
+          <div class="h-px flex-1 bg-border"></div>
+        </div>
+        <div id="product-reviews-list"><p class="text-sm text-muted">Carregando avaliações...</p></div>
+        <div id="product-review-form-wrap"></div>
+      </div>
     </div>
   `;
 
   window._selectedPlan = isSub ? 0 : null;
   window._currentProductId = id;
+  loadProductReviewsSection(id);
 }
 
 window.switchProductTab = (tab) => {
@@ -2767,7 +3023,7 @@ function fireConfetti(targetEl, pieces = 28) {
 
 route();
 loadSiteSettings();
-loadProducts().then(renderCart);
+loadProducts().then(() => { renderCart(); renderDepoimentosMarquee(); });
 </script>
 </body>
 </html>
