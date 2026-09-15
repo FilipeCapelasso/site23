@@ -256,7 +256,7 @@
 
 <div id="view-store">
 
-  <header class="sticky top-0 z-40 glass border-b border-border">
+  <header class="sticky top-0 z-40 glass border-b border-border relative">
     <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
       <a href="#" onclick="goBackToStore()" class="flex items-center gap-2 text-xl font-extrabold tracking-tight font-display">
         <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black text-white">N</span>
@@ -274,7 +274,22 @@
           🛒 <span class="hidden sm:inline">Carrinho</span>
           <span id="cart-count" class="absolute -right-2 -top-2 hidden h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white pulse-glow">0</span>
         </button>
-        <button onclick="goToAdmin()" class="hidden rounded-full bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primaryhover sm:inline-flex">Entrar</button>
+        <button onclick="openChatModal()" title="Meus chats" class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60">
+          💬
+          <span id="chat-unread-dot" class="pulse-glow absolute right-1.5 top-1.5 hidden h-2.5 w-2.5 rounded-full bg-accent"></span>
+        </button>
+        <div class="relative">
+          <button id="btn-login" onclick="openAuthModal('login')" class="rounded-full bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primaryhover">Login</button>
+          <button id="btn-user" onclick="toggleUserMenu()" class="hidden items-center gap-2 rounded-full border border-border bg-surface py-1.5 pl-1.5 pr-3 hover:border-primary/60">
+            <span id="user-avatar" class="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-xs font-black text-white">?</span>
+            <span id="user-first-name" class="text-sm font-semibold text-white"></span>
+            <span class="text-[10px] text-muted">▾</span>
+          </button>
+          <div id="user-menu" class="absolute right-0 top-[calc(100%+10px)] z-50 hidden w-48 rounded-xl border border-border bg-surface p-2 shadow-2xl">
+            <button onclick="toggleUserMenu(true); openChatModal();" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-muted hover:bg-white/5 hover:text-white">💬 Meus chats</button>
+            <button onclick="logoutUser()" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-muted hover:bg-white/5 hover:text-white">🚪 Sair</button>
+          </div>
+        </div>
       </div>
     </div>
   </header>
@@ -428,12 +443,11 @@
   <div id="product-page-view" class="hidden"></div>
 
   <footer class="border-t border-border bg-surface py-10">
-    <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-sm text-muted sm:flex-row">
+    <div class="mx-auto flex max-w-6xl flex-col items-center justify-center gap-4 px-4 text-sm text-muted sm:flex-row">
       <div class="text-center sm:text-left">
         <p class="mb-1 font-display text-lg font-bold text-white">NovaStore</p>
         <p>© <span id="year"></span> Todos os direitos reservados.</p>
       </div>
-      <button onclick="goToAdmin()" class="text-xs text-muted/50 hover:text-muted">área administrativa</button>
     </div>
   </footer>
 </div>
@@ -469,6 +483,7 @@
     <main class="mx-auto max-w-5xl px-4 py-10">
       <div class="mb-8 flex gap-2 border-b border-border">
         <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="admin-tab-btn border-b-2 border-primary px-4 py-3 text-sm font-bold text-white">Produtos</button>
+        <button id="admin-tab-btn-conversas" onclick="switchAdminTab('conversas')" class="admin-tab-btn border-b-2 border-transparent px-4 py-3 text-sm font-bold text-muted hover:text-white">Conversas</button>
         <button id="admin-tab-btn-appearance" onclick="switchAdminTab('appearance')" class="admin-tab-btn border-b-2 border-transparent px-4 py-3 text-sm font-bold text-muted hover:text-white">Aparência do site</button>
       </div>
 
@@ -485,6 +500,22 @@
             </thead>
             <tbody id="products-table"></tbody>
           </table>
+        </div>
+      </section>
+
+      <section id="admin-tab-conversas" class="hidden">
+        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Conversas</h1>
+        <p class="mb-6 text-sm text-muted">Pedidos com pagamento confirmado. Envie aqui a entrega do produto (chave, login, acesso etc.) diretamente para o cliente.</p>
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
+          <div class="overflow-hidden rounded-2xl border border-border bg-surface">
+            <div id="admin-conversas-list" class="max-h-[65vh] overflow-y-auto"></div>
+          </div>
+          <div id="admin-conversa-detail" class="flex min-h-[65vh] flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+            <div class="flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted">
+              <span class="text-3xl">💬</span>
+              Selecione uma conversa à esquerda para ver os dados da compra e responder ao cliente.
+            </div>
+          </div>
         </div>
       </section>
 
@@ -652,6 +683,59 @@
   <div class="w-full max-w-md rounded-2xl border border-border bg-surface p-6" id="checkout-content"></div>
 </div>
 
+<div id="auth-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeAuthModal()">
+  <div class="w-full max-w-sm rounded-2xl border border-border bg-surface p-6">
+    <div class="mb-5 flex border-b border-border">
+      <button type="button" id="auth-tab-btn-login" onclick="switchAuthTab('login')" class="admin-tab-btn border-b-2 border-primary px-4 py-2.5 text-sm font-bold text-white">Entrar</button>
+      <button type="button" id="auth-tab-btn-register" onclick="switchAuthTab('register')" class="admin-tab-btn border-b-2 border-transparent px-4 py-2.5 text-sm font-bold text-muted hover:text-white">Criar conta</button>
+    </div>
+    <div id="auth-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+    <div id="auth-success" class="hidden mb-4 rounded-lg bg-accent/10 px-3 py-2 text-sm text-accent"></div>
+
+    <div id="auth-form-login-wrap">
+      <form id="auth-form-login" class="flex flex-col gap-3">
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
+          <input required type="email" id="auth-login-email" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Senha</label>
+          <input required type="password" id="auth-login-password" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <button id="auth-login-submit" class="mt-1 rounded-lg bg-primary py-2.5 font-bold text-white hover:bg-primaryhover">Entrar</button>
+      </form>
+    </div>
+
+    <div id="auth-form-register-wrap" class="hidden">
+      <form id="auth-form-register" class="flex flex-col gap-3">
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Nome completo</label>
+          <input required id="auth-register-name" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
+          <input required type="email" id="auth-register-email" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Senha</label>
+          <input required type="password" minlength="6" id="auth-register-password" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <button id="auth-register-submit" class="mt-1 rounded-lg bg-primary py-2.5 font-bold text-white hover:bg-primaryhover">Criar conta</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div id="chat-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeChatModal()">
+  <div class="flex h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+    <div class="flex items-center gap-2 border-b border-border px-5 py-4">
+      <div id="chat-modal-title" class="flex flex-1 items-center gap-2 truncate font-display text-lg font-bold uppercase">Meus chats</div>
+      <button onclick="closeChatModal()" class="shrink-0 text-xl leading-none text-muted hover:text-white">✕</button>
+    </div>
+    <div id="chat-modal-body" class="flex flex-1 flex-col overflow-y-auto"></div>
+  </div>
+</div>
+
 <script type="module">
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -659,6 +743,305 @@ const supabase = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 document.getElementById("year").textContent = new Date().getFullYear();
 
 const fmt = (v) => Number(v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+function escapeHTML(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* =========================================================================
+   AUTENTICAÇÃO DE CLIENTES (login/registro) + PERFIL (nome, avatar, role)
+   ========================================================================= */
+
+let CURRENT_USER = null;
+let CURRENT_PROFILE = null;
+
+async function handleAuthChange(session) {
+  CURRENT_USER = session?.user || null;
+  if (CURRENT_USER) {
+    const { data } = await supabase.from("profiles").select("*").eq("id", CURRENT_USER.id).maybeSingle();
+    CURRENT_PROFILE = data || null;
+  } else {
+    CURRENT_PROFILE = null;
+  }
+  renderAuthUI();
+  updateChatUnreadDot();
+}
+
+function renderAuthUI() {
+  const btnLogin = document.getElementById("btn-login");
+  const btnUser = document.getElementById("btn-user");
+  if (CURRENT_USER) {
+    btnLogin.classList.add("hidden");
+    btnUser.classList.remove("hidden");
+    btnUser.classList.add("flex");
+    const name = CURRENT_PROFILE?.full_name || CURRENT_USER.email.split("@")[0];
+    const firstName = name.trim().split(" ")[0];
+    document.getElementById("user-first-name").textContent = firstName;
+    const avatarEl = document.getElementById("user-avatar");
+    if (CURRENT_PROFILE?.avatar_url) {
+      avatarEl.innerHTML = `<img src="${CURRENT_PROFILE.avatar_url}" class="h-full w-full object-cover" />`;
+    } else {
+      avatarEl.textContent = firstName.charAt(0).toUpperCase();
+    }
+  } else {
+    btnLogin.classList.remove("hidden");
+    btnUser.classList.add("hidden");
+    btnUser.classList.remove("flex");
+    document.getElementById("user-menu").classList.add("hidden");
+  }
+}
+
+window.toggleUserMenu = (forceClose = false) => {
+  const menu = document.getElementById("user-menu");
+  if (forceClose) { menu.classList.add("hidden"); return; }
+  menu.classList.toggle("hidden");
+};
+
+document.addEventListener("click", (e) => {
+  const menu = document.getElementById("user-menu");
+  const trigger = document.getElementById("btn-user");
+  if (menu && !menu.classList.contains("hidden") && !menu.contains(e.target) && !trigger.contains(e.target)) {
+    menu.classList.add("hidden");
+  }
+});
+
+window.logoutUser = async () => {
+  await supabase.auth.signOut();
+  toggleUserMenu(true);
+};
+
+window.openAuthModal = (tab = "login") => {
+  switchAuthTab(tab);
+  document.getElementById("auth-modal").classList.remove("hidden");
+  document.getElementById("auth-modal").classList.add("flex");
+};
+
+window.closeAuthModal = () => {
+  document.getElementById("auth-modal").classList.add("hidden");
+  document.getElementById("auth-modal").classList.remove("flex");
+  document.getElementById("auth-error").classList.add("hidden");
+  document.getElementById("auth-success").classList.add("hidden");
+};
+
+window.switchAuthTab = (tab) => {
+  const isLogin = tab === "login";
+  document.getElementById("auth-form-login-wrap").classList.toggle("hidden", !isLogin);
+  document.getElementById("auth-form-register-wrap").classList.toggle("hidden", isLogin);
+  const btnLogin = document.getElementById("auth-tab-btn-login");
+  const btnRegister = document.getElementById("auth-tab-btn-register");
+  btnLogin.classList.toggle("border-primary", isLogin);
+  btnLogin.classList.toggle("text-white", isLogin);
+  btnLogin.classList.toggle("border-transparent", !isLogin);
+  btnLogin.classList.toggle("text-muted", !isLogin);
+  btnRegister.classList.toggle("border-primary", !isLogin);
+  btnRegister.classList.toggle("text-white", !isLogin);
+  btnRegister.classList.toggle("border-transparent", isLogin);
+  btnRegister.classList.toggle("text-muted", isLogin);
+  document.getElementById("auth-error").classList.add("hidden");
+  document.getElementById("auth-success").classList.add("hidden");
+};
+
+document.getElementById("auth-form-login").onsubmit = async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("auth-error");
+  errEl.classList.add("hidden");
+  const submitBtn = document.getElementById("auth-login-submit");
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Entrando...";
+
+  const email = document.getElementById("auth-login-email").value;
+  const password = document.getElementById("auth-login-password").value;
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = "Entrar";
+
+  if (error) { errEl.textContent = "E-mail ou senha inválidos."; errEl.classList.remove("hidden"); return; }
+  document.getElementById("auth-form-login").reset();
+  closeAuthModal();
+};
+
+document.getElementById("auth-form-register").onsubmit = async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("auth-error");
+  errEl.classList.add("hidden");
+  const submitBtn = document.getElementById("auth-register-submit");
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Criando conta...";
+
+  const full_name = document.getElementById("auth-register-name").value;
+  const email = document.getElementById("auth-register-email").value;
+  const password = document.getElementById("auth-register-password").value;
+  const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name } } });
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = "Criar conta";
+
+  if (error) { errEl.textContent = error.message || "Não foi possível criar a conta."; errEl.classList.remove("hidden"); return; }
+  document.getElementById("auth-form-register").reset();
+  closeAuthModal();
+};
+
+/* =========================================================================
+   CHAT DO CLIENTE ("Meus chats") — lista de pedidos pagos + conversa
+   ========================================================================= */
+
+let chatRealtimeChannel = null;
+let currentChatOrderId = null;
+
+window.openChatModal = async () => {
+  if (!CURRENT_USER) { openAuthModal("login"); return; }
+  document.getElementById("chat-modal").classList.remove("hidden");
+  document.getElementById("chat-modal").classList.add("flex");
+  await renderChatConversationList();
+};
+
+window.closeChatModal = () => {
+  document.getElementById("chat-modal").classList.add("hidden");
+  document.getElementById("chat-modal").classList.remove("flex");
+  if (chatRealtimeChannel) { supabase.removeChannel(chatRealtimeChannel); chatRealtimeChannel = null; }
+  currentChatOrderId = null;
+  updateChatUnreadDot();
+};
+
+async function renderChatConversationList() {
+  document.getElementById("chat-modal-title").textContent = "Meus chats";
+  const body = document.getElementById("chat-modal-body");
+  body.innerHTML = `<div class="p-6 text-sm text-muted">Carregando conversas...</div>`;
+
+  const { data: orders, error } = await supabase
+    .from("orders")
+    .select("id, items, total, status, created_at")
+    .eq("customer_id", CURRENT_USER.id)
+    .eq("status", "PAGO")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    body.innerHTML = `<div class="p-6 text-sm text-red-400">Erro ao carregar suas conversas.</div>`;
+    return;
+  }
+
+  if (!orders || !orders.length) {
+    body.innerHTML = `
+      <div class="flex h-full flex-col items-center justify-center gap-3 p-10 text-center">
+        <span class="text-4xl">💬</span>
+        <p class="font-semibold text-white">Nenhuma conversa ainda</p>
+        <p class="text-sm text-muted">Assim que sua compra for confirmada, nossa equipe entra em contato por aqui com a entrega do seu produto.</p>
+      </div>`;
+    return;
+  }
+
+  const withLast = await Promise.all(orders.map(async (o) => {
+    const { data: msgs } = await supabase.from("messages").select("*").eq("order_id", o.id).order("created_at", { ascending: false }).limit(1);
+    return { order: o, last: (msgs && msgs[0]) || null };
+  }));
+
+  body.innerHTML = withLast.map(({ order, last }) => {
+    const productName = (order.items && order.items[0] && order.items[0].name) || "Pedido";
+    const preview = last ? escapeHTML(last.message_text) : "Aguardando mensagem da nossa equipe...";
+    return `
+    <button onclick='openChatThread(${JSON.stringify(order.id)})' class="flex w-full items-center gap-3 border-b border-border/60 px-5 py-4 text-left hover:bg-white/5">
+      <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black text-white">N</span>
+      <span class="min-w-0 flex-1">
+        <span class="flex items-center justify-between gap-2">
+          <span class="truncate text-sm font-bold text-white">${escapeHTML(productName)}</span>
+          <span class="shrink-0 text-[10px] text-muted">${fmt(order.total)}</span>
+        </span>
+        <span class="block truncate text-xs text-muted">${preview}</span>
+      </span>
+    </button>`;
+  }).join("");
+}
+
+window.openChatThread = async (orderId) => {
+  currentChatOrderId = orderId;
+  document.getElementById("chat-modal-title").innerHTML = `<button onclick="renderChatConversationList()" class="text-muted hover:text-white">←</button> Suporte NovaStore`;
+  const body = document.getElementById("chat-modal-body");
+  body.innerHTML = `
+    <div class="flex h-full flex-1 flex-col">
+      <div id="chat-thread-messages" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
+      <form id="chat-thread-form" class="flex items-center gap-2 border-t border-border p-3">
+        <input id="chat-thread-input" autocomplete="off" placeholder="Digite sua mensagem..." class="flex-1 rounded-full border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary" />
+        <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white hover:bg-primaryhover">➤</button>
+      </form>
+    </div>`;
+  document.getElementById("chat-thread-form").onsubmit = (e) => { e.preventDefault(); sendCustomerChatMessage(orderId); };
+  await loadChatMessages(orderId);
+  subscribeToChat(orderId);
+};
+
+async function loadChatMessages(orderId) {
+  const { data: msgs } = await supabase.from("messages").select("*").eq("order_id", orderId).order("created_at", { ascending: true });
+  renderChatMessages(msgs || []);
+
+  const unreadIds = (msgs || []).filter((m) => m.sender_id !== CURRENT_USER.id && !m.read_at).map((m) => m.id);
+  if (unreadIds.length) {
+    await supabase.from("messages").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
+    updateChatUnreadDot();
+  }
+}
+
+function renderChatMessages(msgs) {
+  const el = document.getElementById("chat-thread-messages");
+  if (!el) return;
+  if (!msgs.length) {
+    el.innerHTML = `<div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted"><span class="text-3xl">📦</span>Assim que liberarmos seu produto, a mensagem aparece aqui.</div>`;
+    return;
+  }
+  el.innerHTML = msgs.map((m) => {
+    const mine = m.sender_id === CURRENT_USER.id;
+    return `<div class="flex ${mine ? "justify-end" : "justify-start"}">
+      <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${mine ? "bg-primary text-white" : "bg-surface2 text-white"}">
+        ${escapeHTML(m.message_text)}
+      </div>
+    </div>`;
+  }).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendCustomerChatMessage(orderId) {
+  const input = document.getElementById("chat-thread-input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  const { error } = await supabase.from("messages").insert({
+    order_id: orderId,
+    sender_id: CURRENT_USER.id,
+    receiver_id: null,
+    message_text: text,
+  });
+  if (error) alert("Erro ao enviar mensagem: " + error.message);
+}
+
+function subscribeToChat(orderId) {
+  if (chatRealtimeChannel) supabase.removeChannel(chatRealtimeChannel);
+  chatRealtimeChannel = supabase
+    .channel(`chat-${orderId}`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `order_id=eq.${orderId}` }, () => loadChatMessages(orderId))
+    .subscribe();
+}
+
+async function updateChatUnreadDot() {
+  const dot = document.getElementById("chat-unread-dot");
+  if (!dot) return;
+  if (!CURRENT_USER) { dot.classList.add("hidden"); return; }
+
+  const { data: orders } = await supabase.from("orders").select("id").eq("customer_id", CURRENT_USER.id);
+  if (!orders || !orders.length) { dot.classList.add("hidden"); return; }
+
+  const ids = orders.map((o) => o.id);
+  const { count } = await supabase
+    .from("messages")
+    .select("id", { count: "exact", head: true })
+    .in("order_id", ids)
+    .is("read_at", null)
+    .neq("sender_id", CURRENT_USER.id);
+
+  dot.classList.toggle("hidden", !count);
+}
+
+supabase.auth.onAuthStateChange((_event, session) => { handleAuthChange(session); });
+supabase.auth.getSession().then(({ data: { session } }) => handleAuthChange(session));
 
 /* ---------------- Game categories (used for filter bar, card tags, and admin select) ---------------- */
 
@@ -790,18 +1173,18 @@ function applySiteSettings(s) {
 }
 
 window.switchAdminTab = (tab) => {
-  const isProducts = tab === "products";
-  document.getElementById("admin-tab-products").classList.toggle("hidden", !isProducts);
-  document.getElementById("admin-tab-appearance").classList.toggle("hidden", isProducts);
-  document.getElementById("admin-tab-btn-products").classList.toggle("border-primary", isProducts);
-  document.getElementById("admin-tab-btn-products").classList.toggle("text-white", isProducts);
-  document.getElementById("admin-tab-btn-products").classList.toggle("border-transparent", !isProducts);
-  document.getElementById("admin-tab-btn-products").classList.toggle("text-muted", !isProducts);
-  document.getElementById("admin-tab-btn-appearance").classList.toggle("border-primary", !isProducts);
-  document.getElementById("admin-tab-btn-appearance").classList.toggle("text-white", !isProducts);
-  document.getElementById("admin-tab-btn-appearance").classList.toggle("border-transparent", isProducts);
-  document.getElementById("admin-tab-btn-appearance").classList.toggle("text-muted", isProducts);
-  if (!isProducts) populateAppearanceForm();
+  const tabs = ["products", "conversas", "appearance"];
+  tabs.forEach((t) => {
+    const isActive = t === tab;
+    document.getElementById(`admin-tab-${t}`).classList.toggle("hidden", !isActive);
+    const btn = document.getElementById(`admin-tab-btn-${t}`);
+    btn.classList.toggle("border-primary", isActive);
+    btn.classList.toggle("text-white", isActive);
+    btn.classList.toggle("border-transparent", !isActive);
+    btn.classList.toggle("text-muted", !isActive);
+  });
+  if (tab === "appearance") populateAppearanceForm();
+  if (tab === "conversas") loadAdminConversas();
 };
 
 function populateAppearanceForm() {
@@ -1476,7 +1859,14 @@ window.openCart = () => { document.getElementById("cart-drawer").classList.remov
 window.closeCart = () => { document.getElementById("cart-drawer").classList.add("hidden"); document.getElementById("cart-drawer").classList.remove("flex"); };
 
 window.openCheckout = () => {
+  if (!CURRENT_USER) {
+    closeCart();
+    openAuthModal("login");
+    return;
+  }
   closeCart();
+  const prefName = CURRENT_PROFILE?.full_name || "";
+  const prefEmail = CURRENT_USER.email || "";
   document.getElementById("checkout-content").innerHTML = `
     <h2 class="mb-5 font-display text-2xl font-bold uppercase">Finalizar compra</h2>
     <div class="mb-5 rounded-xl border border-border bg-surface2 p-4 flex justify-between text-sm">
@@ -1487,12 +1877,13 @@ window.openCheckout = () => {
     <form id="checkout-form" class="flex flex-col gap-4">
       <div>
         <label class="mb-1 block text-xs font-semibold text-muted">Nome completo</label>
-        <input required id="checkout-name" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        <input required id="checkout-name" value="${escapeHTML(prefName)}" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
       </div>
       <div>
         <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
-        <input required type="email" id="checkout-email" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        <input required type="email" id="checkout-email" value="${escapeHTML(prefEmail)}" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
       </div>
+      <p class="text-[11px] text-muted">A entrega do produto e o suporte pós-compra acontecem pelo chat (ícone 💬 no topo do site), vinculado à sua conta.</p>
       <button id="checkout-submit" class="magnetic-btn mt-2 rounded-xl bg-primary py-3.5 font-bold text-white shadow-glow hover:bg-primaryhover"><span>Gerar Pix e pagar</span></button>
     </form>
   `;
@@ -1523,6 +1914,7 @@ async function submitCheckout(e) {
       p_name: name,
       p_email: email,
       p_items: cart.map((i) => ({ productId: i.productId, planId: i.planId ?? null, name: i.name, planName: i.planName ?? null, price: i.price, quantity: i.quantity })),
+      p_customer_id: CURRENT_USER?.id || null,
     });
 
     if (error || (data && data.error)) {
@@ -1624,14 +2016,35 @@ window.copyPixCode = (btn, code) => {
   setTimeout(() => (btn.textContent = "📋 Copiar código Pix"), 2000);
 };
 
-async function checkAdminSession() {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session) showAdminPanel(); else showAdminLogin();
+/* verifica no banco (tabela profiles) se o usuário logado tem role = 'admin' —
+   é essa checagem que protege de verdade o painel, não a existência de sessão */
+async function verifyAdminRole(userId) {
+  const { data, error } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
+  return !error && data?.role === "admin";
 }
 
-function showAdminLogin() {
+async function checkAdminSession() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) { showAdminLogin(); return; }
+  const isAdmin = await verifyAdminRole(session.user.id);
+  if (isAdmin) {
+    showAdminPanel();
+  } else {
+    await supabase.auth.signOut();
+    showAdminLogin("Esta conta não tem permissão de administrador.");
+  }
+}
+
+function showAdminLogin(errorMsg) {
   document.getElementById("admin-login-screen").classList.remove("hidden");
   document.getElementById("admin-panel-screen").classList.add("hidden");
+  const errEl = document.getElementById("login-error");
+  if (errorMsg) {
+    errEl.textContent = errorMsg;
+    errEl.classList.remove("hidden");
+  } else {
+    errEl.classList.add("hidden");
+  }
 }
 
 function showAdminPanel() {
@@ -1647,12 +2060,134 @@ document.getElementById("login-form").onsubmit = async (e) => {
   const errEl = document.getElementById("login-error");
   errEl.classList.add("hidden");
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) { errEl.textContent = "E-mail ou senha inválidos."; errEl.classList.remove("hidden"); return; }
+
+  const isAdmin = await verifyAdminRole(data.user.id);
+  if (!isAdmin) {
+    await supabase.auth.signOut();
+    errEl.textContent = "Esta conta não tem permissão de administrador.";
+    errEl.classList.remove("hidden");
+    return;
+  }
   showAdminPanel();
 };
 
 window.logoutAdmin = async () => { await supabase.auth.signOut(); showAdminLogin(); };
+
+/* =========================================================================
+   PAINEL ADMIN — ABA "CONVERSAS": lista pedidos pagos e permite responder
+   (entregar a key/produto) diretamente para o cliente pelo chat.
+   ========================================================================= */
+
+let ADMIN_ORDERS = [];
+let currentAdminOrder = null;
+let adminChatRealtimeChannel = null;
+
+async function loadAdminConversas() {
+  const list = document.getElementById("admin-conversas-list");
+  list.innerHTML = `<div class="p-4 text-sm text-muted">Carregando pedidos pagos...</div>`;
+
+  const { data: orders, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("status", "PAGO")
+    .order("created_at", { ascending: false });
+
+  if (error) { list.innerHTML = `<div class="p-4 text-sm text-red-400">Erro: ${error.message}</div>`; return; }
+
+  ADMIN_ORDERS = orders || [];
+  if (!ADMIN_ORDERS.length) { list.innerHTML = `<div class="p-4 text-sm text-muted">Nenhum pedido pago ainda.</div>`; return; }
+
+  list.innerHTML = ADMIN_ORDERS.map((o) => {
+    const productName = (o.items && o.items[0] && o.items[0].name) || "Pedido";
+    const extra = (o.items && o.items.length > 1) ? ` +${o.items.length - 1}` : "";
+    return `
+    <button onclick='openAdminConversa(${JSON.stringify(o.id)})' data-order-id="${o.id}" class="admin-conversa-item block w-full border-b border-border/60 px-4 py-3.5 text-left hover:bg-white/5">
+      <div class="flex items-center justify-between gap-2">
+        <span class="truncate text-sm font-bold text-white">${escapeHTML(o.customer_name || "Cliente")}</span>
+        <span class="shrink-0 text-[11px] text-muted">${fmt(o.total)}</span>
+      </div>
+      <p class="truncate text-xs text-muted">${escapeHTML(productName)}${extra}</p>
+    </button>`;
+  }).join("");
+}
+
+window.openAdminConversa = async (orderId) => {
+  currentAdminOrder = ADMIN_ORDERS.find((o) => o.id === orderId);
+  document.querySelectorAll(".admin-conversa-item").forEach((el) => el.classList.toggle("bg-white/5", el.dataset.orderId === orderId));
+  const detail = document.getElementById("admin-conversa-detail");
+  if (!currentAdminOrder) return;
+
+  const productsList = (currentAdminOrder.items || [])
+    .map((it) => `${it.name}${it.planName ? " — " + it.planName : ""} (x${it.quantity || 1})`)
+    .join(", ");
+
+  detail.innerHTML = `
+    <div class="border-b border-border p-4">
+      <p class="text-sm font-bold text-white">${escapeHTML(currentAdminOrder.customer_name || "Cliente")}</p>
+      <p class="text-xs text-muted">${escapeHTML(currentAdminOrder.customer_email || "")}</p>
+      <p class="mt-2 text-xs text-muted"><span class="font-semibold text-white">Produto(s):</span> ${escapeHTML(productsList)}</p>
+      <p class="text-xs text-muted"><span class="font-semibold text-white">Valor:</span> ${fmt(currentAdminOrder.total)}</p>
+    </div>
+    <div id="admin-chat-messages" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
+    <form id="admin-chat-form" class="flex items-center gap-2 border-t border-border p-3">
+      <input id="admin-chat-input" autocomplete="off" placeholder="Digite a mensagem (ex: chave do produto)..." class="flex-1 rounded-full border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary" />
+      <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white hover:bg-primaryhover">➤</button>
+    </form>
+  `;
+  document.getElementById("admin-chat-form").onsubmit = (e) => { e.preventDefault(); sendAdminChatMessage(orderId); };
+  await loadAdminChatMessages(orderId);
+  subscribeAdminChat(orderId);
+};
+
+async function loadAdminChatMessages(orderId) {
+  const { data: msgs } = await supabase.from("messages").select("*").eq("order_id", orderId).order("created_at", { ascending: true });
+  renderAdminChatMessages(msgs || []);
+}
+
+function renderAdminChatMessages(msgs) {
+  const el = document.getElementById("admin-chat-messages");
+  if (!el) return;
+  if (!msgs.length) {
+    el.innerHTML = `<div class="flex h-full items-center justify-center p-6 text-center text-sm text-muted">Nenhuma mensagem ainda. Envie a entrega do produto abaixo.</div>`;
+    return;
+  }
+  el.innerHTML = msgs.map((m) => {
+    // se quem enviou não foi o próprio cliente do pedido, a mensagem é da equipe (admin)
+    const fromTeam = m.sender_id !== currentAdminOrder.customer_id;
+    return `<div class="flex ${fromTeam ? "justify-end" : "justify-start"}">
+      <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${fromTeam ? "bg-primary text-white" : "bg-surface2 text-white"}">
+        ${escapeHTML(m.message_text)}
+      </div>
+    </div>`;
+  }).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendAdminChatMessage(orderId) {
+  const input = document.getElementById("admin-chat-input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const { error } = await supabase.from("messages").insert({
+    order_id: orderId,
+    sender_id: session.user.id,
+    receiver_id: currentAdminOrder.customer_id,
+    message_text: text,
+  });
+  if (error) alert("Erro ao enviar mensagem: " + error.message);
+}
+
+function subscribeAdminChat(orderId) {
+  if (adminChatRealtimeChannel) supabase.removeChannel(adminChatRealtimeChannel);
+  adminChatRealtimeChannel = supabase
+    .channel(`admin-chat-${orderId}`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `order_id=eq.${orderId}` }, () => loadAdminChatMessages(orderId))
+    .subscribe();
+}
 
 async function loadAdminProducts() {
   const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false });
