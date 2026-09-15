@@ -1,766 +1,2774 @@
-SQL 1:
-
--- =====================================================================
--- NOVASTORE — AUTENTICAÇÃO DE CLIENTES, PERFIS (ROLE) E CHAT DE ENTREGA (v3)
--- =====================================================================
--- Rode este script DEPOIS do script principal que já criou as tabelas
--- products / site_settings / orders / a função criar_pix.
--- Ele é aditivo e seguro de rodar de novo: cria o que falta, atualiza
--- funções com CREATE OR REPLACE e nunca apaga dados existentes.
---
--- O que este script adiciona:
---   1) Tabela public.profiles  (nome, avatar, role: 'client' | 'admin')
---      criada automaticamente para todo novo usuário que se cadastra.
---   2) Coluna orders.customer_id, ligando cada pedido à conta do cliente
---      que comprou (necessário para o chat e pra corrigir o acesso aos
---      pedidos, que antes era liberado pra qualquer usuário logado).
---   3) Tabela public.messages — o chat entre cliente e loja, por pedido.
---   4) Função criar_pix atualizada para gravar o customer_id do pedido.
---   5) Regras de segurança (RLS) coerentes com o novo modelo de acesso.
--- =====================================================================
-
-create extension if not exists pgcrypto;
-
-
--- =====================================================================
--- 1) PROFILES — perfil de cada usuário (nome, avatar, role)
--- =====================================================================
-create table if not exists public.profiles (
-  id          uuid primary key references auth.users(id) on delete cascade,
-  full_name   text,
-  avatar_url  text,
-  role        text not null default 'client' check (role in ('admin','client')),
-  created_at  timestamptz default now()
-);
-
-alter table public.profiles enable row level security;
-
--- função auxiliar (SECURITY DEFINER) usada nas policies abaixo pra checar
--- se o usuário logado é admin, sem cair em recursão de RLS na própria tabela
-create or replace function public.is_admin()
-returns boolean
-language sql
-security definer
-set search_path = public
-as $$
-  select exists(
-    select 1 from public.profiles where id = auth.uid() and role = 'admin'
-  );
-$$;
-
-revoke all on function public.is_admin() from public;
-grant execute on function public.is_admin() to anon, authenticated;
-
-drop policy if exists "users read own profile" on public.profiles;
-create policy "users read own profile" on public.profiles
-  for select using (auth.uid() = id or public.is_admin());
-
-drop policy if exists "users update own profile" on public.profiles;
-create policy "users update own profile" on public.profiles
-  for update using (auth.uid() = id or public.is_admin());
-
--- não existe policy pública de insert: o perfil é criado automaticamente
--- pela trigger abaixo (que roda como SECURITY DEFINER e ignora RLS)
-
--- cria o profile assim que alguém se cadastra (supabase.auth.signUp)
-create or replace function public.handle_new_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-  insert into public.profiles (id, full_name, avatar_url, role)
-  values (
-    new.id,
-    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
-    new.raw_user_meta_data->>'avatar_url',
-    'client'
-  )
-  on conflict (id) do nothing;
-  return new;
-end;
-$$;
-
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function public.handle_new_user();
-
-
--- =====================================================================
--- 2) ORDERS — liga cada pedido à conta do cliente + corrige as regras
---    de acesso (antes, qualquer usuário autenticado podia ver TODOS os
---    pedidos; agora só o admin real, ou o próprio dono do pedido).
--- =====================================================================
-alter table public.orders add column if not exists customer_id uuid references auth.users(id);
-create index if not exists idx_orders_customer_id on public.orders (customer_id);
-
-drop policy if exists "admin can view orders" on public.orders;
-drop policy if exists "customers read own orders" on public.orders;
-drop policy if exists "orders select" on public.orders;
-create policy "orders select" on public.orders
-  for select using (public.is_admin() or auth.uid() = customer_id);
-
-drop policy if exists "admin can update orders" on public.orders;
-drop policy if exists "orders update" on public.orders;
-create policy "orders update" on public.orders
-  for update using (public.is_admin());
-
-
--- =====================================================================
--- 3) CRIAR_PIX — mesma função de antes, agora também gravando o
---    customer_id (quando o cliente estiver logado no momento da compra)
--- =====================================================================
-create or replace function public.criar_pix(p_name text, p_email text, p_items jsonb, p_customer_id uuid default null)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public, extensions
-as $$
-declare
-  v_token        text;
-  v_total        numeric;
-  v_order_id     uuid;
-  v_expires_at   timestamptz := now() + interval '30 minutes';
-  v_first_name   text;
-  v_last_name    text;
-  v_payload      jsonb;
-  v_response     http_response;
-  v_mp           jsonb;
-  v_qr_code      text;
-  v_qr_base64    text;
-  v_mp_id        text;
-begin
-  if p_name is null or p_email is null or p_items is null or jsonb_array_length(p_items) = 0 then
-    return jsonb_build_object('error', 'Dados incompletos para gerar o Pix.');
-  end if;
-
-  select coalesce(sum((item->>'price')::numeric * coalesce((item->>'quantity')::numeric, 1)), 0)
-  into v_total
-  from jsonb_array_elements(p_items) as item;
-
-  if v_total <= 0 then
-    return jsonb_build_object('error', 'Valor do pedido inválido.');
-  end if;
-
-  v_token := public.mp_get_token();
-  if v_token is null or v_token = '' then
-    return jsonb_build_object('error', 'Token do Mercado Pago não configurado. Cadastre o segredo "mp_access_token" no Vault do Supabase.');
-  end if;
-
-  insert into public.orders (customer_name, customer_email, customer_id, items, total, status, expires_at)
-  values (p_name, p_email, p_customer_id, p_items, v_total, 'PENDENTE', v_expires_at)
-  returning id into v_order_id;
-
-  v_first_name := split_part(trim(p_name), ' ', 1);
-  v_last_name  := nullif(trim(substr(trim(p_name), length(v_first_name) + 1)), '');
-  if v_last_name is null then v_last_name := v_first_name; end if;
-
-  v_payload := jsonb_build_object(
-    'transaction_amount', round(v_total, 2),
-    'description', 'Pedido NovaStore #' || left(v_order_id::text, 8),
-    'payment_method_id', 'pix',
-    'payer', jsonb_build_object('email', p_email, 'first_name', v_first_name, 'last_name', v_last_name),
-    'external_reference', v_order_id::text,
-    'date_of_expiration', to_char(v_expires_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS".000Z"')
-  );
-
-  begin
-    select * into v_response from http((
-      'POST',
-      'https://api.mercadopago.com/v1/payments',
-      ARRAY[
-        http_header('Authorization', 'Bearer ' || v_token),
-        http_header('X-Idempotency-Key', v_order_id::text)
-      ],
-      'application/json',
-      v_payload::text
-    )::http_request);
-  exception when others then
-    update public.orders set status = 'CANCELADO' where id = v_order_id;
-    return jsonb_build_object('error', 'Erro de conexão com o Mercado Pago: ' || sqlerrm);
-  end;
-
-  if v_response.status < 200 or v_response.status >= 300 then
-    update public.orders set status = 'CANCELADO' where id = v_order_id;
-    return jsonb_build_object(
-      'error',
-      coalesce((v_response.content::jsonb ->> 'message'), 'Erro ao gerar cobrança Pix no Mercado Pago (status ' || v_response.status || ').')
-    );
-  end if;
-
-  v_mp := v_response.content::jsonb;
-  v_qr_code   := v_mp #>> '{point_of_interaction,transaction_data,qr_code}';
-  v_qr_base64 := v_mp #>> '{point_of_interaction,transaction_data,qr_code_base64}';
-  v_mp_id     := v_mp ->> 'id';
-
-  if v_qr_code is null then
-    update public.orders set status = 'CANCELADO' where id = v_order_id;
-    return jsonb_build_object('error', 'O Mercado Pago não retornou um QR code Pix.');
-  end if;
-
-  update public.orders
-  set mp_payment_id = v_mp_id,
-      pix_qr_code = v_qr_code,
-      pix_qr_code_base64 = v_qr_base64
-  where id = v_order_id;
-
-  return jsonb_build_object(
-    'orderId', v_order_id,
-    'qrCode', v_qr_code,
-    'qrCodeBase64', v_qr_base64,
-    'expiresAt', v_expires_at
-  );
-end;
-$$;
-
-revoke all on function public.criar_pix(text, text, jsonb, uuid) from public;
-grant execute on function public.criar_pix(text, text, jsonb, uuid) to anon, authenticated;
-
-
--- =====================================================================
--- 4) MESSAGES — chat entre cliente e loja, atrelado a um pedido pago
--- =====================================================================
-create table if not exists public.messages (
-  id            uuid primary key default gen_random_uuid(),
-  order_id      uuid not null references public.orders(id) on delete cascade,
-  sender_id     uuid references auth.users(id),
-  receiver_id   uuid references auth.users(id),
-  message_text  text not null,
-  read_at       timestamptz,
-  created_at    timestamptz default now()
-);
-
-create index if not exists idx_messages_order_id on public.messages (order_id, created_at);
-
-alter table public.messages enable row level security;
-
--- cliente só lê mensagens de pedidos que são dele; admin lê tudo
-drop policy if exists "participants read messages" on public.messages;
-create policy "participants read messages" on public.messages
-  for select using (
-    public.is_admin()
-    or exists (select 1 from public.orders o where o.id = messages.order_id and o.customer_id = auth.uid())
-  );
-
--- cliente só envia mensagem em nome dele mesmo, em pedido que é dele; admin envia em qualquer um
-drop policy if exists "participants send messages" on public.messages;
-create policy "participants send messages" on public.messages
-  for insert with check (
-    sender_id = auth.uid()
-    and (
-      public.is_admin()
-      or exists (select 1 from public.orders o where o.id = messages.order_id and o.customer_id = auth.uid())
-    )
-  );
-
--- permite marcar mensagens como lidas (read_at) pelos participantes da conversa
-drop policy if exists "participants update messages read status" on public.messages;
-create policy "participants update messages read status" on public.messages
-  for update using (
-    public.is_admin()
-    or exists (select 1 from public.orders o where o.id = messages.order_id and o.customer_id = auth.uid())
-  );
-
--- habilita realtime (mensagens aparecem na hora, sem precisar recarregar)
-do $$
-begin
-  alter publication supabase_realtime add table public.messages;
-exception when others then
-  raise notice 'Tabela messages já estava no publication de realtime, ou o publication tem outro nome (%).', sqlerrm;
-end $$;
-
-
--- =====================================================================
--- 5) ÚLTIMO PASSO (manual): promover sua conta a administrador
--- =====================================================================
--- 1. Crie sua conta normalmente pelo site (botão "Login" → aba "Criar conta").
--- 2. Depois, rode isto aqui trocando pelo e-mail que você cadastrou:
---
---   update public.profiles set role = 'admin'
---   where id = (select id from auth.users where email = 'filipecapelasso1@gmail.com');
---
--- A partir daí, essa conta consegue entrar em /#admin normalmente — contas
--- sem role = 'admin' são bloqueadas e deslogadas automaticamente ao tentar.
--- =====================================================================
-
-SQL 2:
--- =====================================================================
--- NOVASTORE — SCRIPT SQL COMPLETO E AUTOSSUFICIENTE (v2)
--- =====================================================================
--- Esta versão NÃO precisa de Edge Function, CLI, PowerShell nem nada
--- fora do site do Supabase. Tudo roda dentro do banco:
---   • a chamada ao Mercado Pago é feita de dentro do Postgres
---     (extensão "http")
---   • o token de acesso fica guardado no Vault do Supabase
---     (Project Settings → Vault, ou por SQL, como mostrado no final)
---   • a confirmação automática do pagamento roda sozinha via pg_cron
---
--- É seguro rodar este script em um projeto que já tem produtos, imagens
--- e configurações salvas: tudo usa "IF NOT EXISTS" e nunca apaga dados.
---
--- Depois de rodar este arquivo inteiro, o único passo manual que falta
--- é cadastrar o token do Mercado Pago (passo a passo no final deste
--- arquivo, e também explicado na conversa).
--- =====================================================================
-
-create extension if not exists pgcrypto;
-create extension if not exists http with schema extensions;
-
-do $$
-begin
-  create extension if not exists pg_cron with schema extensions;
-exception when others then
-  raise notice 'pg_cron não pôde ser criado automaticamente (%). Se o passo de confirmação automática não funcionar, ative a extensão "pg_cron" em Database → Extensions no site do Supabase.', sqlerrm;
-end $$;
-
-
--- =====================================================================
--- 1) TABELA: products  (preserva tudo que já existe)
--- =====================================================================
-create table if not exists public.products (
-  id           uuid primary key default gen_random_uuid(),
-  slug         text unique,
-  name         text not null,
-  description  text,
-  category     text,
-  tags         text[] default '{}',
-  features     text[] default '{}',
-  type         text not null default 'UNICO' check (type in ('UNICO','ASSINATURA')),
-  price        numeric,
-  stock        integer,
-  image_url    text,
-  plans        jsonb default '[]',
-  featured     boolean default false,
-  active       boolean default true,
-  created_at   timestamptz default now()
-);
-
-alter table public.products add column if not exists slug text;
-alter table public.products add column if not exists tags text[] default '{}';
-alter table public.products add column if not exists features text[] default '{}';
-alter table public.products add column if not exists plans jsonb default '[]';
-alter table public.products add column if not exists featured boolean default false;
-alter table public.products add column if not exists active boolean default true;
-alter table public.products add column if not exists created_at timestamptz default now();
-
-create unique index if not exists products_slug_key on public.products (slug) where slug is not null;
-create index if not exists idx_products_category on public.products (category);
-create index if not exists idx_products_featured on public.products (featured);
-create index if not exists idx_products_active on public.products (active);
-
-alter table public.products enable row level security;
-
-drop policy if exists "public read active products" on public.products;
-create policy "public read active products" on public.products
-  for select using (active = true);
-
-drop policy if exists "admin full access products" on public.products;
-create policy "admin full access products" on public.products
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-
-
--- =====================================================================
--- 2) TABELA: site_settings  (banner e fundo do site)
--- =====================================================================
-create table if not exists public.site_settings (
-  id                   smallint primary key default 1,
-  hero_image_url       text,
-  hero_overlay         numeric default 0.35,
-  background_image_url text,
-  background_overlay   numeric default 0.85,
-  updated_at           timestamptz default now()
-);
-
-alter table public.site_settings add column if not exists hero_overlay numeric default 0.35;
-alter table public.site_settings add column if not exists updated_at timestamptz default now();
-
-insert into public.site_settings (id)
-values (1)
-on conflict (id) do nothing;
-
-alter table public.site_settings enable row level security;
-
-drop policy if exists "public read settings" on public.site_settings;
-create policy "public read settings" on public.site_settings
-  for select using (true);
-
-drop policy if exists "admin write settings" on public.site_settings;
-create policy "admin write settings" on public.site_settings
-  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
-
-
--- =====================================================================
--- 3) TABELA: orders  (pedidos + Pix)
--- =====================================================================
-create table if not exists public.orders (
-  id                    uuid primary key default gen_random_uuid(),
-  customer_name         text,
-  customer_email        text,
-  items                 jsonb,
-  total                 numeric,
-  status                text default 'PENDENTE',
-  mp_payment_id         text,
-  pix_qr_code           text,
-  pix_qr_code_base64    text,
-  expires_at            timestamptz,
-  paid_at               timestamptz,
-  created_at            timestamptz default now()
-);
-
--- garante as colunas mesmo se a tabela já existia com outro formato
-alter table public.orders add column if not exists customer_name text;
-alter table public.orders add column if not exists customer_email text;
-alter table public.orders add column if not exists items jsonb;
-alter table public.orders add column if not exists total numeric;
-alter table public.orders add column if not exists status text default 'PENDENTE';
-alter table public.orders add column if not exists mp_payment_id text;
-alter table public.orders add column if not exists pix_qr_code text;
-alter table public.orders add column if not exists pix_qr_code_base64 text;
-alter table public.orders add column if not exists expires_at timestamptz;
-alter table public.orders add column if not exists paid_at timestamptz;
-alter table public.orders add column if not exists created_at timestamptz default now();
-alter table public.orders alter column status set default 'PENDENTE';
-
-do $$
-begin
-  if not exists (select 1 from pg_constraint where conname = 'orders_status_check') then
-    alter table public.orders add constraint orders_status_check
-      check (status in ('PENDENTE','PAGO','CANCELADO','EXPIRADO'));
-  end if;
-exception when others then
-  raise notice 'Não criei a validação de status (talvez já existam pedidos com status diferente) — %', sqlerrm;
-end $$;
-
-create index if not exists idx_orders_status on public.orders (status);
-create index if not exists idx_orders_mp_payment_id on public.orders (mp_payment_id);
-create index if not exists idx_orders_created_at on public.orders (created_at desc);
-
-alter table public.orders enable row level security;
-
-drop policy if exists "admin can view orders" on public.orders;
-create policy "admin can view orders" on public.orders
-  for select using (auth.role() = 'authenticated');
-
-drop policy if exists "admin can update orders" on public.orders;
-create policy "admin can update orders" on public.orders
-  for update using (auth.role() = 'authenticated');
--- Não existe policy pública de insert/update: tudo passa pelas funções
--- abaixo, que rodam como SECURITY DEFINER (ignoram RLS com segurança).
-
-
--- =====================================================================
--- 4) TOKEN DO MERCADO PAGO — guardado no Vault do Supabase
--- =====================================================================
--- Se o Vault já estiver disponível no seu projeto (é o padrão hoje em
--- dia), este bloco só garante que a extensão exista. O cadastro do
--- valor do token em si você faz depois, sem precisar mexer em código
--- (veja o passo a passo no final deste arquivo).
-do $$
-begin
-  create extension if not exists supabase_vault;
-exception when others then
-  raise notice 'Vault já gerenciado pelo Supabase ou indisponível para criar via SQL — normalmente já vem ativo no projeto (%).', sqlerrm;
-end $$;
-
--- Função auxiliar que lê o token salvo no Vault com o nome "mp_access_token"
-create or replace function public.mp_get_token()
-returns text
-language plpgsql
-security definer
-set search_path = public, vault
-as $$
-declare
-  v_token text;
-begin
-  select decrypted_secret into v_token
-  from vault.decrypted_secrets
-  where name = 'mp_access_token'
-  limit 1;
-
-  return v_token;
-end;
-$$;
-
-revoke all on function public.mp_get_token() from public;
--- só as funções abaixo (security definer, donas do mesmo schema) chamam esta
-
-
--- =====================================================================
--- 5) FUNÇÃO: get_order_status
---    O site usa isso pra saber se o Pix já caiu (sem expor dados do
---    cliente pra quem não é dono do pedido).
--- =====================================================================
-create or replace function public.get_order_status(order_id uuid)
-returns text
-language sql
-security definer
-set search_path = public
-as $$
-  select status from public.orders where id = order_id;
-$$;
-
-revoke all on function public.get_order_status(uuid) from public;
-grant execute on function public.get_order_status(uuid) to anon, authenticated;
-
-
--- =====================================================================
--- 6) FUNÇÃO: criar_pix
---    Chamada direto pelo site (supabase.rpc). Cria o pedido e já gera
---    a cobrança Pix no Mercado Pago, tudo dentro do Postgres.
--- =====================================================================
-create or replace function public.criar_pix(p_name text, p_email text, p_items jsonb)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public, extensions
-as $$
-declare
-  v_token        text;
-  v_total        numeric;
-  v_order_id     uuid;
-  v_expires_at   timestamptz := now() + interval '30 minutes';
-  v_first_name   text;
-  v_last_name    text;
-  v_payload      jsonb;
-  v_response     http_response;
-  v_mp           jsonb;
-  v_qr_code      text;
-  v_qr_base64    text;
-  v_mp_id        text;
-begin
-  if p_name is null or p_email is null or p_items is null or jsonb_array_length(p_items) = 0 then
-    return jsonb_build_object('error', 'Dados incompletos para gerar o Pix.');
-  end if;
-
-  select coalesce(sum((item->>'price')::numeric * coalesce((item->>'quantity')::numeric, 1)), 0)
-  into v_total
-  from jsonb_array_elements(p_items) as item;
-
-  if v_total <= 0 then
-    return jsonb_build_object('error', 'Valor do pedido inválido.');
-  end if;
-
-  v_token := public.mp_get_token();
-  if v_token is null or v_token = '' then
-    return jsonb_build_object('error', 'Token do Mercado Pago não configurado. Cadastre o segredo "mp_access_token" no Vault do Supabase.');
-  end if;
-
-  insert into public.orders (customer_name, customer_email, items, total, status, expires_at)
-  values (p_name, p_email, p_items, v_total, 'PENDENTE', v_expires_at)
-  returning id into v_order_id;
-
-  v_first_name := split_part(trim(p_name), ' ', 1);
-  v_last_name  := nullif(trim(substr(trim(p_name), length(v_first_name) + 1)), '');
-  if v_last_name is null then v_last_name := v_first_name; end if;
-
-  v_payload := jsonb_build_object(
-    'transaction_amount', round(v_total, 2),
-    'description', 'Pedido NovaStore #' || left(v_order_id::text, 8),
-    'payment_method_id', 'pix',
-    'payer', jsonb_build_object('email', p_email, 'first_name', v_first_name, 'last_name', v_last_name),
-    'external_reference', v_order_id::text,
-    'date_of_expiration', to_char(v_expires_at at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS".000Z"')
-  );
-
-  begin
-    select * into v_response from http((
-      'POST',
-      'https://api.mercadopago.com/v1/payments',
-      ARRAY[
-        http_header('Authorization', 'Bearer ' || v_token),
-        http_header('X-Idempotency-Key', v_order_id::text)
-      ],
-      'application/json',
-      v_payload::text
-    )::http_request);
-  exception when others then
-    update public.orders set status = 'CANCELADO' where id = v_order_id;
-    return jsonb_build_object('error', 'Erro de conexão com o Mercado Pago: ' || sqlerrm);
-  end;
-
-  if v_response.status < 200 or v_response.status >= 300 then
-    update public.orders set status = 'CANCELADO' where id = v_order_id;
-    return jsonb_build_object(
-      'error',
-      coalesce((v_response.content::jsonb ->> 'message'), 'Erro ao gerar cobrança Pix no Mercado Pago (status ' || v_response.status || ').')
-    );
-  end if;
-
-  v_mp := v_response.content::jsonb;
-  v_qr_code   := v_mp #>> '{point_of_interaction,transaction_data,qr_code}';
-  v_qr_base64 := v_mp #>> '{point_of_interaction,transaction_data,qr_code_base64}';
-  v_mp_id     := v_mp ->> 'id';
-
-  if v_qr_code is null then
-    update public.orders set status = 'CANCELADO' where id = v_order_id;
-    return jsonb_build_object('error', 'O Mercado Pago não retornou um QR code Pix.');
-  end if;
-
-  update public.orders
-  set mp_payment_id = v_mp_id,
-      pix_qr_code = v_qr_code,
-      pix_qr_code_base64 = v_qr_base64
-  where id = v_order_id;
-
-  return jsonb_build_object(
-    'orderId', v_order_id,
-    'qrCode', v_qr_code,
-    'qrCodeBase64', v_qr_base64,
-    'expiresAt', v_expires_at
-  );
-end;
-$$;
-
-revoke all on function public.criar_pix(text, text, jsonb) from public;
-grant execute on function public.criar_pix(text, text, jsonb) to anon, authenticated;
-
-
--- =====================================================================
--- 7) CONFIRMAÇÃO AUTOMÁTICA DO PAGAMENTO (sem webhook, sem Edge Function)
---    Um job dentro do próprio Postgres pergunta pro Mercado Pago, a
---    cada poucos segundos, se os pedidos pendentes já foram pagos.
--- =====================================================================
-create or replace function public.checar_pagamentos_pendentes()
-returns void
-language plpgsql
-security definer
-set search_path = public, extensions
-as $$
-declare
-  v_token    text;
-  v_order    record;
-  v_response http_response;
-  v_mp       jsonb;
-  v_status   text;
-begin
-  -- expira pedidos vencidos que nunca foram pagos
-  update public.orders
-  set status = 'EXPIRADO'
-  where status = 'PENDENTE'
-    and expires_at is not null
-    and expires_at < now();
-
-  v_token := public.mp_get_token();
-  if v_token is null or v_token = '' then
-    return; -- sem token cadastrado ainda, não há o que checar
-  end if;
-
-  for v_order in
-    select id, mp_payment_id from public.orders
-    where status = 'PENDENTE' and mp_payment_id is not null
-  loop
-    begin
-      select * into v_response from http((
-        'GET',
-        'https://api.mercadopago.com/v1/payments/' || v_order.mp_payment_id,
-        ARRAY[http_header('Authorization', 'Bearer ' || v_token)],
-        null,
-        null
-      )::http_request);
-    exception when others then
-      continue; -- tenta de novo no próximo ciclo
-    end;
-
-    if v_response.status between 200 and 299 then
-      v_mp := v_response.content::jsonb;
-      v_status := v_mp ->> 'status';
-
-      if v_status = 'approved' then
-        update public.orders
-        set status = 'PAGO', paid_at = now()
-        where id = v_order.id;
-      elsif v_status in ('rejected', 'cancelled') then
-        update public.orders
-        set status = 'CANCELADO'
-        where id = v_order.id;
-      end if;
-    end if;
-  end loop;
-end;
-$$;
-
-revoke all on function public.checar_pagamentos_pendentes() from public;
-
-do $$
-begin
-  perform cron.unschedule(jobid) from cron.job where jobname = 'checar-pagamentos-pix';
-
-  perform cron.schedule(
-    'checar-pagamentos-pix',
-    '30 seconds',
-    $cron$select public.checar_pagamentos_pendentes();$cron$
-  );
-exception when others then
-  begin
-    perform cron.schedule(
-      'checar-pagamentos-pix',
-      '* * * * *',
-      $cron$select public.checar_pagamentos_pendentes();$cron$
-    );
-    raise notice 'pg_cron não aceitou intervalo de segundos nesta versão — agendado para rodar 1x por minuto.';
-  exception when others then
-    raise notice 'Não consegui agendar o job automático (%). Ative a extensão "pg_cron" em Database → Extensions e rode este bloco novamente.', sqlerrm;
-  end;
-end $$;
-
-
--- =====================================================================
--- 8) STORAGE — buckets de imagens (produtos e aparência do site)
--- =====================================================================
-insert into storage.buckets (id, name, public)
-values ('product-images', 'product-images', true)
-on conflict (id) do nothing;
-
-insert into storage.buckets (id, name, public)
-values ('site-assets', 'site-assets', true)
-on conflict (id) do nothing;
-
-drop policy if exists "public read product-images" on storage.objects;
-create policy "public read product-images" on storage.objects
-  for select using (bucket_id = 'product-images');
-
-drop policy if exists "public read site-assets" on storage.objects;
-create policy "public read site-assets" on storage.objects
-  for select using (bucket_id = 'site-assets');
-
-drop policy if exists "admin upload product-images" on storage.objects;
-create policy "admin upload product-images" on storage.objects
-  for insert with check (bucket_id = 'product-images' and auth.role() = 'authenticated');
-
-drop policy if exists "admin update product-images" on storage.objects;
-create policy "admin update product-images" on storage.objects
-  for update using (bucket_id = 'product-images' and auth.role() = 'authenticated');
-
-drop policy if exists "admin delete product-images" on storage.objects;
-create policy "admin delete product-images" on storage.objects
-  for delete using (bucket_id = 'product-images' and auth.role() = 'authenticated');
-
-drop policy if exists "admin upload site-assets" on storage.objects;
-create policy "admin upload site-assets" on storage.objects
-  for insert with check (bucket_id = 'site-assets' and auth.role() = 'authenticated');
-
-drop policy if exists "admin update site-assets" on storage.objects;
-create policy "admin update site-assets" on storage.objects
-  for update using (bucket_id = 'site-assets' and auth.role() = 'authenticated');
-
-drop policy if exists "admin delete site-assets" on storage.objects;
-create policy "admin delete site-assets" on storage.objects
-  for delete using (bucket_id = 'site-assets' and auth.role() = 'authenticated');
-
-
--- =====================================================================
--- 9) ÚLTIMO PASSO (só esse é manual): cadastrar o token do Mercado Pago
--- =====================================================================
--- OPÇÃO A — pelo site, sem SQL (recomendado):
---   Supabase → seu projeto → Project Settings → Vault → "Add new secret"
---     Name:  mp_access_token
---     Value: seu Access Token de produção do Mercado Pago
---
--- OPÇÃO B — por SQL, rodando isto aqui (troque SEU_TOKEN_AQUI):
---   select vault.create_secret('APP_USR-4856290854903668-032123-5fff247030e782e3b58c16e065294408-2514178336', 'mp_access_token');
---
--- Depois de cadastrar o token, o Pix já funciona sozinho — não precisa
--- rodar mais nada.
--- =====================================================================
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NovaStore | Loja de produtos digitais</title>
+<meta name="description" content="Jogos, contas e assinaturas com pagamento via Pix e liberação imediata." />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: {
+        bg:"#08090c", surface:"#111318", surface2:"#181b22", surface3:"#1e2129", border:"#23262f",
+        primary:"#7c5cff", primaryhover:"#6a47ff", accent:"#00e6a8", muted:"#8b8fa3",
+      },
+      boxShadow: { glow: "0 0 40px -10px rgba(124,92,255,0.45)" },
+      fontFamily: { display: ["'Rajdhani'","system-ui","sans-serif"], sans: ["Inter","system-ui","sans-serif"] },
+    }},
+  };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{background:#08090c;color:#f1f2f6;font-family:Inter,system-ui,sans-serif}
+  ::-webkit-scrollbar{width:10px;height:10px} ::-webkit-scrollbar-track{background:#0c0d11}
+  ::-webkit-scrollbar-thumb{background:#2a2d38;border-radius:8px}
+  .glass{background:rgba(17,19,24,.72);backdrop-filter:blur(14px)}
+  .gradient-text{background:linear-gradient(90deg,#a78bfa,#7c5cff 45%,#c9b6ff 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .card-hover{transition:.25s ease}
+  .card-hover:hover{transform:translateY(-4px);border-color:rgba(124,92,255,.55);
+    box-shadow:0 16px 44px -14px rgba(124,92,255,.4)}
+  .bg-grid-fade{background:radial-gradient(circle at 50% 0%, rgba(124,92,255,.20), transparent 62%)}
+  body.has-custom-bg::before{content:"";position:fixed;inset:0;z-index:-2;background-image:var(--site-bg-image);
+    background-size:cover;background-position:center;background-attachment:fixed}
+  body.has-custom-bg::after{content:"";position:fixed;inset:0;z-index:-1;background:rgba(8,9,12,var(--site-bg-overlay,0.85))}
+  #hero-overlay{background:linear-gradient(90deg, rgba(8,9,12,var(--hero-overlay,.35)) 15%, rgba(8,9,12,calc(var(--hero-overlay,.35) * 0.55)) 55%, rgba(8,9,12,0) 100%)}
+  .bg-noise{background-image:radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px);background-size:3px 3px}
+  @keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(124,92,255,.45)}50%{box-shadow:0 0 0 8px rgba(124,92,255,0)}}
+  .pulse-glow{animation:pulseGlow 2.4s infinite}
+  @keyframes ctaGlow{0%,100%{box-shadow:0 0 22px 2px rgba(124,92,255,.55),0 0 0 0 rgba(0,230,168,0)}50%{box-shadow:0 0 34px 8px rgba(124,92,255,.85),0 0 14px 2px rgba(0,230,168,.35)}}
+  .glow-cta{animation:ctaGlow 2.2s ease-in-out infinite}
+  @keyframes floatSlow{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+  .float-slow{animation:floatSlow 4.5s ease-in-out infinite}
+  @keyframes badgeShine{0%{background-position:-120% 0}100%{background-position:220% 0}}
+  .badge-shine{background:linear-gradient(110deg,#ff5c5c 0%,#ff8a5c 35%,#ff5c5c 60%,#ff8a5c 100%);background-size:220% 100%;animation:badgeShine 2.8s linear infinite}
+  .badge-hot{background:linear-gradient(110deg,#00e6a8 0%,#38ffcf 35%,#00e6a8 60%,#38ffcf 100%);background-size:220% 100%;animation:badgeShine 2.8s linear infinite}
+  .badge-last{background:linear-gradient(110deg,#ffb020 0%,#ffd76a 35%,#ffb020 60%,#ffd76a 100%);background-size:220% 100%;animation:badgeShine 2.8s linear infinite}
+  .hero-fade-up{opacity:0;animation:cardIn .8s cubic-bezier(.16,.9,.3,1) forwards}
+  .section-title-underline{position:relative}
+  .section-title-underline::after{content:"";position:absolute;left:0;bottom:-10px;width:56px;height:3px;border-radius:99px;background:linear-gradient(90deg,#7c5cff,#00e6a8)}
+  .faq-item[open] summary .faq-chevron{transform:rotate(45deg)}
+  .faq-item summary{list-style:none}
+  .faq-item summary::-webkit-details-marker{display:none}
+  .line-clamp-1{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+  .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .modal-overlay{background:rgba(4,4,7,.75);backdrop-filter:blur(6px)}
+  .lilac{color:#a78bfa}
+  .font-display{font-family:'Rajdhani',Inter,system-ui,sans-serif;letter-spacing:.01em}
+  .cat-btn{scroll-snap-align:start}
+  .cat-scroll{scroll-snap-type:x proximity}
+  .cat-btn.is-active{background:#7c5cff;border-color:#7c5cff;color:#fff;box-shadow:0 8px 24px -8px rgba(124,92,255,.6)}
+  .cat-btn.is-active .cat-icon{color:#fff}
+  .plan-card{transition:.15s ease}
+  .plan-card.is-selected{border-color:#7c5cff;background:rgba(124,92,255,.12);box-shadow:0 0 0 1px #7c5cff inset}
+  .plan-radio{transition:.15s ease}
+  .plan-card.is-selected .plan-radio{background:#7c5cff;border-color:#7c5cff}
+  .tag-chip{background:rgba(124,92,255,.12);border:1px solid rgba(124,92,255,.3);color:#c9b6ff}
+  input[type=number]::-webkit-inner-spin-button{opacity:1}
+  @media(min-width:1024px){.modal-scroll{max-height:88vh}}
+
+  /* ---------- animações de impacto nos produtos ---------- */
+  @keyframes cardIn{from{opacity:0;transform:translateY(22px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
+  .card-in{opacity:0;animation:cardIn .55s cubic-bezier(.16,.9,.3,1) forwards}
+
+  .product-card{position:relative;isolation:isolate;transform-style:preserve-3d;
+    transition:transform .18s ease, border-color .35s ease, box-shadow .35s ease;
+    will-change:transform;}
+  .product-card::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;
+    transition:opacity .35s ease;z-index:5;
+    background:radial-gradient(420px circle at var(--x,50%) var(--y,50%), rgba(124,92,255,.55), transparent 55%);
+    mix-blend-mode:screen;}
+  .product-card:hover::after{opacity:1}
+  .product-card.tilt{
+    transform:perspective(900px) rotateX(var(--ry,0deg)) rotateY(var(--rx,0deg)) translateY(-8px) scale(1.03);
+    border-color:rgba(124,92,255,.55);
+    box-shadow:0 24px 55px -16px rgba(124,92,255,.5), 0 0 0 1px rgba(124,92,255,.15);
+    z-index:10;
+  }
+
+  @keyframes shockRing{0%{box-shadow:0 0 0 0 rgba(124,92,255,.65),0 0 0 0 rgba(0,230,168,.35)}
+    60%{box-shadow:0 0 0 10px rgba(124,92,255,0),0 0 0 22px rgba(0,230,168,0)}
+    100%{box-shadow:0 0 0 0 rgba(124,92,255,0),0 0 0 0 rgba(0,230,168,0)}}
+  .shock-click{animation:shockRing .55s ease}
+
+  @keyframes flashPop{0%{transform:scale(.5);opacity:0}40%{transform:scale(1.15);opacity:1}100%{transform:scale(1);opacity:0}}
+  .flash-pop{animation:flashPop .6s ease forwards}
+
+  .modal-image-frame{position:relative;overflow:hidden}
+  .modal-image-frame img{transition:transform .6s cubic-bezier(.16,.9,.3,1)}
+  .modal-image-frame:hover img{transform:scale(1.08)}
+  .modal-image-frame::before{content:"";position:absolute;inset:0;z-index:2;pointer-events:none;
+    background:linear-gradient(135deg, rgba(124,92,255,.18), transparent 40%, transparent 60%, rgba(0,230,168,.14));
+    mix-blend-mode:overlay}
+  .modal-image-frame::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;border-radius:inherit;
+    box-shadow:inset 0 0 0 1px rgba(124,92,255,.35), 0 0 60px -10px rgba(124,92,255,.5)}
+
+  @keyframes badgePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+  .purchase-badge{animation:badgePulse 2.2s ease-in-out infinite}
+
+  .btn-press{transition:transform .12s ease}
+  .btn-press:active{transform:scale(.96)}
+
+  /* ---------- animações da modal de produto ---------- */
+  @keyframes overlayFadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes overlayFadeOut{from{opacity:1}to{opacity:0}}
+
+  /* transições mais suaves nos botões de categoria e cards */
+  .cat-btn{transition:background-color .2s ease, border-color .2s ease, color .2s ease, transform .15s ease}
+  .cat-btn:active{transform:scale(.94)}
+
+  /* ---------- NovaStore visual refresh ---------- */
+  :root{color-scheme:dark}
+  html{scroll-behavior:smooth}
+  body{overflow-x:hidden;background:
+    radial-gradient(circle at 15% -5%,rgba(124,92,255,.13),transparent 28%),
+    radial-gradient(circle at 90% 8%,rgba(0,230,168,.055),transparent 22%),#08090c}
+  body::selection{background:rgba(124,92,255,.38);color:#fff}
+  .glass{background:rgba(10,11,16,.72);border-color:rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.18)}
+  header.sticky{backdrop-filter:blur(18px) saturate(145%);box-shadow:0 10px 35px rgba(0,0,0,.20)}
+  header.sticky a{transition:transform .2s ease,filter .2s ease}
+  header.sticky a:hover{transform:translateY(-1px);filter:brightness(1.08)}
+  header.sticky nav a{position:relative;transition:color .2s ease}
+  header.sticky nav a::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:2px;border-radius:999px;background:#7c5cff;transform:scaleX(0);transform-origin:center;transition:transform .2s ease}
+  header.sticky nav a:hover::after,header.sticky nav a.text-white::after{transform:scaleX(1)}
+  #hero-section{min-height:360px;box-shadow:inset 0 -90px 90px -80px rgba(124,92,255,.22)}
+  #hero-section::before{content:"";position:absolute;inset:0;pointer-events:none;background:
+    radial-gradient(circle at 75% 25%,rgba(124,92,255,.22),transparent 30%),
+    linear-gradient(180deg,rgba(4,5,8,.04),rgba(4,5,8,.28) 72%,rgba(4,5,8,.8))}
+  #category-bar{padding-top:2px;scrollbar-width:none}
+  #category-bar::-webkit-scrollbar{display:none}
+  .cat-btn{min-width:88px;position:relative;overflow:hidden;backdrop-filter:blur(10px);box-shadow:0 8px 24px rgba(0,0,0,.12)}
+  .cat-btn::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.045),transparent 55%);pointer-events:none}
+  .cat-btn:hover{transform:translateY(-2px);background:#151821;border-color:rgba(124,92,255,.55);color:#f4f1ff;box-shadow:0 10px 26px rgba(0,0,0,.2)}
+  .cat-btn.is-active{box-shadow:0 10px 28px rgba(124,92,255,.32),inset 0 0 0 1px rgba(255,255,255,.08)}
+  #search-input{height:46px;background:rgba(17,19,24,.82);border-color:rgba(255,255,255,.08);box-shadow:0 10px 28px rgba(0,0,0,.16);transition:border-color .2s ease,box-shadow .2s ease,background .2s ease}
+  #search-input:hover{background:rgba(22,24,31,.9);border-color:rgba(124,92,255,.32)}
+  #search-input:focus{background:rgba(19,20,27,.96);box-shadow:0 0 0 3px rgba(124,92,255,.12),0 12px 30px rgba(0,0,0,.2)}
+  #products-grid{align-items:stretch}
+  .product-card{border-color:rgba(255,255,255,.07)!important;background:linear-gradient(180deg,rgba(20,22,29,.97),rgba(12,13,18,.98));box-shadow:0 12px 28px rgba(0,0,0,.16)}
+  .product-card:hover{box-shadow:0 26px 60px rgba(0,0,0,.34),0 0 0 1px rgba(124,92,255,.10)}
+  .product-card .aspect-\[1\/1\]{background:linear-gradient(135deg,#171923,#0d0e13);}
+  .product-card h3{letter-spacing:.025em;text-wrap:balance}
+  .product-card button{box-shadow:0 9px 22px rgba(124,92,255,.16);transition:transform .16s ease,box-shadow .2s ease,background .2s ease}
+  .product-card button:hover{box-shadow:0 12px 28px rgba(124,92,255,.28);transform:translateY(-1px)}
+  #empty-state{backdrop-filter:blur(10px);box-shadow:0 14px 40px rgba(0,0,0,.14)}
+  footer{background:linear-gradient(180deg,rgba(17,19,24,.94),rgba(8,9,12,1));box-shadow:0 -20px 50px rgba(0,0,0,.16)}
+
+  #form-modal,#checkout-modal{z-index:60}
+  #form-modal>div,#checkout-content{box-shadow:0 30px 90px rgba(0,0,0,.58),0 0 0 1px rgba(255,255,255,.035)}
+  #product-page-view .product-page-box{background:linear-gradient(135deg,rgba(18,20,27,.98),rgba(12,13,18,.985))}
+  #product-page-view .product-page-box img{filter:saturate(1.06) contrast(1.03)}
+  #product-page-view .purchase-badge{box-shadow:0 10px 30px rgba(0,230,168,.08)}
+  .plan-card,.plan-row{background:linear-gradient(180deg,rgba(27,29,38,.92),rgba(20,22,29,.92));box-shadow:0 8px 22px rgba(0,0,0,.12)}
+  .plan-card:hover,.plan-row:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,0,0,.2)}
+  .plan-card.is-selected,.plan-row.is-selected{box-shadow:0 12px 32px rgba(124,92,255,.18),inset 0 0 0 1px rgba(124,92,255,.65)}
+  #product-page-view aside{background:linear-gradient(180deg,rgba(25,27,35,.65),rgba(15,16,22,.76))}
+
+  /* Admin visual refresh */
+  #view-admin header{background:rgba(14,15,20,.88);backdrop-filter:blur(14px)}
+  #view-admin .rounded-2xl.border{box-shadow:0 16px 42px rgba(0,0,0,.18)}
+  #view-admin input,#view-admin select,#view-admin textarea{transition:border-color .2s ease,box-shadow .2s ease,background .2s ease}
+  #view-admin input:hover,#view-admin select:hover,#view-admin textarea:hover{border-color:rgba(124,92,255,.34)}
+  #view-admin input:focus,#view-admin select:focus,#view-admin textarea:focus{box-shadow:0 0 0 3px rgba(124,92,255,.1)}
+  #view-admin table tbody tr{transition:background .18s ease}
+  #view-admin table tbody tr:hover{background:rgba(124,92,255,.045)}
+
+  @media(max-width:767px){
+    #hero-section{min-height:320px}
+    #catalogo{padding-top:2rem;padding-bottom:3rem}
+    .product-card{border-radius:1rem!important}
+    .product-card h3{font-size:1.05rem;line-height:1.15}
+    .product-card .p-5{padding:1rem}
+    .product-card .text-2xl{font-size:1.25rem}
+    .cat-btn{min-width:82px;padding-left:1rem;padding-right:1rem}
+  }
+
+  /* ---------- partículas do hero (constelação gamer) ---------- */
+  #particles-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:.85}
+
+  /* ---------- glow magnético que segue o cursor nos botões principais ---------- */
+  .magnetic-btn{position:relative;isolation:isolate;overflow:hidden}
+  .magnetic-btn::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;
+    z-index:0;transition:opacity .3s ease;
+    background:radial-gradient(180px circle at var(--mx,50%) var(--my,50%), rgba(255,255,255,.35), transparent 60%);
+    mix-blend-mode:overlay}
+  .magnetic-btn:hover::before{opacity:1}
+  .magnetic-btn > *{position:relative;z-index:1}
+
+  /* ---------- sistema de sorteio (ticket) ---------- */
+  @keyframes ticketPop{
+    0%{transform:scale(.35) rotate(-10deg);opacity:0}
+    55%{transform:scale(1.1) rotate(3deg);opacity:1}
+    75%{transform:scale(.96) rotate(-1deg)}
+    100%{transform:scale(1) rotate(0)}
+  }
+  @keyframes ticketShine{0%{background-position:-140% 0}100%{background-position:220% 0}}
+  @keyframes ticketGlowPulse{0%,100%{box-shadow:0 0 0 0 rgba(0,230,168,.45),0 8px 30px rgba(0,230,168,.12)}50%{box-shadow:0 0 0 8px rgba(0,230,168,0),0 8px 40px rgba(0,230,168,.28)}}
+  .ticket-reveal{position:relative;overflow:hidden;animation:ticketPop .65s cubic-bezier(.16,.9,.3,1), ticketGlowPulse 2.4s ease-in-out .65s infinite;
+    background:linear-gradient(135deg,rgba(0,230,168,.14),rgba(124,92,255,.10));border:2px dashed rgba(0,230,168,.55)}
+  .ticket-reveal::before{content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(110deg,transparent 20%,rgba(255,255,255,.16) 35%,transparent 50%);
+    background-size:220% 100%;animation:ticketShine 2.6s linear infinite}
+  .ticket-number{text-shadow:0 0 18px rgba(0,230,168,.6);letter-spacing:.04em}
+
+  .confetti-piece{position:fixed;top:0;left:0;width:7px;height:11px;border-radius:2px;z-index:200;pointer-events:none;
+    animation:confettiBurst .9s cubic-bezier(.2,.7,.3,1) forwards}
+  @keyframes confettiBurst{
+    0%{transform:translate(0,0) rotate(0deg) scale(1);opacity:1}
+    100%{transform:translate(var(--dx),calc(var(--dy) + 160px)) rotate(var(--rot)) scale(.5);opacity:0}
+  }
+
+  /* ---------------- Página dedicada de produto (SPA) ---------------- */
+  #product-page-view{animation:overlayFadeIn .25s ease}
+  .product-page-box{position:relative;box-shadow:0 25px 70px rgba(0,0,0,.4), 0 0 0 1px rgba(124,92,255,.12)}
+  .product-page-box::after{content:"";position:absolute;inset:-1px;z-index:-1;border-radius:inherit;pointer-events:none;
+    background:radial-gradient(120% 120% at 50% 0%, rgba(124,92,255,.35), transparent 60%)}
+  .page-tab{position:relative;padding:.65rem 0;margin-right:1.75rem;font-size:.8rem;font-weight:700;text-transform:uppercase;
+    letter-spacing:.03em;color:#8b8f9c;transition:color .2s ease;background:none;border:none;cursor:pointer}
+  .page-tab:hover{color:#fff}
+  .page-tab.is-active{color:#fff}
+  .page-tab.is-active::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:99px;
+    background:linear-gradient(90deg,#7c5cff,#00e6a8)}
+  .plan-row{transition:.15s ease}
+  .plan-row.is-selected{border-color:#7c5cff;background:rgba(124,92,255,.12);box-shadow:0 0 0 1px #7c5cff inset}
+  .plan-row.is-selected .plan-radio{background:#7c5cff;border-color:#7c5cff}
+
+  /* ---------------- Dropdown customizado de planos ---------------- */
+  .plan-dropdown-item.is-selected{background:rgba(124,92,255,.14)}
+  .plan-dropdown-scroll{scrollbar-width:thin;scrollbar-color:#3f3f46 transparent}
+  .plan-dropdown-scroll::-webkit-scrollbar{width:6px}
+  .plan-dropdown-scroll::-webkit-scrollbar-track{background:transparent}
+  .plan-dropdown-scroll::-webkit-scrollbar-thumb{background:#3f3f46;border-radius:99px}
+  .plan-dropdown-scroll::-webkit-scrollbar-thumb:hover{background:#52525b}
+
+</style>
+</head>
+<body class="min-h-screen bg-noise">
+
+<script>
+  window.SUPABASE_URL = "https://tisicavugzcsixvhuvvm.supabase.co";
+  window.SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRpc2ljYXZ1Z3pjc2l4dmh1dnZtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzMzQ2NzAsImV4cCI6MjEwNDkxMDY3MH0.j6hD2RdhC3BTgC3TIYuFney3jj4Chg1OO9QnJxw-F3g";
+  /* Não usamos mais Edge Function: o Pix é criado direto por uma função
+     do banco (public.criar_pix), chamada via supabase.rpc(). */
+</script>
+
+<div id="view-store">
+
+  <header class="sticky top-0 z-40 glass border-b border-border relative">
+    <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+      <a href="#" onclick="goBackToStore()" class="flex items-center gap-2 text-xl font-extrabold tracking-tight font-display">
+        <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black text-white">N</span>
+        <span class="gradient-text">Nova</span><span class="text-white">Store</span>
+      </a>
+      <nav class="hidden items-center gap-8 text-sm font-medium text-muted md:flex">
+        <a href="#top" onclick="goBackToStore()" class="text-white">Início</a>
+        <a href="#catalogo" onclick="goBackToStore()" class="hover:text-white">Produtos</a>
+        <a href="#" class="hover:text-white">Contas NFA</a>
+        <a href="#" class="hover:text-white">Avaliações</a>
+        <a href="#" class="hover:text-white">Suporte</a>
+      </nav>
+      <div class="flex items-center gap-3">
+        <button onclick="openCart()" class="relative flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium hover:border-primary/60">
+          🛒 <span class="hidden sm:inline">Carrinho</span>
+          <span id="cart-count" class="absolute -right-2 -top-2 hidden h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white pulse-glow">0</span>
+        </button>
+        <button onclick="openGlobalChatModal()" title="Chat Global" class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60">
+          🌐
+        </button>
+        <div class="relative">
+          <button id="btn-login" onclick="openAuthModal('login')" class="rounded-full bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primaryhover">Login</button>
+          <button id="btn-user" onclick="toggleUserMenu()" class="hidden items-center gap-2 rounded-full border border-border bg-surface py-1.5 pl-1.5 pr-3 hover:border-primary/60">
+            <span class="relative shrink-0">
+              <span id="user-avatar" class="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-xs font-black text-white">?</span>
+              <span id="profile-unread-dot" class="pulse-glow absolute -right-0.5 -top-0.5 hidden h-2.5 w-2.5 rounded-full bg-accent ring-2 ring-surface"></span>
+            </span>
+            <span id="user-first-name" class="text-sm font-semibold text-white"></span>
+            <span class="text-[10px] text-muted">▾</span>
+          </button>
+          <div id="user-menu" class="absolute right-0 top-[calc(100%+10px)] z-50 hidden w-48 rounded-xl border border-border bg-surface p-2 shadow-2xl">
+            <button onclick="toggleUserMenu(true); openChatModal();" class="relative flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted hover:bg-white/5 hover:text-white">
+              <span>💬 Meus chats</span>
+              <span id="menu-chat-unread-badge" class="hidden min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
+            </button>
+            <button onclick="logoutUser()" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-muted hover:bg-white/5 hover:text-white">🚪 Sair</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div id="store-home">
+  <section id="hero-section" class="relative min-h-[520px] overflow-hidden bg-grid-fade border-b border-border bg-cover bg-center sm:min-h-[560px] md:min-h-[640px] lg:min-h-[700px]">
+    <canvas id="particles-canvas"></canvas>
+    <div id="hero-overlay" class="pointer-events-none absolute inset-0"></div>
+  </section>
+
+  <section id="por-que" class="border-b border-border bg-surface py-10">
+    <div class="mx-auto grid max-w-6xl grid-cols-1 gap-6 px-4 sm:grid-cols-3">
+      <div class="flex items-center gap-4 rounded-2xl border border-border bg-surface2/60 p-5">
+        <span class="float-slow flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-2xl">🎧</span>
+        <div>
+          <p class="font-display text-base font-bold uppercase text-white">Suporte 24/7</p>
+          <p class="text-sm text-muted">Time pronto para te ajudar a qualquer hora do dia.</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-4 rounded-2xl border border-border bg-surface2/60 p-5">
+        <span class="float-slow flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent/15 text-2xl" style="animation-delay:.3s">🛡️</span>
+        <div>
+          <p class="font-display text-base font-bold uppercase text-white">Pagamento Seguro via Pix</p>
+          <p class="text-sm text-muted">Transações protegidas e liberação automática após confirmação.</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-4 rounded-2xl border border-border bg-surface2/60 p-5">
+        <span class="float-slow flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-2xl" style="animation-delay:.6s">⚡</span>
+        <div>
+          <p class="font-display text-base font-bold uppercase text-white">Entrega Imediata</p>
+          <p class="text-sm text-muted">Receba seu produto na hora, sem espera, direto no seu e-mail ou painel.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <main id="catalogo" class="mx-auto max-w-[2100px] px-4 py-16 sm:px-8 lg:px-14 xl:px-20">
+
+    <div id="category-bar" class="cat-scroll mb-8 flex gap-2 overflow-x-auto pb-2"></div>
+
+    <div class="mb-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center gap-2 text-lg font-display font-bold uppercase tracking-wide">
+        <span class="lilac">🔥</span> Produtos em destaque
+      </div>
+      <div class="relative w-full sm:w-72">
+        <input id="search-input" type="text" placeholder="Buscar produto..." class="w-full rounded-xl border border-border bg-surface px-4 py-2.5 pr-10 text-sm outline-none focus:border-primary/60" />
+        <span class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-muted">🔎</span>
+      </div>
+    </div>
+
+    <div id="loading" class="text-muted">Carregando produtos...</div>
+    <div id="products-grid" class="grid grid-cols-2 gap-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 xl:gap-8"></div>
+    <div id="empty-state" class="hidden rounded-2xl border border-dashed border-border bg-surface/40 py-14 text-center text-muted">
+      Nenhum produto encontrado nessa categoria.<br/>
+      <button onclick="goToAdmin()" class="lilac underline">Cadastre produtos na área administrativa</button>.
+    </div>
+  </main>
+
+  <section id="depoimentos" class="border-y border-border bg-surface py-16">
+    <div class="mx-auto max-w-6xl px-4">
+      <div class="mb-10 text-center">
+        <h2 class="section-title-underline inline-block font-display text-2xl font-bold uppercase tracking-wide text-white sm:text-3xl">O que dizem nossos clientes</h2>
+        <p class="mx-auto mt-5 max-w-lg text-sm text-muted">Milhares de compras entregues automaticamente, com segurança e satisfação garantida.</p>
+      </div>
+      <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <div class="card-hover rounded-2xl border border-border bg-surface2/60 p-6">
+          <div class="mb-3 text-accent">★★★★★</div>
+          <p class="mb-5 text-sm leading-relaxed text-muted">"Comprei e recebi o acesso em menos de 2 minutos. Nunca vi entrega tão rápida, virei cliente fiel da loja."</p>
+          <div class="flex items-center gap-3">
+            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-bold text-white">L</span>
+            <div>
+              <p class="text-sm font-bold text-white">Lucas M.</p>
+              <p class="text-xs text-muted">Compra verificada</p>
+            </div>
+          </div>
+        </div>
+        <div class="card-hover rounded-2xl border border-border bg-surface2/60 p-6">
+          <div class="mb-3 text-accent">★★★★★</div>
+          <p class="mb-5 text-sm leading-relaxed text-muted">"Suporte respondeu rápido quando tive uma dúvida sobre o plano. Pagamento via Pix é super prático e seguro."</p>
+          <div class="flex items-center gap-3">
+            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-bold text-white">A</span>
+            <div>
+              <p class="text-sm font-bold text-white">Ana P.</p>
+              <p class="text-xs text-muted">Compra verificada</p>
+            </div>
+          </div>
+        </div>
+        <div class="card-hover rounded-2xl border border-border bg-surface2/60 p-6">
+          <div class="mb-3 text-accent">★★★★★</div>
+          <p class="mb-5 text-sm leading-relaxed text-muted">"Já é a terceira vez que compro aqui. Preço justo, entrega automática e site muito bem organizado."</p>
+          <div class="flex items-center gap-3">
+            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-bold text-white">R</span>
+            <div>
+              <p class="text-sm font-bold text-white">Rafael S.</p>
+              <p class="text-xs text-muted">Compra verificada</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" class="py-16">
+    <div class="mx-auto max-w-3xl px-4">
+      <div class="mb-10 text-center">
+        <h2 class="section-title-underline inline-block font-display text-2xl font-bold uppercase tracking-wide text-white sm:text-3xl">Perguntas frequentes</h2>
+        <p class="mx-auto mt-5 max-w-lg text-sm text-muted">Ainda com dúvidas? Aqui estão as respostas mais comuns antes de finalizar sua compra.</p>
+      </div>
+      <div class="flex flex-col gap-3">
+        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5" open>
+          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
+            Como recebo meu produto após o pagamento?
+            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
+          </summary>
+          <p class="mt-3 text-sm leading-relaxed text-muted">A liberação é automática assim que o pagamento via Pix é confirmado. Você recebe o acesso na hora, direto por e-mail ou no seu painel.</p>
+        </details>
+        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5">
+          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
+            O pagamento via Pix é seguro?
+            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
+          </summary>
+          <p class="mt-3 text-sm leading-relaxed text-muted">Sim. Todas as transações são processadas de forma segura e criptografada, e a liberação do produto só ocorre após a confirmação do pagamento.</p>
+        </details>
+        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5">
+          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
+            E se eu tiver problemas com o produto?
+            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
+          </summary>
+          <p class="mt-3 text-sm leading-relaxed text-muted">Nosso suporte está disponível 24/7 para resolver qualquer problema ou dúvida sobre sua compra rapidamente.</p>
+        </details>
+        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5">
+          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
+            Posso comprar mais de um produto de uma vez?
+            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
+          </summary>
+          <p class="mt-3 text-sm leading-relaxed text-muted">Sim! Você pode adicionar quantos produtos quiser ao carrinho e finalizar tudo em um único pagamento via Pix.</p>
+        </details>
+        <details class="faq-item group rounded-xl border border-border bg-surface2/60 p-5">
+          <summary class="flex cursor-pointer items-center justify-between gap-4 font-semibold text-white">
+            As assinaturas renovam automaticamente?
+            <span class="faq-chevron shrink-0 text-xl text-primary transition-transform">+</span>
+          </summary>
+          <p class="mt-3 text-sm leading-relaxed text-muted">Depende do plano escolhido. As condições de cada assinatura estão detalhadas na página do produto antes da compra.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  </div><!-- /#store-home -->
+
+  <div id="product-page-view" class="hidden"></div>
+
+  <footer class="border-t border-border bg-surface py-10">
+    <div class="mx-auto flex max-w-6xl flex-col items-center justify-center gap-4 px-4 text-sm text-muted sm:flex-row">
+      <div class="text-center sm:text-left">
+        <p class="mb-1 font-display text-lg font-bold text-white">NovaStore</p>
+        <p>© <span id="year"></span> Todos os direitos reservados.</p>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<div id="view-admin" class="hidden">
+
+  <div id="admin-login-screen" class="flex min-h-screen items-center justify-center px-4 bg-grid-fade">
+    <form id="login-form" class="w-full max-w-sm rounded-2xl border border-border bg-surface p-8">
+      <div class="mb-6 text-center">
+        <div class="mb-3 text-3xl">🔒</div>
+        <h1 class="font-display text-xl font-bold uppercase">Painel Administrativo</h1>
+        <p class="text-sm text-muted">Entre com sua conta Supabase</p>
+      </div>
+      <div id="login-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+      <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
+      <input required type="email" id="login-email" class="mb-4 w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      <label class="mb-1 block text-xs font-semibold text-muted">Senha</label>
+      <input required type="password" id="login-password" class="mb-6 w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      <button class="w-full rounded-lg bg-primary py-2.5 font-bold text-white hover:bg-primaryhover">Entrar</button>
+      <p class="mt-4 text-center text-xs text-muted">Crie o usuário admin em: Supabase → Authentication → Users → Add user</p>
+      <button type="button" onclick="goToStore()" class="mt-3 block w-full text-center text-xs text-muted hover:text-white">← Voltar para a loja</button>
+    </form>
+  </div>
+
+  <div id="admin-panel-screen" class="hidden">
+    <header class="flex items-center justify-between border-b border-border bg-surface px-6 py-4">
+      <button onclick="goToStore()" class="font-display text-lg font-bold uppercase"><span class="gradient-text">Nova</span>Store
+        <span class="ml-2 rounded bg-primary/20 px-2 py-0.5 text-[10px] font-bold lilac">ADMIN</span>
+      </button>
+      <button onclick="logoutAdmin()" class="text-sm font-medium text-muted hover:text-white">Sair</button>
+    </header>
+
+    <main class="mx-auto max-w-5xl px-4 py-10">
+      <div class="mb-8 flex gap-2 border-b border-border">
+        <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="admin-tab-btn border-b-2 border-primary px-4 py-3 text-sm font-bold text-white">Produtos</button>
+        <button id="admin-tab-btn-conversas" onclick="switchAdminTab('conversas')" class="admin-tab-btn border-b-2 border-transparent px-4 py-3 text-sm font-bold text-muted hover:text-white">Conversas</button>
+        <button id="admin-tab-btn-mensagens" onclick="switchAdminTab('mensagens')" class="admin-tab-btn relative border-b-2 border-transparent px-4 py-3 text-sm font-bold text-muted hover:text-white">Mensagens
+          <span id="admin-mensagens-unread-badge" class="hidden absolute -right-2 -top-1 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
+        </button>
+        <button id="admin-tab-btn-appearance" onclick="switchAdminTab('appearance')" class="admin-tab-btn border-b-2 border-transparent px-4 py-3 text-sm font-bold text-muted hover:text-white">Aparência do site</button>
+      </div>
+
+      <section id="admin-tab-products">
+        <div class="mb-6 flex items-center justify-between">
+          <h1 class="font-display text-2xl font-bold uppercase">Produtos</h1>
+          <button onclick="openForm()" class="rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">+ Novo produto</button>
+        </div>
+
+        <div class="overflow-x-auto rounded-2xl border border-border bg-surface">
+          <table class="w-full text-left text-sm">
+            <thead class="border-b border-border text-muted">
+              <tr><th class="px-4 py-3">Produto</th><th class="px-4 py-3">Jogo</th><th class="px-4 py-3">Tipo</th><th class="px-4 py-3">Preço</th><th class="px-4 py-3">Status</th><th class="px-4 py-3 text-right">Ações</th></tr>
+            </thead>
+            <tbody id="products-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="admin-tab-conversas" class="hidden">
+        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Conversas</h1>
+        <p class="mb-6 text-sm text-muted">Pedidos com pagamento confirmado. Envie aqui a entrega do produto (chave, login, acesso etc.) diretamente para o cliente.</p>
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
+          <div class="overflow-hidden rounded-2xl border border-border bg-surface">
+            <div id="admin-conversas-list" class="max-h-[65vh] overflow-y-auto"></div>
+          </div>
+          <div id="admin-conversa-detail" class="flex min-h-[65vh] flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+            <div class="flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted">
+              <span class="text-3xl">💬</span>
+              Selecione uma conversa à esquerda para ver os dados da compra e responder ao cliente.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="admin-tab-mensagens" class="hidden">
+        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Mensagens</h1>
+        <p class="mb-6 text-sm text-muted">Chat privado (1-para-1) com cada cliente. Use para suporte, entrega de produtos e qualquer contato direto.</p>
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
+          <div class="overflow-hidden rounded-2xl border border-border bg-surface">
+            <div id="admin-mensagens-list" class="max-h-[65vh] overflow-y-auto"></div>
+          </div>
+          <div id="admin-mensagens-detail" class="flex min-h-[65vh] flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+            <div class="flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted">
+              <span class="text-3xl">💬</span>
+              Selecione um cliente à esquerda para ver e responder à conversa.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="admin-tab-appearance" class="hidden">
+        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Aparência do site</h1>
+        <div id="appearance-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+        <div id="appearance-success" class="hidden mb-4 rounded-lg bg-accent/10 px-3 py-2 text-sm text-accent"></div>
+
+        <div class="flex flex-col gap-8">
+
+          <div class="rounded-2xl border border-border bg-surface p-6">
+            <h2 class="mb-1 font-display text-lg font-bold uppercase">Banner do topo (Hero)</h2>
+            <p class="mb-4 text-sm text-muted">Imagem larga que aparece no topo do site, atrás do texto de destaque. Recomendado: imagem larga e grande, mínimo 1600×700px.</p>
+            <div class="flex flex-col items-start gap-4 sm:flex-row">
+              <div id="hero-image-preview" class="flex h-32 w-full max-w-xs items-center justify-center overflow-hidden rounded-lg border border-border bg-surface2 text-xs text-muted sm:w-72">Sem imagem</div>
+              <div class="flex flex-col gap-2">
+                <input type="file" id="hero-image-input" accept="image/*" class="text-sm text-muted" />
+                <p id="hero-upload-status" class="text-xs text-muted"></p>
+                <button type="button" onclick="removeHeroImage()" class="self-start text-xs font-bold text-red-400 hover:underline">Remover imagem</button>
+              </div>
+            </div>
+            <div class="mt-5">
+              <label class="mb-1 flex items-center justify-between text-xs font-semibold text-muted">
+                <span>Escurecimento sobre o banner (para legibilidade do texto)</span>
+                <span id="hero-overlay-value">35%</span>
+              </label>
+              <input type="range" id="hero-overlay-input" min="0" max="100" value="35" class="w-full accent-primary" />
+              <p class="mt-1 text-[11px] text-muted">Deixe em 0% para exibir a imagem sem nenhum véu escuro por cima.</p>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-border bg-surface p-6">
+            <h2 class="mb-1 font-display text-lg font-bold uppercase">Plano de fundo do site</h2>
+            <p class="mb-4 text-sm text-muted">Imagem de fundo aplicada em todas as páginas da loja, atrás do conteúdo (textura, cenário ou arte escura).</p>
+            <div class="flex flex-col items-start gap-4 sm:flex-row">
+              <div id="bg-image-preview" class="flex h-32 w-full max-w-xs items-center justify-center overflow-hidden rounded-lg border border-border bg-surface2 text-xs text-muted sm:w-72">Sem imagem</div>
+              <div class="flex flex-col gap-2">
+                <input type="file" id="bg-image-input" accept="image/*" class="text-sm text-muted" />
+                <p id="bg-upload-status" class="text-xs text-muted"></p>
+                <button type="button" onclick="removeBgImage()" class="self-start text-xs font-bold text-red-400 hover:underline">Remover imagem</button>
+              </div>
+            </div>
+            <div class="mt-5">
+              <label class="mb-1 flex items-center justify-between text-xs font-semibold text-muted">
+                <span>Intensidade do escurecimento (overlay)</span>
+                <span id="bg-overlay-value">85%</span>
+              </label>
+              <input type="range" id="bg-overlay-input" min="0" max="100" value="85" class="w-full accent-primary" />
+            </div>
+          </div>
+
+          <button id="appearance-save" onclick="saveSiteSettings()" class="self-start rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">Salvar aparência</button>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div id="form-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeForm()">
+  <div class="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-surface p-6">
+    <div class="mb-5 flex items-center justify-between">
+      <h2 id="form-title" class="font-display text-xl font-bold uppercase">Novo produto</h2>
+      <button onclick="closeForm()" class="text-2xl text-muted hover:text-white leading-none">✕</button>
+    </div>
+    <div id="form-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+
+    <form id="product-form" class="flex flex-col gap-4">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Nome</label>
+          <input required id="f-name" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Jogo / Categoria</label>
+          <input id="f-category" list="category-options" placeholder="Ex: CS2, Minecraft, Rust, GTA V..."
+            class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+          <datalist id="category-options"></datalist>
+          <p class="mt-1 text-[11px] text-muted">Escolha um jogo já usado ou digite o nome de um jogo novo — ele aparece automaticamente na página principal.</p>
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-xs font-semibold text-muted">Descrição</label>
+        <textarea required id="f-description" rows="3" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary"></textarea>
+      </div>
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Tags rápidas (separadas por vírgula)</label>
+          <input id="f-tags" placeholder="Interno, Legit, Rage, Semi Rage" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Recursos incluídos (um por linha)</label>
+          <input id="f-features" placeholder="Skin Changer, ESP, Aimbot..." class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-2 block text-xs font-semibold text-muted">Imagem principal</label>
+        <div class="flex items-center gap-4">
+          <div id="image-preview" class="h-24 w-24 overflow-hidden rounded-lg border border-border bg-surface2"></div>
+          <input type="file" id="f-image" accept="image/*" class="text-sm text-muted" />
+        </div>
+        <p id="upload-status" class="mt-1 text-xs text-muted"></p>
+      </div>
+
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Tipo de venda</label>
+          <select id="f-type" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary">
+            <option value="UNICO">Compra única</option>
+            <option value="ASSINATURA">Assinatura (planos por dias)</option>
+          </select>
+        </div>
+        <div id="price-field">
+          <label class="mb-1 block text-xs font-semibold text-muted">Preço (R$)</label>
+          <input type="number" step="0.01" min="0" id="f-price" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div id="stock-field">
+          <label class="mb-1 block text-xs font-semibold text-muted">Estoque (vazio=ilimitado)</label>
+          <input type="number" min="0" id="f-stock" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+      </div>
+
+      <div id="plans-section" class="hidden">
+        <div class="mb-2 flex items-center justify-between">
+          <label class="text-xs font-semibold text-muted">Planos (dias e preço de cada um)</label>
+          <button type="button" onclick="addPlanRow()" class="text-xs font-bold hover:underline lilac">+ Adicionar plano</button>
+        </div>
+        <div id="plans-list" class="flex flex-col gap-3"></div>
+      </div>
+
+      <div class="flex items-center gap-6">
+        <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" id="f-featured" /> Destacar na home</label>
+        <label class="flex items-center gap-2 text-sm text-muted"><input type="checkbox" id="f-active" checked /> Produto ativo</label>
+      </div>
+
+      <button id="form-submit" class="mt-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">Salvar produto</button>
+    </form>
+  </div>
+</div>
+
+<div id="cart-drawer" class="fixed inset-0 z-50 hidden justify-end">
+  <div class="absolute inset-0 modal-overlay" onclick="closeCart()"></div>
+  <div class="relative flex h-full w-full max-w-md flex-col border-l border-border bg-surface shadow-2xl">
+    <div class="flex items-center justify-between border-b border-border px-5 py-4">
+      <h2 class="font-display text-lg font-bold uppercase">Seu carrinho</h2>
+      <button onclick="closeCart()" class="text-muted hover:text-white text-xl leading-none">✕</button>
+    </div>
+    <div id="cart-items" class="flex-1 overflow-y-auto px-5 py-4"></div>
+    <div id="cart-offers" class="px-5"></div>
+    <div id="cart-footer" class="hidden border-t border-border px-5 py-4">
+      <div class="mb-3 flex items-center justify-between text-sm">
+        <span class="text-muted">Total</span>
+        <span id="cart-total" class="text-xl font-extrabold text-white"></span>
+      </div>
+      <button onclick="openCheckout()" class="block w-full rounded-xl bg-primary py-3 text-center font-bold text-white shadow-glow hover:bg-primaryhover">
+        Finalizar compra via Pix
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="checkout-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeCheckout()">
+  <div class="w-full max-w-md rounded-2xl border border-border bg-surface p-6" id="checkout-content"></div>
+</div>
+
+<div id="auth-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeAuthModal()">
+  <div class="w-full max-w-sm rounded-2xl border border-border bg-surface p-6">
+    <div class="mb-5 flex border-b border-border">
+      <button type="button" id="auth-tab-btn-login" onclick="switchAuthTab('login')" class="admin-tab-btn border-b-2 border-primary px-4 py-2.5 text-sm font-bold text-white">Entrar</button>
+      <button type="button" id="auth-tab-btn-register" onclick="switchAuthTab('register')" class="admin-tab-btn border-b-2 border-transparent px-4 py-2.5 text-sm font-bold text-muted hover:text-white">Criar conta</button>
+    </div>
+    <div id="auth-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+    <div id="auth-success" class="hidden mb-4 rounded-lg bg-accent/10 px-3 py-2 text-sm text-accent"></div>
+
+    <div id="auth-form-login-wrap">
+      <form id="auth-form-login" class="flex flex-col gap-3">
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
+          <input required type="email" id="auth-login-email" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Senha</label>
+          <input required type="password" id="auth-login-password" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <button id="auth-login-submit" class="mt-1 rounded-lg bg-primary py-2.5 font-bold text-white hover:bg-primaryhover">Entrar</button>
+      </form>
+    </div>
+
+    <div id="auth-form-register-wrap" class="hidden">
+      <form id="auth-form-register" class="flex flex-col gap-3">
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Nome completo</label>
+          <input required id="auth-register-name" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
+          <input required type="email" id="auth-register-email" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <div>
+          <label class="mb-1 block text-xs font-semibold text-muted">Senha</label>
+          <input required type="password" minlength="6" id="auth-register-password" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        </div>
+        <button id="auth-register-submit" class="mt-1 rounded-lg bg-primary py-2.5 font-bold text-white hover:bg-primaryhover">Criar conta</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div id="chat-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeChatModal()">
+  <div class="flex h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+    <div class="flex items-center gap-2 border-b border-border px-5 py-4">
+      <div id="chat-modal-title" class="flex flex-1 items-center gap-2 truncate font-display text-lg font-bold uppercase">Meus chats</div>
+      <button onclick="closeChatModal()" class="shrink-0 text-xl leading-none text-muted hover:text-white">✕</button>
+    </div>
+    <div id="chat-modal-body" class="flex flex-1 flex-col overflow-y-auto"></div>
+  </div>
+</div>
+
+<div id="global-chat-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeGlobalChatModal()">
+  <div class="flex h-[82vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+    <div class="flex items-center gap-2 border-b border-border px-5 py-4">
+      <div class="flex flex-1 items-center gap-2 truncate font-display text-lg font-bold uppercase">🌐 Chat Global</div>
+      <button onclick="closeGlobalChatModal()" class="shrink-0 text-xl leading-none text-muted hover:text-white">✕</button>
+    </div>
+    <div id="global-chat-messages" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
+    <form id="global-chat-form" class="flex items-center gap-2 border-t border-border p-3">
+      <input id="global-chat-input" autocomplete="off" maxlength="500" placeholder="Digite sua mensagem para a comunidade..." class="flex-1 rounded-full border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary" />
+      <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white hover:bg-primaryhover">➤</button>
+    </form>
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const supabase = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+document.getElementById("year").textContent = new Date().getFullYear();
+
+const fmt = (v) => Number(v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+function escapeHTML(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* =========================================================================
+   AUTENTICAÇÃO DE CLIENTES (login/registro) + PERFIL (nome, avatar, role)
+   ========================================================================= */
+
+let CURRENT_USER = null;
+let CURRENT_PROFILE = null;
+
+async function handleAuthChange(session) {
+  CURRENT_USER = session?.user || null;
+  if (CURRENT_USER) {
+    const { data } = await supabase.from("profiles").select("*").eq("id", CURRENT_USER.id).maybeSingle();
+    CURRENT_PROFILE = data || null;
+  } else {
+    CURRENT_PROFILE = null;
+  }
+  renderAuthUI();
+  updatePrivateUnreadBadge();
+}
+
+function renderAuthUI() {
+  const btnLogin = document.getElementById("btn-login");
+  const btnUser = document.getElementById("btn-user");
+  if (CURRENT_USER) {
+    btnLogin.classList.add("hidden");
+    btnUser.classList.remove("hidden");
+    btnUser.classList.add("flex");
+    const name = CURRENT_PROFILE?.full_name || CURRENT_USER.email.split("@")[0];
+    const firstName = name.trim().split(" ")[0];
+    document.getElementById("user-first-name").textContent = firstName;
+    const avatarEl = document.getElementById("user-avatar");
+    if (CURRENT_PROFILE?.avatar_url) {
+      avatarEl.innerHTML = `<img src="${CURRENT_PROFILE.avatar_url}" class="h-full w-full object-cover" />`;
+    } else {
+      avatarEl.textContent = firstName.charAt(0).toUpperCase();
+    }
+  } else {
+    btnLogin.classList.remove("hidden");
+    btnUser.classList.add("hidden");
+    btnUser.classList.remove("flex");
+    document.getElementById("user-menu").classList.add("hidden");
+  }
+}
+
+window.toggleUserMenu = (forceClose = false) => {
+  const menu = document.getElementById("user-menu");
+  if (forceClose) { menu.classList.add("hidden"); return; }
+  menu.classList.toggle("hidden");
+};
+
+document.addEventListener("click", (e) => {
+  const menu = document.getElementById("user-menu");
+  const trigger = document.getElementById("btn-user");
+  if (menu && !menu.classList.contains("hidden") && !menu.contains(e.target) && !trigger.contains(e.target)) {
+    menu.classList.add("hidden");
+  }
+});
+
+window.logoutUser = async () => {
+  await supabase.auth.signOut();
+  toggleUserMenu(true);
+};
+
+window.openAuthModal = (tab = "login") => {
+  switchAuthTab(tab);
+  document.getElementById("auth-modal").classList.remove("hidden");
+  document.getElementById("auth-modal").classList.add("flex");
+};
+
+window.closeAuthModal = () => {
+  document.getElementById("auth-modal").classList.add("hidden");
+  document.getElementById("auth-modal").classList.remove("flex");
+  document.getElementById("auth-error").classList.add("hidden");
+  document.getElementById("auth-success").classList.add("hidden");
+};
+
+window.switchAuthTab = (tab) => {
+  const isLogin = tab === "login";
+  document.getElementById("auth-form-login-wrap").classList.toggle("hidden", !isLogin);
+  document.getElementById("auth-form-register-wrap").classList.toggle("hidden", isLogin);
+  const btnLogin = document.getElementById("auth-tab-btn-login");
+  const btnRegister = document.getElementById("auth-tab-btn-register");
+  btnLogin.classList.toggle("border-primary", isLogin);
+  btnLogin.classList.toggle("text-white", isLogin);
+  btnLogin.classList.toggle("border-transparent", !isLogin);
+  btnLogin.classList.toggle("text-muted", !isLogin);
+  btnRegister.classList.toggle("border-primary", !isLogin);
+  btnRegister.classList.toggle("text-white", !isLogin);
+  btnRegister.classList.toggle("border-transparent", isLogin);
+  btnRegister.classList.toggle("text-muted", isLogin);
+  document.getElementById("auth-error").classList.add("hidden");
+  document.getElementById("auth-success").classList.add("hidden");
+};
+
+document.getElementById("auth-form-login").onsubmit = async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("auth-error");
+  errEl.classList.add("hidden");
+  const submitBtn = document.getElementById("auth-login-submit");
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Entrando...";
+
+  const email = document.getElementById("auth-login-email").value;
+  const password = document.getElementById("auth-login-password").value;
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = "Entrar";
+
+  if (error) { errEl.textContent = "E-mail ou senha inválidos."; errEl.classList.remove("hidden"); return; }
+  document.getElementById("auth-form-login").reset();
+  closeAuthModal();
+};
+
+document.getElementById("auth-form-register").onsubmit = async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("auth-error");
+  errEl.classList.add("hidden");
+  const submitBtn = document.getElementById("auth-register-submit");
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Criando conta...";
+
+  const full_name = document.getElementById("auth-register-name").value;
+  const email = document.getElementById("auth-register-email").value;
+  const password = document.getElementById("auth-register-password").value;
+  const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name } } });
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = "Criar conta";
+
+  if (error) { errEl.textContent = error.message || "Não foi possível criar a conta."; errEl.classList.remove("hidden"); return; }
+  document.getElementById("auth-form-register").reset();
+  closeAuthModal();
+};
+
+/* =========================================================================
+   CHAT PRIVADO ("Meus chats") — conversa 1-para-1 entre o cliente logado
+   e o admin da loja (tabela chat_privado). Uma única thread contínua.
+   ========================================================================= */
+
+let privadoRealtimeChannel = null;   // canal aberto enquanto o modal está visível
+let privadoBadgeChannel = null;      // canal em segundo plano pra manter o badge atualizado
+
+window.openChatModal = async () => {
+  if (!CURRENT_USER) { openAuthModal("login"); return; }
+  document.getElementById("chat-modal-title").textContent = "Meus chats";
+  document.getElementById("chat-modal").classList.remove("hidden");
+  document.getElementById("chat-modal").classList.add("flex");
+
+  const body = document.getElementById("chat-modal-body");
+  body.innerHTML = `
+    <div class="flex h-full flex-1 flex-col">
+      <div id="chat-thread-messages" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
+      <form id="chat-thread-form" class="flex items-center gap-2 border-t border-border p-3">
+        <input id="chat-thread-input" autocomplete="off" maxlength="500" placeholder="Digite sua mensagem..." class="flex-1 rounded-full border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary" />
+        <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white hover:bg-primaryhover">➤</button>
+      </form>
+    </div>`;
+  document.getElementById("chat-thread-form").onsubmit = (e) => { e.preventDefault(); sendPrivateChatMessage(); };
+
+  await loadPrivateChatMessages();
+  subscribeToPrivateChat();
+};
+
+window.closeChatModal = () => {
+  document.getElementById("chat-modal").classList.add("hidden");
+  document.getElementById("chat-modal").classList.remove("flex");
+  if (privadoRealtimeChannel) { supabase.removeChannel(privadoRealtimeChannel); privadoRealtimeChannel = null; }
+};
+
+async function loadPrivateChatMessages() {
+  if (!CURRENT_USER) return;
+  const { data: msgs, error } = await supabase
+    .from("chat_privado")
+    .select("*")
+    .eq("customer_id", CURRENT_USER.id)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    const el = document.getElementById("chat-thread-messages");
+    if (el) el.innerHTML = `<div class="p-6 text-sm text-red-400">Erro ao carregar sua conversa.</div>`;
+    return;
+  }
+
+  renderPrivateChatMessages(msgs || []);
+
+  // marca como lidas as mensagens do admin que ainda não foram lidas
+  const unreadIds = (msgs || []).filter((m) => m.sender_role === "admin" && !m.read_at).map((m) => m.id);
+  if (unreadIds.length) {
+    await supabase.from("chat_privado").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
+  }
+  updatePrivateUnreadBadge();
+}
+
+function renderPrivateChatMessages(msgs) {
+  const el = document.getElementById("chat-thread-messages");
+  if (!el) return;
+  if (!msgs.length) {
+    el.innerHTML = `<div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted"><span class="text-3xl">💬</span>Envie uma mensagem e a equipe da NovaStore te responde por aqui.</div>`;
+    return;
+  }
+  el.innerHTML = msgs.map((m) => {
+    const mine = m.sender_role === "client";
+    return `<div class="flex ${mine ? "justify-end" : "justify-start"}">
+      <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${mine ? "bg-primary text-white" : "bg-surface2 text-white"}">
+        ${escapeHTML(m.message_text)}
+      </div>
+    </div>`;
+  }).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendPrivateChatMessage() {
+  const input = document.getElementById("chat-thread-input");
+  const text = input.value.trim();
+  if (!text || !CURRENT_USER) return;
+  input.value = "";
+  const { error } = await supabase.from("chat_privado").insert({
+    customer_id: CURRENT_USER.id,
+    sender_id: CURRENT_USER.id,
+    sender_role: "client",
+    message_text: text,
+  });
+  if (error) alert("Erro ao enviar mensagem: " + error.message);
+}
+
+function subscribeToPrivateChat() {
+  if (!CURRENT_USER) return;
+  if (privadoRealtimeChannel) supabase.removeChannel(privadoRealtimeChannel);
+  privadoRealtimeChannel = supabase
+    .channel(`chat-privado-${CURRENT_USER.id}`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_privado", filter: `customer_id=eq.${CURRENT_USER.id}` }, () => loadPrivateChatMessages())
+    .subscribe();
+}
+
+/* mantém o badge (bolinha vermelha no perfil + contador em "Meus chats")
+   atualizado mesmo com o modal fechado */
+async function updatePrivateUnreadBadge() {
+  const dot = document.getElementById("profile-unread-dot");
+  const badge = document.getElementById("menu-chat-unread-badge");
+  if (!dot || !badge) return;
+
+  if (!CURRENT_USER) { dot.classList.add("hidden"); badge.classList.add("hidden"); return; }
+
+  const { count } = await supabase
+    .from("chat_privado")
+    .select("id", { count: "exact", head: true })
+    .eq("customer_id", CURRENT_USER.id)
+    .eq("sender_role", "admin")
+    .is("read_at", null);
+
+  const hasUnread = !!count;
+  dot.classList.toggle("hidden", !hasUnread);
+  badge.classList.toggle("hidden", !hasUnread);
+  if (hasUnread) badge.textContent = count > 9 ? "9+" : String(count);
+}
+
+function subscribeToPrivateBadge() {
+  if (privadoBadgeChannel) { supabase.removeChannel(privadoBadgeChannel); privadoBadgeChannel = null; }
+  if (!CURRENT_USER) return;
+  privadoBadgeChannel = supabase
+    .channel(`chat-privado-badge-${CURRENT_USER.id}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "chat_privado", filter: `customer_id=eq.${CURRENT_USER.id}` }, () => updatePrivateUnreadBadge())
+    .subscribe();
+}
+
+/* =========================================================================
+   CHAT GLOBAL — sala pública em tempo real (tabela chat_global), aberta
+   pelo ícone 🌐 no header. Visível a qualquer usuário autenticado.
+   ========================================================================= */
+
+let globalChatChannel = null;
+const GLOBAL_CHAT_LIMIT = 100;
+
+window.openGlobalChatModal = async () => {
+  if (!CURRENT_USER) { openAuthModal("login"); return; }
+  document.getElementById("global-chat-modal").classList.remove("hidden");
+  document.getElementById("global-chat-modal").classList.add("flex");
+  document.getElementById("global-chat-form").onsubmit = (e) => { e.preventDefault(); sendGlobalChatMessage(); };
+  await loadGlobalChatMessages();
+  subscribeToGlobalChat();
+};
+
+window.closeGlobalChatModal = () => {
+  document.getElementById("global-chat-modal").classList.add("hidden");
+  document.getElementById("global-chat-modal").classList.remove("flex");
+  if (globalChatChannel) { supabase.removeChannel(globalChatChannel); globalChatChannel = null; }
+};
+
+async function loadGlobalChatMessages() {
+  const { data: msgs, error } = await supabase
+    .from("chat_global")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(GLOBAL_CHAT_LIMIT);
+
+  const el = document.getElementById("global-chat-messages");
+  if (error) { el.innerHTML = `<div class="p-6 text-sm text-red-400">Erro ao carregar o chat global.</div>`; return; }
+  renderGlobalChatMessages((msgs || []).reverse());
+}
+
+function renderGlobalChatMessages(msgs) {
+  const el = document.getElementById("global-chat-messages");
+  if (!el) return;
+  if (!msgs.length) {
+    el.innerHTML = `<div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted"><span class="text-3xl">🌐</span>Seja o primeiro a mandar uma mensagem na comunidade!</div>`;
+    return;
+  }
+  el.innerHTML = msgs.map((m) => {
+    const mine = m.sender_id === CURRENT_USER?.id;
+    return `<div class="flex ${mine ? "justify-end" : "justify-start"}">
+      <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${mine ? "bg-primary text-white" : "bg-surface2 text-white"}">
+        ${mine ? "" : `<p class="mb-0.5 text-[11px] font-bold ${m.sender_role === "admin" ? "text-accent" : "lilac"}">${escapeHTML(m.sender_name)}${m.sender_role === "admin" ? " · Equipe" : ""}</p>`}
+        ${escapeHTML(m.message_text)}
+      </div>
+    </div>`;
+  }).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendGlobalChatMessage() {
+  const input = document.getElementById("global-chat-input");
+  const text = input.value.trim();
+  if (!text || !CURRENT_USER) return;
+  input.value = "";
+  const senderName = CURRENT_PROFILE?.full_name || CURRENT_USER.email.split("@")[0];
+  const { error } = await supabase.from("chat_global").insert({
+    sender_id: CURRENT_USER.id,
+    sender_name: senderName,
+    sender_role: CURRENT_PROFILE?.role === "admin" ? "admin" : "client",
+    message_text: text,
+  });
+  if (error) alert("Erro ao enviar mensagem: " + error.message);
+}
+
+function subscribeToGlobalChat() {
+  if (globalChatChannel) supabase.removeChannel(globalChatChannel);
+  globalChatChannel = supabase
+    .channel("chat-global-room")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_global" }, (payload) => {
+      const el = document.getElementById("global-chat-messages");
+      const currentlyOpen = el && !document.getElementById("global-chat-modal").classList.contains("hidden");
+      if (currentlyOpen) loadGlobalChatMessages();
+    })
+    .subscribe();
+}
+
+supabase.auth.onAuthStateChange((_event, session) => { handleAuthChange(session); subscribeToPrivateBadge(); });
+supabase.auth.getSession().then(({ data: { session } }) => { handleAuthChange(session); subscribeToPrivateBadge(); });
+
+/* ---------------- Game categories (used for filter bar, card tags, and admin select) ---------------- */
+
+function icon(path, extra = "") {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="cat-icon h-5 w-5">${path}</svg>${extra}`;
+}
+
+const ALL_ICON = icon('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>');
+const GENERIC_GAME_ICON = icon('<rect x="2" y="8" width="20" height="9" rx="4.5"/><circle cx="8" cy="12.5" r="1"/><path d="M6 12.5h4"/><path d="M15.2 11.3h.01M17.6 13.2h.01"/>');
+
+/* jogos conhecidos de fábrica (ganham um ícone bonitinho); qualquer outro nome digitado no admin
+   também funciona normalmente, só usa um ícone genérico de controle */
+const GAME_CATEGORIES = [
+  { key: "CS2",       label: "CS2",       icon: icon('<circle cx="12" cy="12" r="8"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/>') },
+  { key: "VALORANT",  label: "Valorant",  icon: icon('<path d="M4 12l6-8 10 8-10 8z"/>') },
+  { key: "WARZONE",   label: "Warzone",   icon: icon('<path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/>') },
+  { key: "R6S",       label: "R6S",       icon: icon('<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/>') },
+  { key: "FORTNITE",  label: "Fortnite",  icon: icon('<path d="M6 3v18l6-4 6 4V3z"/>') },
+  { key: "CSGOS",     label: "CS:GOS",    icon: icon('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.4"/>') },
+  { key: "POOFER",    label: "Poofer",    icon: icon('<path d="M12 2l1.8 5.6L19 9l-5.2 1.4L12 16l-1.8-5.6L5 9l5.2-1.4z"/>') },
+  { key: "DAYZ",      label: "Dayz",      icon: icon('<circle cx="12" cy="12" r="8"/><path d="M12 8v1M9 15.5a3.5 3 0 016 0M8.5 11a1 1 0 100-2M15.5 11a1 1 0 100-2"/>') },
+  { key: "FIVEM",     label: "Fivem",     icon: icon('<path d="M4 16l1.5-5.5A2 2 0 017.4 9h9.2a2 2 0 011.9 1.5L20 16M4 16h16M6.5 16v2.5M17.5 16v2.5M6 12.5h12"/>') },
+  { key: "UNTURNED",  label: "Unturned",  icon: icon('<path d="M12 2l8 4.6v10.8L12 22l-8-4.6V6.6z"/><path d="M12 2v20M4 6.6l8 4.6 8-4.6"/>') },
+];
+const CATEGORY_MAP = Object.fromEntries(GAME_CATEGORIES.map(c => [c.key, c]));
+
+/* funciona para QUALQUER categoria — conhecida ou digitada na hora pelo admin */
+function categoryMeta(key) {
+  if (!key) return null;
+  const known = CATEGORY_MAP[key.toUpperCase?.() ?? key];
+  if (known) return known;
+  return { key, label: key, icon: GENERIC_GAME_ICON };
+}
+
+/* lista de categorias já usadas nos produtos + os jogos conhecidos, pra sugestão no admin */
+function populateCategoryOptions() {
+  const dl = document.getElementById("category-options");
+  if (!dl) return;
+  const used = ALL_PRODUCTS.map((p) => p.category).filter(Boolean);
+  const known = GAME_CATEGORIES.map((c) => c.label);
+  const all = [...new Set([...known, ...used])];
+  dl.innerHTML = all.map((c) => `<option value="${c}">`).join("");
+}
+
+/* monta a barra de categorias da home a partir dos jogos que realmente existem nos produtos —
+   assim que um jogo novo é cadastrado, o botão dele aparece sozinho aqui */
+const categoryBarEl = document.getElementById("category-bar");
+
+function buildCategoryBar() {
+  const distinct = [...new Set(ALL_PRODUCTS.map((p) => p.category).filter(Boolean))];
+  const knownOrder = GAME_CATEGORIES.map((c) => c.key);
+  distinct.sort((a, b) => {
+    const ai = knownOrder.indexOf(a.toUpperCase?.() ?? a);
+    const bi = knownOrder.indexOf(b.toUpperCase?.() ?? b);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
+  const items = [{ key: null, label: "Todos", icon: ALL_ICON }, ...distinct.map((k) => categoryMeta(k))];
+
+  categoryBarEl.innerHTML = items.map((c) => `
+    <button data-cat="${c.key ?? ""}" onclick='filterCategory(${JSON.stringify(c.key)})'
+      class="cat-btn ${(c.key || null) === (currentCategory || null) ? "is-active" : ""} flex shrink-0 flex-col items-center gap-1.5 rounded-xl border border-border bg-surface px-5 py-3 text-xs font-bold text-muted hover:border-primary/50">
+      ${c.icon}
+      <span>${c.label}</span>
+    </button>`).join("");
+}
+
+/* ---------------- State ---------------- */
+
+let ALL_PRODUCTS = [];
+let currentCategory = null;
+let searchQuery = "";
+let cart = JSON.parse(localStorage.getItem("cart") || "[]");
+let currentImageUrl = "";
+let editingId = null;
+let paymentPollTimer = null;
+
+let SITE_SETTINGS = { hero_image_url: null, hero_overlay: 0.35, background_image_url: null, background_overlay: 0.85 };
+let currentHeroUrl = "";
+let currentBgUrl = "";
+
+function route() {
+  if (location.hash === "#admin") {
+    document.getElementById("view-store").classList.add("hidden");
+    document.getElementById("view-admin").classList.remove("hidden");
+    checkAdminSession();
+  } else {
+    document.getElementById("view-admin").classList.add("hidden");
+    document.getElementById("view-store").classList.remove("hidden");
+  }
+}
+window.addEventListener("hashchange", route);
+window.goToAdmin = () => { location.hash = "#admin"; };
+window.goToStore = () => { location.hash = ""; };
+
+/* ---------------- Site-wide appearance (background + hero banner) ---------------- */
+
+async function loadSiteSettings() {
+  try {
+    const { data, error } = await supabase.from("site_settings").select("*").eq("id", 1).maybeSingle();
+    if (error) throw error;
+    if (data) SITE_SETTINGS = data;
+  } catch (err) {
+    console.warn("Configurações de aparência não carregadas (tabela site_settings pode não existir ainda):", err.message || err);
+  }
+  applySiteSettings(SITE_SETTINGS);
+}
+
+function applySiteSettings(s) {
+  const body = document.body;
+  if (s.background_image_url) {
+    document.documentElement.style.setProperty("--site-bg-image", `url("${s.background_image_url}")`);
+    document.documentElement.style.setProperty("--site-bg-overlay", String(s.background_overlay ?? 0.85));
+    body.classList.add("has-custom-bg");
+  } else {
+    body.classList.remove("has-custom-bg");
+  }
+
+  const heroSection = document.getElementById("hero-section");
+  document.documentElement.style.setProperty("--hero-overlay", String(s.hero_overlay ?? 0.35));
+  if (s.hero_image_url) {
+    heroSection.style.backgroundImage = `url("${s.hero_image_url}")`;
+  } else {
+    heroSection.style.backgroundImage = "";
+  }
+}
+
+window.switchAdminTab = (tab) => {
+  const tabs = ["products", "conversas", "mensagens", "appearance"];
+  tabs.forEach((t) => {
+    const isActive = t === tab;
+    document.getElementById(`admin-tab-${t}`).classList.toggle("hidden", !isActive);
+    const btn = document.getElementById(`admin-tab-btn-${t}`);
+    btn.classList.toggle("border-primary", isActive);
+    btn.classList.toggle("text-white", isActive);
+    btn.classList.toggle("border-transparent", !isActive);
+    btn.classList.toggle("text-muted", !isActive);
+  });
+  if (tab === "appearance") populateAppearanceForm();
+  if (tab === "conversas") loadAdminConversas();
+  if (tab === "mensagens") loadAdminMensagens();
+};
+
+function populateAppearanceForm() {
+  currentHeroUrl = SITE_SETTINGS.hero_image_url || "";
+  currentBgUrl = SITE_SETTINGS.background_image_url || "";
+  const overlayPct = Math.round((SITE_SETTINGS.background_overlay ?? 0.85) * 100);
+  const heroOverlayPct = Math.round((SITE_SETTINGS.hero_overlay ?? 0.35) * 100);
+  document.getElementById("hero-image-preview").innerHTML = currentHeroUrl ? `<img src="${currentHeroUrl}" class="h-full w-full object-cover" />` : "Sem imagem";
+  document.getElementById("bg-image-preview").innerHTML = currentBgUrl ? `<img src="${currentBgUrl}" class="h-full w-full object-cover" />` : "Sem imagem";
+  document.getElementById("hero-overlay-input").value = heroOverlayPct;
+  document.getElementById("hero-overlay-value").textContent = heroOverlayPct + "%";
+  document.getElementById("bg-overlay-input").value = overlayPct;
+  document.getElementById("bg-overlay-value").textContent = overlayPct + "%";
+  document.getElementById("appearance-error").classList.add("hidden");
+  document.getElementById("appearance-success").classList.add("hidden");
+}
+
+document.getElementById("hero-overlay-input").addEventListener("input", (e) => {
+  document.getElementById("hero-overlay-value").textContent = e.target.value + "%";
+});
+
+document.getElementById("bg-overlay-input").addEventListener("input", (e) => {
+  document.getElementById("bg-overlay-value").textContent = e.target.value + "%";
+});
+
+async function uploadSiteAsset(file, prefix) {
+  const path = `${prefix}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "")}`;
+  const { error } = await supabase.storage.from("site-assets").upload(path, file, { upsert: true });
+  if (error) throw error;
+  const { data } = supabase.storage.from("site-assets").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+document.getElementById("hero-image-input").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById("hero-upload-status");
+  statusEl.textContent = "Enviando imagem...";
+  try {
+    currentHeroUrl = await uploadSiteAsset(file, "hero");
+    document.getElementById("hero-image-preview").innerHTML = `<img src="${currentHeroUrl}" class="h-full w-full object-cover" />`;
+    statusEl.textContent = "Imagem enviada ✓";
+  } catch (err) {
+    statusEl.textContent = "Erro no upload: " + err.message;
+  }
+};
+
+document.getElementById("bg-image-input").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById("bg-upload-status");
+  statusEl.textContent = "Enviando imagem...";
+  try {
+    currentBgUrl = await uploadSiteAsset(file, "background");
+    document.getElementById("bg-image-preview").innerHTML = `<img src="${currentBgUrl}" class="h-full w-full object-cover" />`;
+    statusEl.textContent = "Imagem enviada ✓";
+  } catch (err) {
+    statusEl.textContent = "Erro no upload: " + err.message;
+  }
+};
+
+window.removeHeroImage = () => {
+  currentHeroUrl = "";
+  document.getElementById("hero-image-preview").innerHTML = "Sem imagem";
+  document.getElementById("hero-upload-status").textContent = "";
+};
+
+window.removeBgImage = () => {
+  currentBgUrl = "";
+  document.getElementById("bg-image-preview").innerHTML = "Sem imagem";
+  document.getElementById("bg-upload-status").textContent = "";
+};
+
+window.saveSiteSettings = async () => {
+  const btn = document.getElementById("appearance-save");
+  const errEl = document.getElementById("appearance-error");
+  const okEl = document.getElementById("appearance-success");
+  errEl.classList.add("hidden");
+  okEl.classList.add("hidden");
+  btn.disabled = true;
+  btn.textContent = "Salvando...";
+
+  const overlay = Number(document.getElementById("bg-overlay-input").value) / 100;
+  const heroOverlay = Number(document.getElementById("hero-overlay-input").value) / 100;
+  const payload = {
+    id: 1,
+    hero_image_url: currentHeroUrl || null,
+    hero_overlay: heroOverlay,
+    background_image_url: currentBgUrl || null,
+    background_overlay: overlay,
+  };
+
+  const { error } = await supabase.from("site_settings").upsert(payload);
+  btn.disabled = false;
+  btn.textContent = "Salvar aparência";
+
+  if (error) {
+    errEl.textContent = "Erro ao salvar: " + error.message;
+    errEl.classList.remove("hidden");
+    return;
+  }
+
+  SITE_SETTINGS = payload;
+  applySiteSettings(SITE_SETTINGS);
+  okEl.textContent = "Aparência salva com sucesso ✓";
+  okEl.classList.remove("hidden");
+};
+
+async function loadProducts() {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .eq("active", true)
+    .order("featured", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  document.getElementById("loading").classList.add("hidden");
+
+  if (error) {
+    document.getElementById("products-grid").innerHTML =
+      `<p class="text-red-400 col-span-full">Erro ao carregar produtos: ${error.message}. Confira as credenciais do Supabase no topo do arquivo.</p>`;
+    return;
+  }
+
+  ALL_PRODUCTS = data || [];
+  buildCategoryBar();
+  populateCategoryOptions();
+  renderProducts();
+  checkInitialProductRoute();
+}
+
+window.filterCategory = (key) => {
+  currentCategory = key;
+  document.querySelectorAll(".cat-btn").forEach((btn) => {
+    btn.classList.toggle("is-active", (btn.dataset.cat || null) === (key || null));
+  });
+  renderProducts();
+};
+
+document.getElementById("search-input").addEventListener("input", (e) => {
+  searchQuery = e.target.value.trim().toLowerCase();
+  renderProducts();
+});
+
+function renderProducts() {
+  const grid = document.getElementById("products-grid");
+  let list = ALL_PRODUCTS;
+  if (currentCategory) list = list.filter((p) => p.category === currentCategory);
+  if (searchQuery) list = list.filter((p) => p.name.toLowerCase().includes(searchQuery));
+  document.getElementById("empty-state").classList.toggle("hidden", list.length !== 0);
+  grid.innerHTML = list.map((p, i) => productCardHTML(p, i)).join("");
+}
+
+function minPlanPrice(product) {
+  if (!product.plans || product.plans.length === 0) return null;
+  return Math.min(...product.plans.map((p) => Number(p.price)));
+}
+
+/* número de "compras" fixo por produto (15 a 44), calculado a partir do próprio id */
+function purchaseCount(id) {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return 15 + (hash % (44 - 15 + 1));
+}
+
+function parseTags(p) {
+  if (Array.isArray(p.tags) && p.tags.length) return p.tags;
+  return [];
+}
+function parseFeatures(p) {
+  if (Array.isArray(p.features) && p.features.length) return p.features;
+  return [];
+}
+
+function scarcityBadge(p, i = 0) {
+  // Distribui as tags de urgência de forma determinística entre os cards
+  const pool = [
+    { label: "🔥 Mais vendido", cls: "badge-hot" },
+    { label: "⏳ Oferta limitada", cls: "badge-shine" },
+    { label: "⚡ Últimas unidades", cls: "badge-last" },
+  ];
+  const seed = (String(p.id).length + i) % 5;
+  if (seed === 3) return null; // nem todo card precisa de badge
+  const pick = pool[(String(p.id).length + i) % pool.length];
+  return pick;
+}
+
+function productCardHTML(p, i = 0) {
+  const price = p.type === "ASSINATURA" ? minPlanPrice(p) : p.price;
+  const cat = categoryMeta(p.category);
+  const tags = parseTags(p);
+  const delay = Math.min(i, 11) * 70;
+  const badge = scarcityBadge(p, i);
+  return `
+  <div class="product-card card-in group relative flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-border bg-surface"
+       style="animation-delay:${delay}ms"
+       onclick='shockThenOpen(event, ${JSON.stringify(p.id)})'>
+    ${badge ? `<span class="${badge.cls} absolute left-3 top-3 z-10 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide text-black shadow-lg">${badge.label}</span>` : ""}
+    <div class="relative aspect-[1/1] w-full overflow-hidden bg-surface2">
+      ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />` : `<div class="flex h-full items-center justify-center text-muted">Sem imagem</div>`}
+      <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
+      ${cat ? `<span class="absolute left-3 ${badge ? "top-11" : "top-3"} flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white backdrop-blur">${cat.icon}${cat.label}</span>` : ""}
+      ${p.type === "ASSINATURA" ? `<span class="absolute right-3 top-3 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white">Assinatura</span>` : ""}
+    </div>
+    <div class="flex flex-1 flex-col gap-2.5 p-5">
+      <h3 class="font-display text-xl font-bold uppercase leading-tight">${p.name}</h3>
+      ${tags.length ? `<p class="line-clamp-1 text-sm font-medium text-muted">${tags.join(" • ")}</p>` : `<p class="line-clamp-2 text-sm text-muted">${p.description || ""}</p>`}
+      <div class="mt-auto pt-3">
+        <p class="text-2xl font-extrabold text-white">${p.type === "ASSINATURA" ? `<span class="mr-1 text-xs font-medium text-muted">a partir de</span>` : ""}${price != null ? fmt(price) : "Consultar"}</p>
+        <button onclick='event.stopPropagation(); shockThenOpen(event, ${JSON.stringify(p.id)})' class="glow-cta btn-press mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-3 text-sm font-bold text-white hover:bg-primaryhover">
+          Comprar agora <span>→</span>
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* card minimalista (padrão "Collapse") usado na seção de produtos relacionados:
+   imagem grande centralizada + título/preço abaixo, sem descrições ou botões */
+function relatedProductCardHTML(p, i = 0) {
+  const price = p.type === "ASSINATURA" ? minPlanPrice(p) : p.price;
+  const cat = categoryMeta(p.category);
+  const delay = Math.min(i, 11) * 70;
+  return `
+  <a href="javascript:void(0)" onclick='goToProductPage(${JSON.stringify(p.id)})'
+     class="card-in group block cursor-pointer transition-transform duration-300 ease-out hover:scale-105"
+     style="animation-delay:${delay}ms">
+    <div class="flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-2xl bg-zinc-900 p-6">
+      ${p.image_url
+        ? `<img src="${p.image_url}" class="h-full w-full object-contain" />`
+        : `<div class="flex h-full w-full items-center justify-center text-muted">Sem imagem</div>`}
+    </div>
+    <div class="mt-4 text-left">
+      ${cat ? `<p class="mb-1 text-xs font-bold uppercase tracking-wide text-orange-400">${cat.label}</p>` : ""}
+      <h3 class="font-display text-lg font-extrabold uppercase leading-tight text-white sm:text-xl">${p.name}</h3>
+      <p class="mt-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">A partir de</p>
+      <p class="text-xl font-bold text-primary sm:text-2xl">${price != null ? fmt(price) : "Consultar"}</p>
+    </div>
+  </a>`;
+}
+
+/* efeito de "choque" no card ao clicar, antes de abrir o produto */
+window.shockThenOpen = (evt, id) => {
+  const card = evt.currentTarget?.closest?.(".product-card") || evt.target.closest(".product-card");
+  if (card) {
+    card.classList.remove("shock-click");
+    void card.offsetWidth; // reinicia a animação
+    card.classList.add("shock-click");
+  }
+  document.querySelectorAll(".product-card.tilt").forEach(resetTilt);
+  goToProductPage(id);
+};
+
+/* spotlight elétrico + inclinação 3D (tilt) que seguem o mouse em cima dos cards */
+const productsGridEl = document.getElementById("products-grid");
+
+productsGridEl.addEventListener("mousemove", (e) => {
+  const card = e.target.closest(".product-card");
+  document.querySelectorAll(".product-card.tilt").forEach((c) => { if (c !== card) resetTilt(c); });
+  if (!card) return;
+
+  const rect = card.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  card.style.setProperty("--x", `${x}px`);
+  card.style.setProperty("--y", `${y}px`);
+
+  const rx = ((x / rect.width) - 0.5) * 12;
+  const ry = ((y / rect.height) - 0.5) * -12;
+  card.style.setProperty("--rx", `${rx}deg`);
+  card.style.setProperty("--ry", `${ry}deg`);
+  card.classList.add("tilt");
+});
+
+productsGridEl.addEventListener("mouseleave", () => {
+  document.querySelectorAll(".product-card.tilt").forEach(resetTilt);
+});
+
+function resetTilt(card) {
+  card.classList.remove("tilt");
+  card.style.removeProperty("--rx");
+  card.style.removeProperty("--ry");
+}
+
+/* ---------------- Página dedicada de produto (SPA) ---------------- */
+
+function relatedProducts(p) {
+  const sameCategory = ALL_PRODUCTS.filter((x) => x.id !== p.id && x.category === p.category);
+  const list = sameCategory.length ? sameCategory : ALL_PRODUCTS.filter((x) => x.id !== p.id);
+  return list.slice(0, 6);
+}
+
+function renderProductPage(p) {
+  const cat = categoryMeta(p.category);
+  const tags = parseTags(p);
+  const features = parseFeatures(p);
+  const isSub = p.type === "ASSINATURA";
+  const plans = p.plans || [];
+  const id = p.id;
+
+  const planIconHTML = (plan) => {
+    if (plan.icon_url) return `<img src="${plan.icon_url}" class="h-full w-full object-cover" />`;
+    if (p.image_url) return `<img src="${p.image_url}" class="h-full w-full object-cover" />`;
+    return `<div class="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary to-[#4b2fd6] text-xs font-black text-white">${(plan.name || "?").charAt(0)}</div>`;
+  };
+
+  const planOptionHTML = (plan, i) => `
+    <button type="button" data-plan-index="${i}" onclick='selectPlanOption(${JSON.stringify(id)}, ${i})'
+      class="plan-dropdown-item ${i === 0 ? "is-selected" : ""} flex w-full items-center gap-3 border-b border-border/60 p-3 text-left last:border-b-0 hover:bg-white/5">
+      <span class="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-surface2">${planIconHTML(plan)}</span>
+      <span class="min-w-0 flex-1">
+        <span class="flex items-center gap-2">
+          <span class="truncate text-sm font-bold text-white">${plan.name}</span>
+          ${plan.oldPrice ? `<span class="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">Oferta</span>` : (plan.badge ? `<span class="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">${plan.badge}</span>` : "")}
+        </span>
+        <span class="block truncate text-xs text-muted">${plan.subtitle || p.name}</span>
+      </span>
+      <span class="flex shrink-0 flex-col items-end leading-tight">
+        ${plan.oldPrice ? `<span class="text-[11px] text-muted line-through">${fmt(plan.oldPrice)}</span>` : ""}
+        <span class="text-sm font-bold text-white">${fmt(plan.price)}</span>
+      </span>
+      <span class="plan-check-icon ${i === 0 ? "" : "invisible"} ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white">✓</span>
+    </button>`;
+
+  const firstPlan = plans[0] || {};
+  const planDropdownHTML = plans.length ? `
+    <div>
+      <p class="mb-2.5 text-xs font-bold uppercase tracking-wide text-muted">Escolha o plano</p>
+      <div class="relative" id="plan-dropdown">
+        <button type="button" onclick="togglePlanDropdown()" id="plan-dropdown-trigger"
+          class="flex w-full items-center gap-3 rounded-xl border-2 border-primary/70 bg-zinc-900 p-3 text-left transition-colors hover:border-primary">
+          <span class="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-surface2">${planIconHTML(firstPlan)}</span>
+          <span class="min-w-0 flex-1">
+            <span id="plan-trigger-title" class="block truncate text-sm font-bold text-white">${firstPlan.name || ""}</span>
+            <span id="plan-trigger-subtitle" class="block truncate text-xs text-muted">${firstPlan.subtitle || p.name}</span>
+          </span>
+          <span id="plan-trigger-price" class="shrink-0 font-display text-base font-bold lilac">${fmt(firstPlan.price)}</span>
+          <svg id="plan-dropdown-chevron" class="h-4 w-4 shrink-0 text-muted transition-transform duration-200" viewBox="0 0 20 20" fill="none">
+            <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div id="plan-dropdown-menu" class="plan-dropdown-scroll absolute left-0 right-0 top-[calc(100%+8px)] z-30 hidden max-h-64 overflow-y-auto rounded-xl border border-border bg-zinc-900 shadow-2xl">
+          ${plans.map((plan, i) => planOptionHTML(plan, i)).join("")}
+        </div>
+      </div>
+    </div>
+  ` : "";
+
+  const featuresListHTML = features.length ? `
+    <div class="mb-5">
+      <div class="grid grid-cols-1 gap-2.5">
+        ${features.map((f) => `
+          <div class="flex items-center gap-2 text-sm">
+            <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">✓</span>
+            ${f}
+          </div>`).join("")}
+      </div>
+    </div>` : "";
+
+  const initialPrice = isSub ? (plans[0] ? plans[0].price : null) : p.price;
+  const related = relatedProducts(p);
+  const relatedTitle = cat ? `Mais de ${cat.label}` : "Você também pode gostar";
+
+  document.getElementById("product-page-view").innerHTML = `
+    <div class="mx-auto max-w-6xl px-4 py-8 sm:px-8 lg:px-10">
+
+      <nav class="mb-4 flex flex-wrap items-center gap-1.5 text-xs font-medium text-muted">
+        <button onclick="goBackToStore()" class="hover:text-white">Início</button>
+        <span>/</span>
+        <button onclick="goBackToStore()" class="hover:text-white">Produtos</button>
+        <span>/</span>
+        <span class="text-white">${p.name}</span>
+      </nav>
+
+      <button onclick="goBackToStore()" class="mb-8 inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 py-2 text-sm font-semibold text-muted hover:border-primary/60 hover:text-white">
+        ← Voltar
+      </button>
+
+      <div class="grid grid-cols-1 gap-8 lg:grid-cols-[1.5fr_1fr] lg:items-start">
+
+        <div>
+          <div class="product-page-box modal-image-frame mx-auto max-w-md overflow-hidden rounded-2xl border border-border bg-surface2 p-4 sm:max-w-lg">
+            ${p.image_url
+              ? `<img src="${p.image_url}" class="aspect-[4/5] w-full rounded-xl object-cover" />`
+              : `<div class="flex aspect-[4/5] items-center justify-center rounded-xl text-muted">Sem imagem</div>`}
+          </div>
+          <div class="purchase-badge mx-auto mt-4 flex w-fit items-center justify-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-2 text-xs font-bold text-accent">
+            🔥 ${purchaseCount(p.id)} pessoas compraram recentemente
+          </div>
+
+          <div class="mt-10 rounded-2xl border border-border bg-surface p-6">
+            <div class="mb-5 flex border-b border-border">
+              <button type="button" class="page-tab is-active" data-tab-btn="sobre" onclick="switchProductTab('sobre')">Sobre o produto</button>
+              ${features.length ? `<button type="button" class="page-tab" data-tab-btn="recursos" onclick="switchProductTab('recursos')">Recursos</button>` : ""}
+            </div>
+            <div data-tab-panel="sobre">
+              <p class="leading-relaxed text-muted">${p.description || "Sem descrição disponível para este produto."}</p>
+            </div>
+            ${features.length ? `<div data-tab-panel="recursos" class="hidden">${featuresListHTML}</div>` : ""}
+          </div>
+        </div>
+
+        <aside class="flex flex-col gap-5 rounded-2xl border border-border bg-surface2/60 p-6 lg:sticky lg:top-24">
+          ${cat ? `<span class="w-fit inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wide lilac">${cat.icon}${cat.label}</span>` : ""}
+          <h1 class="font-display text-2xl font-bold uppercase leading-tight sm:text-3xl">${p.name}</h1>
+          ${tags.length ? `<div class="flex flex-wrap gap-2">${tags.map((t) => `<span class="tag-chip rounded-full px-2.5 py-1 text-[11px] font-bold">${t}</span>`).join("")}</div>` : ""}
+
+          ${isSub ? planDropdownHTML : ""}
+
+          <div class="border-t border-border pt-5">
+            <p class="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Total</p>
+            <p id="page-price" class="font-display text-3xl font-bold text-white">${initialPrice != null ? fmt(initialPrice) : "Selecione um plano"}</p>
+          </div>
+
+          <div class="flex flex-col gap-2.5">
+            <button onclick='buyNowFromProductPage(${JSON.stringify(id)})' class="magnetic-btn glow-cta w-full rounded-xl bg-primary py-3.5 font-bold text-white hover:bg-primaryhover active:scale-[0.98] transition-transform">
+              <span>Comprar agora</span>
+            </button>
+            <button onclick='addToCartFromProductPage(${JSON.stringify(id)})' class="magnetic-btn flex w-full items-center justify-center gap-2 rounded-xl border border-border py-3 font-bold text-white hover:border-primary/60 active:scale-[0.98] transition-transform">
+              <span>🛒 Adicionar ao carrinho</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 border-t border-border pt-5 text-center text-[11px] text-muted">
+            <div><p class="mb-1 lilac">⚡</p>Pagamento via Pix<br/>Liberação imediata</div>
+            <div><p class="mb-1 lilac">🎧</p>Suporte 24/7<br/>Tire suas dúvidas</div>
+            <div><p class="mb-1 lilac">🛡️</p>Compra segura<br/>Seus dados protegidos</div>
+          </div>
+        </aside>
+      </div>
+
+      ${related.length ? `
+        <div class="mt-16">
+          <div class="mb-8 flex items-center gap-5">
+            <h2 class="shrink-0 font-display text-xl font-bold uppercase tracking-wide text-white sm:text-2xl">${relatedTitle}</h2>
+            <div class="h-px flex-1 bg-border"></div>
+          </div>
+          <div id="related-products-grid" class="grid grid-cols-1 gap-6 sm:gap-8 md:grid-cols-2 lg:grid-cols-3">
+            ${related.map((x, i) => relatedProductCardHTML(x, i)).join("")}
+          </div>
+        </div>
+      ` : ""}
+    </div>
+  `;
+
+  window._selectedPlan = isSub ? 0 : null;
+  window._currentProductId = id;
+}
+
+window.switchProductTab = (tab) => {
+  document.querySelectorAll(".page-tab").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.tabBtn === tab));
+  document.querySelectorAll("[data-tab-panel]").forEach((panel) => panel.classList.toggle("hidden", panel.dataset.tabPanel !== tab));
+};
+
+window.togglePlanDropdown = () => {
+  const menu = document.getElementById("plan-dropdown-menu");
+  if (!menu) return;
+  if (menu.classList.contains("hidden")) openPlanDropdown(); else closePlanDropdown();
+};
+
+function openPlanDropdown() {
+  const menu = document.getElementById("plan-dropdown-menu");
+  const chevron = document.getElementById("plan-dropdown-chevron");
+  if (menu) menu.classList.remove("hidden");
+  if (chevron) chevron.style.transform = "rotate(180deg)";
+}
+
+function closePlanDropdown() {
+  const menu = document.getElementById("plan-dropdown-menu");
+  const chevron = document.getElementById("plan-dropdown-chevron");
+  if (menu) menu.classList.add("hidden");
+  if (chevron) chevron.style.transform = "";
+}
+
+// fecha o dropdown de planos se o clique for fora dele
+document.addEventListener("click", (e) => {
+  const dropdown = document.getElementById("plan-dropdown");
+  if (!dropdown) return;
+  if (!dropdown.contains(e.target)) closePlanDropdown();
+});
+
+window.selectPlanOption = (id, index) => {
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  const plan = p.plans[index];
+  window._selectedPlan = index;
+
+  const titleEl = document.getElementById("plan-trigger-title");
+  const subtitleEl = document.getElementById("plan-trigger-subtitle");
+  const priceEl = document.getElementById("plan-trigger-price");
+  if (titleEl) titleEl.textContent = plan.name;
+  if (subtitleEl) subtitleEl.textContent = plan.subtitle || p.name;
+  if (priceEl) priceEl.textContent = fmt(plan.price);
+
+  document.getElementById("page-price").textContent = fmt(plan.price);
+
+  document.querySelectorAll(".plan-dropdown-item").forEach((item, i) => {
+    const isSelected = i === index;
+    item.classList.toggle("is-selected", isSelected);
+    const check = item.querySelector(".plan-check-icon");
+    if (check) check.classList.toggle("invisible", !isSelected);
+  });
+
+  closePlanDropdown();
+};
+
+/* mostra a página do produto, esconde a vitrine, rola pro topo e atualiza a URL */
+window.goToProductPage = (id, opts = {}) => {
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  if (!p) return;
+
+  renderProductPage(p);
+  document.getElementById("store-home").classList.add("hidden");
+  document.getElementById("product-page-view").classList.remove("hidden");
+  document.querySelectorAll(".product-card.tilt").forEach(resetTilt);
+  window.scrollTo({ top: 0, behavior: "instant" });
+
+  if (opts.pushState !== false) {
+    const slug = p.slug || p.id;
+    history.pushState({ novastoreProduct: id }, "", `?produto=${encodeURIComponent(slug)}`);
+  }
+};
+
+/* esconde a página do produto e volta pra vitrine, sem perder categoria/busca atuais */
+window.goBackToStore = (opts = {}) => {
+  document.getElementById("product-page-view").classList.add("hidden");
+  document.getElementById("store-home").classList.remove("hidden");
+  renderProducts();
+  window.scrollTo({ top: 0, behavior: "instant" });
+
+  if (opts.pushState !== false) {
+    history.pushState({}, "", location.pathname + (location.hash || ""));
+  }
+};
+
+/* suporta o botão "voltar" físico do navegador */
+window.addEventListener("popstate", () => {
+  const produto = new URLSearchParams(location.search).get("produto");
+  if (produto) {
+    const p = ALL_PRODUCTS.find((x) => x.slug === produto || x.id === produto);
+    if (p) { goToProductPage(p.id, { pushState: false }); return; }
+  }
+  goBackToStore({ pushState: false });
+});
+
+/* abre direto na página do produto se a URL já vier com ?produto=... (link compartilhado) */
+function checkInitialProductRoute() {
+  const produto = new URLSearchParams(location.search).get("produto");
+  if (!produto) return;
+  const p = ALL_PRODUCTS.find((x) => x.slug === produto || x.id === produto);
+  if (p) goToProductPage(p.id, { pushState: false });
+}
+
+function cartItemFromProduct(p) {
+  if (p.type === "ASSINATURA") {
+    const plan = p.plans[window._selectedPlan ?? 0];
+    return { key: `${p.id}-${window._selectedPlan}`, productId: p.id, planId: String(window._selectedPlan),
+      name: p.name, planName: plan.name, price: plan.price, image: p.image_url };
+  }
+  return { key: p.id, productId: p.id, name: p.name, price: p.price, image: p.image_url };
+}
+
+window.addToCartFromProductPage = (id) => {
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  addToCart(cartItemFromProduct(p));
+  openCart();
+};
+
+window.buyNowFromProductPage = (id) => {
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  addToCart(cartItemFromProduct(p));
+  openCheckout();
+};
+
+function saveCart() { localStorage.setItem("cart", JSON.stringify(cart)); renderCart(); }
+
+function addToCart(item, qty = 1) {
+  const existing = cart.find((i) => i.key === item.key);
+  if (existing) existing.quantity += qty; else cart.push({ ...item, quantity: qty });
+  saveCart();
+}
+
+window.updateQty = (key, delta) => {
+  const item = cart.find((i) => i.key === key);
+  if (!item) return;
+  item.quantity = Math.max(1, item.quantity + delta);
+  saveCart();
+};
+
+window.removeFromCart = (key) => { cart = cart.filter((i) => i.key !== key); saveCart(); };
+function cartTotal() { return cart.reduce((s, i) => s + i.price * i.quantity, 0); }
+
+async function renderCart() {
+  const countEl = document.getElementById("cart-count");
+  const count = cart.reduce((s, i) => s + i.quantity, 0);
+  countEl.textContent = count;
+  countEl.classList.toggle("hidden", count === 0);
+  countEl.classList.toggle("flex", count > 0);
+
+  const itemsEl = document.getElementById("cart-items");
+  const footerEl = document.getElementById("cart-footer");
+
+  if (cart.length === 0) {
+    itemsEl.innerHTML = `<div class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted py-10">
+      <p class="font-medium">Seu carrinho está vazio</p><p class="text-sm">Adicione um produto para começar.</p></div>`;
+    footerEl.classList.add("hidden");
+  } else {
+    itemsEl.innerHTML = cart.map((i) => `
+      <div class="mb-3 flex gap-3 rounded-xl border border-border bg-surface2 p-3">
+        <div class="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-bg">
+          ${i.image ? `<img src="${i.image}" class="h-full w-full object-cover" />` : ""}
+        </div>
+        <div class="flex flex-1 flex-col justify-between">
+          <div>
+            <p class="text-sm font-semibold leading-tight">${i.name}</p>
+            ${i.planName ? `<p class="text-xs lilac">${i.planName}</p>` : ""}
+          </div>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <button onclick="updateQty('${i.key}',-1)" class="rounded-md border border-border px-1.5 text-muted hover:text-white">-</button>
+              <span class="w-4 text-center text-sm">${i.quantity}</span>
+              <button onclick="updateQty('${i.key}',1)" class="rounded-md border border-border px-1.5 text-muted hover:text-white">+</button>
+            </div>
+            <span class="text-sm font-bold text-white">${fmt(i.price * i.quantity)}</span>
+          </div>
+        </div>
+        <button onclick="removeFromCart('${i.key}')" class="self-start text-muted hover:text-red-400">🗑</button>
+      </div>`).join("");
+    footerEl.classList.remove("hidden");
+    document.getElementById("cart-total").textContent = fmt(cartTotal());
+  }
+
+  await renderOffers();
+}
+
+async function renderOffers() {
+  const offersEl = document.getElementById("cart-offers");
+  if (cart.length === 0 || ALL_PRODUCTS.length === 0) { offersEl.innerHTML = ""; return; }
+  const shuffled = [...ALL_PRODUCTS].sort(() => Math.random() - 0.5).slice(0, 2);
+  offersEl.innerHTML = `
+    <div class="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
+      <div class="mb-3 flex items-center gap-2 text-sm font-bold lilac">✨ Oferta especial pra você</div>
+      <div class="flex flex-col gap-3">
+        ${shuffled.map((p) => {
+          const price = p.type === "ASSINATURA" ? minPlanPrice(p) : p.price;
+          return `
+          <div class="flex items-center gap-3 rounded-lg border border-border bg-surface2 p-2">
+            <div class="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-bg">
+              ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover" />` : ""}
+            </div>
+            <div class="flex-1">
+              <p class="text-xs font-semibold leading-tight">${p.name}</p>
+              ${price != null ? `<p class="text-xs text-white">${fmt(price)}</p>` : ""}
+            </div>
+            <button onclick='quickAdd(${JSON.stringify(p.id)})' class="rounded-md bg-primary px-2 py-1 text-xs font-bold text-white hover:bg-primaryhover">+ Add</button>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>`;
+}
+
+window.quickAdd = (id) => {
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  if (!p) return;
+  if (p.type === "ASSINATURA" && p.plans?.length) {
+    addToCart({ key: `${p.id}-0`, productId: p.id, planId: "0", name: p.name, planName: p.plans[0].name, price: p.plans[0].price, image: p.image_url });
+  } else if (p.price != null) {
+    addToCart({ key: p.id, productId: p.id, name: p.name, price: p.price, image: p.image_url });
+  }
+};
+
+window.openCart = () => { document.getElementById("cart-drawer").classList.remove("hidden"); document.getElementById("cart-drawer").classList.add("flex"); };
+window.closeCart = () => { document.getElementById("cart-drawer").classList.add("hidden"); document.getElementById("cart-drawer").classList.remove("flex"); };
+
+window.openCheckout = () => {
+  if (!CURRENT_USER) {
+    closeCart();
+    openAuthModal("login");
+    return;
+  }
+  closeCart();
+  const prefName = CURRENT_PROFILE?.full_name || "";
+  const prefEmail = CURRENT_USER.email || "";
+  document.getElementById("checkout-content").innerHTML = `
+    <h2 class="mb-5 font-display text-2xl font-bold uppercase">Finalizar compra</h2>
+    <div class="mb-5 rounded-xl border border-border bg-surface2 p-4 flex justify-between text-sm">
+      <span class="text-muted">${cart.reduce((s, i) => s + i.quantity, 0)} item(ns)</span>
+      <span class="font-bold text-white">${fmt(cartTotal())}</span>
+    </div>
+    <div id="checkout-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+    <form id="checkout-form" class="flex flex-col gap-4">
+      <div>
+        <label class="mb-1 block text-xs font-semibold text-muted">Nome completo</label>
+        <input required id="checkout-name" value="${escapeHTML(prefName)}" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      </div>
+      <div>
+        <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
+        <input required type="email" id="checkout-email" value="${escapeHTML(prefEmail)}" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+      </div>
+      <p class="text-[11px] text-muted">A entrega do produto e o suporte pós-compra acontecem pelo chat (ícone 💬 no topo do site), vinculado à sua conta.</p>
+      <button id="checkout-submit" class="magnetic-btn mt-2 rounded-xl bg-primary py-3.5 font-bold text-white shadow-glow hover:bg-primaryhover"><span>Gerar Pix e pagar</span></button>
+    </form>
+  `;
+  document.getElementById("checkout-form").onsubmit = submitCheckout;
+  document.getElementById("checkout-modal").classList.remove("hidden");
+  document.getElementById("checkout-modal").classList.add("flex");
+};
+
+window.closeCheckout = () => {
+  document.getElementById("checkout-modal").classList.add("hidden");
+  document.getElementById("checkout-modal").classList.remove("flex");
+  if (paymentPollTimer) { clearInterval(paymentPollTimer); paymentPollTimer = null; }
+};
+
+async function submitCheckout(e) {
+  e.preventDefault();
+  const btn = document.getElementById("checkout-submit");
+  const errEl = document.getElementById("checkout-error");
+  errEl.classList.add("hidden");
+  btn.disabled = true;
+  btn.textContent = "Gerando Pix...";
+
+  const name = document.getElementById("checkout-name").value;
+  const email = document.getElementById("checkout-email").value;
+
+  try {
+    const { data, error } = await supabase.rpc("criar_pix", {
+      p_name: name,
+      p_email: email,
+      p_items: cart.map((i) => ({ productId: i.productId, planId: i.planId ?? null, name: i.name, planName: i.planName ?? null, price: i.price, quantity: i.quantity })),
+      p_customer_id: CURRENT_USER?.id || null,
+    });
+
+    if (error || (data && data.error)) {
+      errEl.textContent = (data && data.error) || error?.message || "Erro ao gerar o Pix.";
+      errEl.classList.remove("hidden");
+      btn.disabled = false;
+      btn.textContent = "Gerar Pix e pagar";
+      return;
+    }
+
+    cart = [];
+    saveCart();
+    const ticket = generateTicketNumber();
+    saveTicketForOrder(data.orderId, ticket);
+    renderPixScreen(data, ticket);
+  } catch (err) {
+    errEl.textContent = "Erro de conexão ao gerar o Pix.";
+    errEl.classList.remove("hidden");
+    btn.disabled = false;
+    btn.textContent = "Gerar Pix e pagar";
+  }
+}
+
+function renderPixScreen(data, ticket) {
+  document.getElementById("checkout-content").innerHTML = `
+    <div class="text-center">
+      <div class="mb-4 text-4xl">📱</div>
+      <h2 class="mb-2 font-display text-2xl font-bold uppercase">Pague com Pix para confirmar</h2>
+      <p class="mb-4 text-sm text-muted">Escaneie o QR Code ou copie o código abaixo.</p>
+      ${data.qrCodeBase64 ? `<img src="data:image/png;base64,${data.qrCodeBase64}" class="mx-auto mb-4 w-56 rounded-xl border border-border bg-white p-3" />` : ""}
+      ${data.expiresAt ? `<p id="pix-countdown" class="mb-4 text-xs font-semibold text-yellow-400"></p>` : ""}
+      ${data.qrCode ? `<button onclick="copyPixCode(this, '${data.qrCode.replace(/'/g, "\\'")}')" class="btn-press mx-auto mb-4 flex items-center gap-2 rounded-lg border border-border bg-surface2 px-4 py-2.5 text-sm font-semibold text-muted hover:border-primary/60">📋 Copiar código Pix</button>` : ""}
+      ${ticketBadgeHTML(ticket)}
+      <div id="pix-status" class="mb-2 flex items-center justify-center gap-2 text-sm text-muted">
+        <span class="h-2 w-2 animate-pulse rounded-full bg-yellow-400"></span> Aguardando pagamento (confirmação automática)...
+      </div>
+      <p class="text-xs text-muted">Pedido #${data.orderId.slice(0, 8).toUpperCase()}</p>
+      <button onclick="closeCheckout()" class="mt-6 w-full rounded-xl border border-border py-3 font-bold text-muted hover:text-white">Fechar</button>
+    </div>`;
+
+  if (data.expiresAt) startPixCountdown(data.expiresAt);
+  startPaymentPolling(data.orderId);
+
+  if (ticket) {
+    const badge = document.querySelector("#checkout-content .ticket-reveal");
+    setTimeout(() => fireConfetti(badge, 26), 150);
+  }
+}
+
+function startPixCountdown(expiresAt) {
+  const el = document.getElementById("pix-countdown");
+  function tick() {
+    if (!el) return;
+    const diff = new Date(expiresAt).getTime() - Date.now();
+    if (diff <= 0) { el.textContent = "Pix expirado — gere um novo pedido."; return; }
+    const m = Math.floor(diff / 60000), s = Math.floor((diff % 60000) / 1000);
+    el.textContent = `Expira em ${m}:${String(s).padStart(2, "0")}`;
+    setTimeout(tick, 1000);
+  }
+  tick();
+}
+
+/* fica perguntando ao Supabase se o pagamento já caiu, e libera sozinho quando confirmar */
+function startPaymentPolling(orderId) {
+  if (paymentPollTimer) clearInterval(paymentPollTimer);
+  paymentPollTimer = setInterval(async () => {
+    try {
+      const { data: status, error } = await supabase.rpc("get_order_status", { order_id: orderId });
+      if (error || !status) return;
+      if (status === "PAGO") {
+        clearInterval(paymentPollTimer);
+        paymentPollTimer = null;
+        const ticket = getTicketForOrder(orderId);
+        document.getElementById("checkout-content").innerHTML = `
+          <div class="text-center">
+            <div class="mb-4 text-5xl flash-pop">✅</div>
+            <h2 class="mb-2 font-display text-2xl font-bold uppercase text-accent">Pagamento confirmado!</h2>
+            <p class="mb-6 text-sm text-muted">Seu pedido foi liberado automaticamente. Obrigado pela compra!</p>
+            ${ticketBadgeHTML(ticket)}
+            <button onclick="closeCheckout()" class="w-full rounded-xl bg-primary py-3 font-bold text-white hover:bg-primaryhover">Fechar</button>
+          </div>`;
+        if (ticket) {
+          const badge = document.querySelector("#checkout-content .ticket-reveal");
+          setTimeout(() => fireConfetti(badge, 42), 200);
+        }
+      } else if (status === "CANCELADO" || status === "EXPIRADO") {
+        clearInterval(paymentPollTimer);
+        paymentPollTimer = null;
+        const statusEl = document.getElementById("pix-status");
+        if (statusEl) statusEl.innerHTML = `<span class="text-red-400 font-semibold">Pagamento não confirmado (${status.toLowerCase()}).</span>`;
+      }
+    } catch (e) { /* tenta de novo no próximo ciclo */ }
+  }, 4000);
+}
+
+window.copyPixCode = (btn, code) => {
+  navigator.clipboard.writeText(code);
+  btn.textContent = "✓ Copiado!";
+  setTimeout(() => (btn.textContent = "📋 Copiar código Pix"), 2000);
+};
+
+/* verifica no banco (tabela profiles) se o usuário logado tem role = 'admin' —
+   é essa checagem que protege de verdade o painel, não a existência de sessão */
+async function verifyAdminRole(userId) {
+  const { data, error } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle();
+  return !error && data?.role === "admin";
+}
+
+async function checkAdminSession() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) { showAdminLogin(); return; }
+  const isAdmin = await verifyAdminRole(session.user.id);
+  if (isAdmin) {
+    showAdminPanel();
+  } else {
+    await supabase.auth.signOut();
+    showAdminLogin("Esta conta não tem permissão de administrador.");
+  }
+}
+
+function showAdminLogin(errorMsg) {
+  document.getElementById("admin-login-screen").classList.remove("hidden");
+  document.getElementById("admin-panel-screen").classList.add("hidden");
+  const errEl = document.getElementById("login-error");
+  if (errorMsg) {
+    errEl.textContent = errorMsg;
+    errEl.classList.remove("hidden");
+  } else {
+    errEl.classList.add("hidden");
+  }
+}
+
+function showAdminPanel() {
+  document.getElementById("admin-login-screen").classList.add("hidden");
+  document.getElementById("admin-panel-screen").classList.remove("hidden");
+  loadAdminProducts();
+}
+
+document.getElementById("login-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("login-email").value;
+  const password = document.getElementById("login-password").value;
+  const errEl = document.getElementById("login-error");
+  errEl.classList.add("hidden");
+
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) { errEl.textContent = "E-mail ou senha inválidos."; errEl.classList.remove("hidden"); return; }
+
+  const isAdmin = await verifyAdminRole(data.user.id);
+  if (!isAdmin) {
+    await supabase.auth.signOut();
+    errEl.textContent = "Esta conta não tem permissão de administrador.";
+    errEl.classList.remove("hidden");
+    return;
+  }
+  showAdminPanel();
+};
+
+window.logoutAdmin = async () => { await supabase.auth.signOut(); showAdminLogin(); };
+
+/* =========================================================================
+   PAINEL ADMIN — ABA "CONVERSAS": lista pedidos pagos e permite responder
+   (entregar a key/produto) diretamente para o cliente pelo chat.
+   ========================================================================= */
+
+let ADMIN_ORDERS = [];
+let currentAdminOrder = null;
+let adminChatRealtimeChannel = null;
+
+async function loadAdminConversas() {
+  const list = document.getElementById("admin-conversas-list");
+  list.innerHTML = `<div class="p-4 text-sm text-muted">Carregando pedidos pagos...</div>`;
+
+  const { data: orders, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("status", "PAGO")
+    .order("created_at", { ascending: false });
+
+  if (error) { list.innerHTML = `<div class="p-4 text-sm text-red-400">Erro: ${error.message}</div>`; return; }
+
+  ADMIN_ORDERS = orders || [];
+  if (!ADMIN_ORDERS.length) { list.innerHTML = `<div class="p-4 text-sm text-muted">Nenhum pedido pago ainda.</div>`; return; }
+
+  list.innerHTML = ADMIN_ORDERS.map((o) => {
+    const productName = (o.items && o.items[0] && o.items[0].name) || "Pedido";
+    const extra = (o.items && o.items.length > 1) ? ` +${o.items.length - 1}` : "";
+    return `
+    <button onclick='openAdminConversa(${JSON.stringify(o.id)})' data-order-id="${o.id}" class="admin-conversa-item block w-full border-b border-border/60 px-4 py-3.5 text-left hover:bg-white/5">
+      <div class="flex items-center justify-between gap-2">
+        <span class="truncate text-sm font-bold text-white">${escapeHTML(o.customer_name || "Cliente")}</span>
+        <span class="shrink-0 text-[11px] text-muted">${fmt(o.total)}</span>
+      </div>
+      <p class="truncate text-xs text-muted">${escapeHTML(productName)}${extra}</p>
+    </button>`;
+  }).join("");
+}
+
+window.openAdminConversa = async (orderId) => {
+  currentAdminOrder = ADMIN_ORDERS.find((o) => o.id === orderId);
+  document.querySelectorAll(".admin-conversa-item").forEach((el) => el.classList.toggle("bg-white/5", el.dataset.orderId === orderId));
+  const detail = document.getElementById("admin-conversa-detail");
+  if (!currentAdminOrder) return;
+
+  const productsList = (currentAdminOrder.items || [])
+    .map((it) => `${it.name}${it.planName ? " — " + it.planName : ""} (x${it.quantity || 1})`)
+    .join(", ");
+
+  detail.innerHTML = `
+    <div class="border-b border-border p-4">
+      <p class="text-sm font-bold text-white">${escapeHTML(currentAdminOrder.customer_name || "Cliente")}</p>
+      <p class="text-xs text-muted">${escapeHTML(currentAdminOrder.customer_email || "")}</p>
+      <p class="mt-2 text-xs text-muted"><span class="font-semibold text-white">Produto(s):</span> ${escapeHTML(productsList)}</p>
+      <p class="text-xs text-muted"><span class="font-semibold text-white">Valor:</span> ${fmt(currentAdminOrder.total)}</p>
+    </div>
+    <div id="admin-chat-messages" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
+    <form id="admin-chat-form" class="flex items-center gap-2 border-t border-border p-3">
+      <input id="admin-chat-input" autocomplete="off" placeholder="Digite a mensagem (ex: chave do produto)..." class="flex-1 rounded-full border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary" />
+      <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white hover:bg-primaryhover">➤</button>
+    </form>
+  `;
+  document.getElementById("admin-chat-form").onsubmit = (e) => { e.preventDefault(); sendAdminChatMessage(orderId); };
+  await loadAdminChatMessages(orderId);
+  subscribeAdminChat(orderId);
+};
+
+async function loadAdminChatMessages(orderId) {
+  const { data: msgs } = await supabase.from("messages").select("*").eq("order_id", orderId).order("created_at", { ascending: true });
+  renderAdminChatMessages(msgs || []);
+}
+
+function renderAdminChatMessages(msgs) {
+  const el = document.getElementById("admin-chat-messages");
+  if (!el) return;
+  if (!msgs.length) {
+    el.innerHTML = `<div class="flex h-full items-center justify-center p-6 text-center text-sm text-muted">Nenhuma mensagem ainda. Envie a entrega do produto abaixo.</div>`;
+    return;
+  }
+  el.innerHTML = msgs.map((m) => {
+    // se quem enviou não foi o próprio cliente do pedido, a mensagem é da equipe (admin)
+    const fromTeam = m.sender_id !== currentAdminOrder.customer_id;
+    return `<div class="flex ${fromTeam ? "justify-end" : "justify-start"}">
+      <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${fromTeam ? "bg-primary text-white" : "bg-surface2 text-white"}">
+        ${escapeHTML(m.message_text)}
+      </div>
+    </div>`;
+  }).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendAdminChatMessage(orderId) {
+  const input = document.getElementById("admin-chat-input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const { error } = await supabase.from("messages").insert({
+    order_id: orderId,
+    sender_id: session.user.id,
+    receiver_id: currentAdminOrder.customer_id,
+    message_text: text,
+  });
+  if (error) alert("Erro ao enviar mensagem: " + error.message);
+}
+
+function subscribeAdminChat(orderId) {
+  if (adminChatRealtimeChannel) supabase.removeChannel(adminChatRealtimeChannel);
+  adminChatRealtimeChannel = supabase
+    .channel(`admin-chat-${orderId}`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `order_id=eq.${orderId}` }, () => loadAdminChatMessages(orderId))
+    .subscribe();
+}
+
+/* =========================================================================
+   PAINEL ADMIN — ABA "MENSAGENS": chat privado 1-para-1 com cada cliente
+   (tabela chat_privado). Independente de pedidos — serve pra suporte,
+   entrega de produto, ou qualquer contato direto com o cliente.
+   ========================================================================= */
+
+let ADMIN_MENSAGENS_CLIENTES = [];
+let currentAdminMensagemCustomerId = null;
+let adminMensagemRealtimeChannel = null;
+let adminMensagensListChannel = null;
+
+async function loadAdminMensagens() {
+  const list = document.getElementById("admin-mensagens-list");
+  list.innerHTML = `<div class="p-4 text-sm text-muted">Carregando conversas...</div>`;
+
+  // pega todas as mensagens privadas, mais recentes primeiro, pra montar a lista de clientes
+  const { data: msgs, error } = await supabase
+    .from("chat_privado")
+    .select("customer_id, sender_role, message_text, read_at, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) { list.innerHTML = `<div class="p-4 text-sm text-red-400">Erro: ${error.message}</div>`; return; }
+
+  const byCustomer = new Map();
+  for (const m of msgs || []) {
+    if (!byCustomer.has(m.customer_id)) {
+      byCustomer.set(m.customer_id, { last: m, unread: 0 });
+    }
+    if (m.sender_role === "client" && !m.read_at) byCustomer.get(m.customer_id).unread++;
+  }
+
+  const customerIds = [...byCustomer.keys()];
+  updateAdminMensagensTabBadge([...byCustomer.values()].reduce((sum, c) => sum + c.unread, 0));
+
+  if (!customerIds.length) {
+    list.innerHTML = `<div class="p-4 text-sm text-muted">Nenhuma mensagem ainda.</div>`;
+    ADMIN_MENSAGENS_CLIENTES = [];
+    subscribeAdminMensagensList();
+    return;
+  }
+
+  const { data: profiles } = await supabase.from("profiles").select("id, full_name, avatar_url").in("id", customerIds);
+  const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+
+  ADMIN_MENSAGENS_CLIENTES = customerIds.map((id) => ({
+    id,
+    name: profileMap.get(id)?.full_name || "Cliente",
+    ...byCustomer.get(id),
+  }));
+
+  list.innerHTML = ADMIN_MENSAGENS_CLIENTES.map((c) => `
+    <button onclick='openAdminMensagem(${JSON.stringify(c.id)})' data-customer-id="${c.id}" class="admin-mensagem-item block w-full border-b border-border/60 px-4 py-3.5 text-left hover:bg-white/5">
+      <div class="flex items-center justify-between gap-2">
+        <span class="truncate text-sm font-bold text-white">${escapeHTML(c.name)}</span>
+        ${c.unread ? `<span class="shrink-0 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">${c.unread > 9 ? "9+" : c.unread}</span>` : ""}
+      </div>
+      <p class="truncate text-xs text-muted">${escapeHTML(c.last.message_text)}</p>
+    </button>`).join("");
+
+  subscribeAdminMensagensList();
+}
+
+function updateAdminMensagensTabBadge(count) {
+  const badge = document.getElementById("admin-mensagens-unread-badge");
+  if (!badge) return;
+  badge.classList.toggle("hidden", !count);
+  if (count) badge.textContent = count > 9 ? "9+" : String(count);
+}
+
+window.openAdminMensagem = async (customerId) => {
+  currentAdminMensagemCustomerId = customerId;
+  document.querySelectorAll(".admin-mensagem-item").forEach((el) => el.classList.toggle("bg-white/5", el.dataset.customerId === customerId));
+  const client = ADMIN_MENSAGENS_CLIENTES.find((c) => c.id === customerId);
+  const detail = document.getElementById("admin-mensagens-detail");
+
+  detail.innerHTML = `
+    <div class="border-b border-border p-4">
+      <p class="text-sm font-bold text-white">${escapeHTML(client?.name || "Cliente")}</p>
+    </div>
+    <div id="admin-mensagem-messages" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
+    <form id="admin-mensagem-form" class="flex items-center gap-2 border-t border-border p-3">
+      <input id="admin-mensagem-input" autocomplete="off" maxlength="500" placeholder="Digite a mensagem..." class="flex-1 rounded-full border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary" />
+      <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white hover:bg-primaryhover">➤</button>
+    </form>
+  `;
+  document.getElementById("admin-mensagem-form").onsubmit = (e) => { e.preventDefault(); sendAdminMensagem(customerId); };
+  await loadAdminMensagemThread(customerId);
+  subscribeAdminMensagemThread(customerId);
+};
+
+async function loadAdminMensagemThread(customerId) {
+  const { data: msgs } = await supabase.from("chat_privado").select("*").eq("customer_id", customerId).order("created_at", { ascending: true });
+  renderAdminMensagemThread(msgs || []);
+
+  const unreadIds = (msgs || []).filter((m) => m.sender_role === "client" && !m.read_at).map((m) => m.id);
+  if (unreadIds.length) {
+    await supabase.from("chat_privado").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
+  }
+}
+
+function renderAdminMensagemThread(msgs) {
+  const el = document.getElementById("admin-mensagem-messages");
+  if (!el) return;
+  if (!msgs.length) {
+    el.innerHTML = `<div class="flex h-full items-center justify-center p-6 text-center text-sm text-muted">Nenhuma mensagem ainda. Envie a primeira mensagem abaixo.</div>`;
+    return;
+  }
+  el.innerHTML = msgs.map((m) => {
+    const fromTeam = m.sender_role === "admin";
+    return `<div class="flex ${fromTeam ? "justify-end" : "justify-start"}">
+      <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${fromTeam ? "bg-primary text-white" : "bg-surface2 text-white"}">
+        ${escapeHTML(m.message_text)}
+      </div>
+    </div>`;
+  }).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendAdminMensagem(customerId) {
+  const input = document.getElementById("admin-mensagem-input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const { error } = await supabase.from("chat_privado").insert({
+    customer_id: customerId,
+    sender_id: session.user.id,
+    sender_role: "admin",
+    message_text: text,
+  });
+  if (error) alert("Erro ao enviar mensagem: " + error.message);
+}
+
+function subscribeAdminMensagemThread(customerId) {
+  if (adminMensagemRealtimeChannel) supabase.removeChannel(adminMensagemRealtimeChannel);
+  adminMensagemRealtimeChannel = supabase
+    .channel(`admin-mensagem-${customerId}`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_privado", filter: `customer_id=eq.${customerId}` }, () => loadAdminMensagemThread(customerId))
+    .subscribe();
+}
+
+/* mantém a lista da esquerda e o badge da aba atualizados em tempo real
+   enquanto o admin está no painel, mesmo sem estar dentro de uma conversa */
+function subscribeAdminMensagensList() {
+  if (adminMensagensListChannel) { supabase.removeChannel(adminMensagensListChannel); adminMensagensListChannel = null; }
+  adminMensagensListChannel = supabase
+    .channel("admin-mensagens-list")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_privado" }, () => loadAdminMensagens())
+    .subscribe();
+}
+
+async function loadAdminProducts() {
+  const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false });
+  const tbody = document.getElementById("products-table");
+
+  if (error) { tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-red-400">Erro: ${error.message}</td></tr>`; return; }
+  if (!data.length) { tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-muted">Nenhum produto cadastrado.</td></tr>`; return; }
+
+  tbody.innerHTML = data.map((p) => {
+    const price = p.type === "ASSINATURA"
+      ? (p.plans?.length ? `a partir de ${fmt(Math.min(...p.plans.map(pl=>pl.price)))}` : "sem planos")
+      : fmt(p.price);
+    const cat = categoryMeta(p.category);
+    return `
+    <tr class="border-b border-border/60 last:border-0">
+      <td class="flex items-center gap-3 px-4 py-3">
+        <div class="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-surface2">
+          ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover" />` : ""}
+        </div>
+        <span class="font-semibold">${p.name}</span>
+      </td>
+      <td class="px-4 py-3">${cat ? `<span class="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-2.5 py-1 text-xs font-bold lilac">${cat.icon}${cat.label}</span>` : `<span class="text-xs text-muted">—</span>`}</td>
+      <td class="px-4 py-3">${p.type === "ASSINATURA" ? `<span class="rounded-full bg-primary/15 px-2.5 py-1 text-xs font-bold lilac">Assinatura</span>` : `<span class="rounded-full bg-surface2 px-2.5 py-1 text-xs font-bold text-muted">Único</span>`}</td>
+      <td class="px-4 py-3 font-semibold text-white">${price}</td>
+      <td class="px-4 py-3"><span class="rounded-full px-2.5 py-1 text-xs font-bold ${p.active ? "bg-accent/15 text-accent" : "bg-red-500/15 text-red-400"}">${p.active ? "Ativo" : "Inativo"}</span></td>
+      <td class="px-4 py-3 text-right">
+        <button onclick='editProduct(${JSON.stringify(p).replace(/'/g,"&#39;")})' class="mr-3 text-xs font-bold hover:underline lilac">Editar</button>
+        <button onclick="deleteProduct('${p.id}','${p.name.replace(/'/g,"\\'")}')" class="text-xs font-bold text-red-400 hover:underline">Excluir</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+window.deleteProduct = async (id, name) => {
+  if (!confirm(`Excluir "${name}"? Essa ação não pode ser desfeita.`)) return;
+  const { error } = await supabase.from("products").delete().eq("id", id);
+  if (error) alert("Erro ao excluir: " + error.message);
+  loadAdminProducts();
+};
+
+document.getElementById("f-type").onchange = (e) => {
+  const isSub = e.target.value === "ASSINATURA";
+  document.getElementById("plans-section").classList.toggle("hidden", !isSub);
+  document.getElementById("price-field").classList.toggle("hidden", isSub);
+  document.getElementById("stock-field").classList.toggle("hidden", isSub);
+};
+
+window.addPlanRow = (plan = { name: "", durationDays: 30, price: 0, recurring: false }) => {
+  const div = document.createElement("div");
+  div.className = "plan-row grid grid-cols-1 items-end gap-2 rounded-lg border border-border bg-surface2 p-3 sm:grid-cols-[2fr_1fr_1fr_auto_auto]";
+  div.innerHTML = `
+    <div><label class="mb-1 block text-[10px] text-muted">Nome do plano</label>
+      <input class="plan-name w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm outline-none focus:border-primary" value="${plan.name}" placeholder="ex: 30 Dias" /></div>
+    <div><label class="mb-1 block text-[10px] text-muted">Dias</label>
+      <input type="number" min="1" class="plan-days w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm outline-none focus:border-primary" value="${plan.durationDays}" /></div>
+    <div><label class="mb-1 block text-[10px] text-muted">Preço (R$)</label>
+      <input type="number" step="0.01" min="0" class="plan-price w-full rounded-md border border-border bg-surface px-2.5 py-2 text-sm outline-none focus:border-primary" value="${plan.price}" /></div>
+    <label class="flex items-center gap-1.5 whitespace-nowrap pb-2 text-[11px] text-muted">
+      <input type="checkbox" class="plan-recurring" ${plan.recurring ? "checked" : ""}/> Recorrente</label>
+    <button type="button" onclick="this.closest('.plan-row').remove()" class="mb-1 flex h-9 w-9 items-center justify-center rounded-md border border-border text-red-400 hover:bg-red-500/10">✕</button>
+  `;
+  document.getElementById("plans-list").appendChild(div);
+};
+
+function collectPlans() {
+  return [...document.querySelectorAll(".plan-row")].map((row) => ({
+    name: row.querySelector(".plan-name").value,
+    durationDays: Number(row.querySelector(".plan-days").value),
+    price: Number(row.querySelector(".plan-price").value),
+    recurring: row.querySelector(".plan-recurring").checked,
+  })).filter((p) => p.name);
+}
+
+function parseCommaList(str) {
+  return str.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+window.openForm = () => {
+  editingId = null;
+  currentImageUrl = "";
+  document.getElementById("form-title").textContent = "Novo produto";
+  document.getElementById("product-form").reset();
+  document.getElementById("plans-list").innerHTML = "";
+  document.getElementById("image-preview").innerHTML = "";
+  document.getElementById("upload-status").textContent = "";
+  document.getElementById("f-type").dispatchEvent(new Event("change"));
+  document.getElementById("form-error").classList.add("hidden");
+  document.getElementById("form-modal").classList.remove("hidden");
+  document.getElementById("form-modal").classList.add("flex");
+};
+
+window.closeForm = () => { document.getElementById("form-modal").classList.add("hidden"); document.getElementById("form-modal").classList.remove("flex"); };
+
+window.editProduct = (p) => {
+  editingId = p.id;
+  currentImageUrl = p.image_url || "";
+  document.getElementById("form-title").textContent = "Editar produto";
+  document.getElementById("f-name").value = p.name;
+  document.getElementById("f-category").value = p.category || "";
+  document.getElementById("f-description").value = p.description || "";
+  document.getElementById("f-tags").value = (p.tags || []).join(", ");
+  document.getElementById("f-features").value = (p.features || []).join(", ");
+  document.getElementById("f-type").value = p.type;
+  document.getElementById("f-price").value = p.price ?? "";
+  document.getElementById("f-stock").value = p.stock ?? "";
+  document.getElementById("f-featured").checked = !!p.featured;
+  document.getElementById("f-active").checked = !!p.active;
+  document.getElementById("image-preview").innerHTML = p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover" />` : "";
+  document.getElementById("f-type").dispatchEvent(new Event("change"));
+  document.getElementById("plans-list").innerHTML = "";
+  (p.plans || []).forEach((plan) => addPlanRow(plan));
+  document.getElementById("form-error").classList.add("hidden");
+  document.getElementById("form-modal").classList.remove("hidden");
+  document.getElementById("form-modal").classList.add("flex");
+};
+
+document.getElementById("f-image").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById("upload-status");
+  statusEl.textContent = "Enviando imagem...";
+
+  const path = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "")}`;
+  const { error } = await supabase.storage.from("product-images").upload(path, file, { upsert: true });
+  if (error) { statusEl.textContent = "Erro no upload: " + error.message; return; }
+
+  const { data } = supabase.storage.from("product-images").getPublicUrl(path);
+  currentImageUrl = data.publicUrl;
+  document.getElementById("image-preview").innerHTML = `<img src="${currentImageUrl}" class="h-full w-full object-cover" />`;
+  statusEl.textContent = "Imagem enviada ✓";
+};
+
+function slugify(text) {
+  return text.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+document.getElementById("product-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("form-error");
+  errEl.classList.add("hidden");
+
+  const type = document.getElementById("f-type").value;
+  const name = document.getElementById("f-name").value;
+
+  const payload = {
+    name,
+    description: document.getElementById("f-description").value,
+    category: document.getElementById("f-category").value.trim() || null,
+    tags: parseCommaList(document.getElementById("f-tags").value),
+    features: parseCommaList(document.getElementById("f-features").value),
+    type,
+    price: type === "UNICO" ? Number(document.getElementById("f-price").value) || 0 : null,
+    stock: type === "UNICO" && document.getElementById("f-stock").value !== "" ? Number(document.getElementById("f-stock").value) : null,
+    image_url: currentImageUrl || null,
+    plans: type === "ASSINATURA" ? collectPlans() : [],
+    featured: document.getElementById("f-featured").checked,
+    active: document.getElementById("f-active").checked,
+  };
+
+  let error;
+  if (editingId) {
+    ({ error } = await supabase.from("products").update(payload).eq("id", editingId));
+  } else {
+    payload.slug = slugify(name) + "-" + Date.now().toString(36);
+    ({ error } = await supabase.from("products").insert(payload));
+  }
+
+  if (error) { errEl.textContent = "Erro ao salvar: " + error.message; errEl.classList.remove("hidden"); return; }
+
+  closeForm();
+  loadAdminProducts();
+  loadProducts();
+};
+
+/* ---------------- Partículas do hero (efeito constelação) ---------------- */
+(function initHeroParticles() {
+  const canvas = document.getElementById("particles-canvas");
+  if (!canvas || !canvas.getContext) return;
+  const ctx = canvas.getContext("2d");
+  const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const COLORS = ["124,92,255", "0,230,168"];
+  let width = 0, height = 0, particles = [], raf = null;
+
+  function resize() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    width = rect.width; height = rect.height;
+    canvas.width = width * dpr; canvas.height = height * dpr;
+    canvas.style.width = width + "px"; canvas.style.height = height + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function seed() {
+    const count = Math.max(24, Math.min(70, Math.floor((width * height) / 16000)));
+    particles = Array.from({ length: count }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      r: Math.random() * 1.5 + 0.7,
+      c: COLORS[Math.floor(Math.random() * COLORS.length)],
+    }));
+  }
+
+  function drawStatic() {
+    ctx.clearRect(0, 0, width, height);
+    particles.forEach((p) => {
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(${p.c},.75)`;
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  function tick() {
+    ctx.clearRect(0, 0, width, height);
+    for (const p of particles) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x <= 0 || p.x >= width) p.vx *= -1;
+      if (p.y <= 0 || p.y >= height) p.vy *= -1;
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(${p.c},.8)`;
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const a = particles[i], b = particles[j];
+        const dx = a.x - b.x, dy = a.y - b.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 130) {
+          ctx.beginPath();
+          ctx.strokeStyle = `rgba(124,92,255,${0.16 * (1 - dist / 130)})`;
+          ctx.lineWidth = 1;
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+    }
+    raf = requestAnimationFrame(tick);
+  }
+
+  function start() {
+    if (raf) return;
+    if (prefersReduced) { drawStatic(); return; }
+    tick();
+  }
+  function stop() {
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+  }
+
+  resize();
+  seed();
+  start();
+
+  window.addEventListener("resize", () => { resize(); seed(); if (prefersReduced) drawStatic(); });
+
+  // só anima enquanto o hero está visível na tela, pra não gastar CPU à toa
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver((entries) => {
+      entries.forEach((entry) => (entry.isIntersecting ? start() : stop()));
+    }, { threshold: 0.01 }).observe(canvas.parentElement);
+  }
+})();
+
+/* ---------------- Glow magnético nos botões (segue o cursor) ---------------- */
+document.addEventListener("pointermove", (e) => {
+  const btn = e.target.closest?.(".magnetic-btn");
+  if (!btn) return;
+  const rect = btn.getBoundingClientRect();
+  btn.style.setProperty("--mx", `${e.clientX - rect.left}px`);
+  btn.style.setProperty("--my", `${e.clientY - rect.top}px`);
+});
+
+/* ---------------- Sistema de sorteio (Ticket) ---------------- */
+/* Gera um número de ticket aleatório (ex: "#4384") assim que o Pix é criado,
+   guarda ele junto do pedido, e mostra numa tela de participação no sorteio. */
+function generateTicketNumber() {
+  return "#" + (1000 + Math.floor(Math.random() * 9000));
+}
+
+function saveTicketForOrder(orderId, ticket) {
+  try {
+    const all = JSON.parse(localStorage.getItem("novastore_tickets") || "{}");
+    all[orderId] = ticket;
+    localStorage.setItem("novastore_tickets", JSON.stringify(all));
+  } catch (e) { /* localStorage indisponível, tudo bem, o ticket ainda aparece na hora */ }
+}
+
+function getTicketForOrder(orderId) {
+  try {
+    const all = JSON.parse(localStorage.getItem("novastore_tickets") || "{}");
+    return all[orderId] || null;
+  } catch (e) { return null; }
+}
+
+function ticketBadgeHTML(ticket) {
+  if (!ticket) return "";
+  return `
+    <div class="ticket-reveal mx-auto mb-5 w-fit rounded-2xl px-7 py-4 text-center">
+      <p class="mb-1 text-[11px] font-bold uppercase tracking-wide text-accent">🎟️ Você está concorrendo ao sorteio!</p>
+      <p class="ticket-number font-display text-3xl font-black text-white">${ticket}</p>
+      <p class="mt-1 text-[11px] text-muted">Guarde seu número da sorte — o resultado sai em breve</p>
+    </div>`;
+}
+
+/* pequena explosão de confete em CSS puro, sem dependências externas */
+function fireConfetti(targetEl, pieces = 28) {
+  if (!targetEl) return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const rect = targetEl.getBoundingClientRect();
+  const originX = rect.left + rect.width / 2;
+  const originY = rect.top + rect.height / 2;
+  const colors = ["#7c5cff", "#00e6a8", "#ffb020", "#ff5c5c", "#38ffcf", "#c9b6ff"];
+  for (let i = 0; i < pieces; i++) {
+    const piece = document.createElement("span");
+    piece.className = "confetti-piece";
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 50 + Math.random() * 100;
+    piece.style.setProperty("--dx", `${Math.cos(angle) * dist}px`);
+    piece.style.setProperty("--dy", `${Math.sin(angle) * dist - 30}px`);
+    piece.style.setProperty("--rot", `${400 + Math.random() * 400}deg`);
+    piece.style.left = `${originX}px`;
+    piece.style.top = `${originY}px`;
+    piece.style.background = colors[i % colors.length];
+    piece.style.animationDelay = `${Math.random() * 0.12}s`;
+    document.body.appendChild(piece);
+    setTimeout(() => piece.remove(), 1100);
+  }
+}
+
+route();
+loadSiteSettings();
+loadProducts().then(renderCart);
+</script>
+</body>
+</html>
