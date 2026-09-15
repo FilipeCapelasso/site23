@@ -114,12 +114,6 @@
   /* ---------- animações da modal de produto ---------- */
   @keyframes overlayFadeIn{from{opacity:0}to{opacity:1}}
   @keyframes overlayFadeOut{from{opacity:1}to{opacity:0}}
-  @keyframes modalPopIn{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
-  @keyframes modalPopOut{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(10px) scale(.97)}}
-  #product-modal{animation:overlayFadeIn .2s ease}
-  #product-modal.modal-fade-out{animation:overlayFadeOut .16s ease forwards}
-  #product-modal-content.modal-pop-in{animation:modalPopIn .3s cubic-bezier(.16,.9,.3,1)}
-  #product-modal-content.modal-pop-out{animation:modalPopOut .16s ease forwards}
 
   /* transições mais suaves nos botões de categoria e cards */
   .cat-btn{transition:background-color .2s ease, border-color .2s ease, color .2s ease, transform .15s ease}
@@ -162,18 +156,15 @@
   #empty-state{backdrop-filter:blur(10px);box-shadow:0 14px 40px rgba(0,0,0,.14)}
   footer{background:linear-gradient(180deg,rgba(17,19,24,.94),rgba(8,9,12,1));box-shadow:0 -20px 50px rgba(0,0,0,.16)}
 
-  #product-modal,#form-modal,#checkout-modal{z-index:60}
-  #product-modal-content,#form-modal>div,#checkout-content{box-shadow:0 30px 90px rgba(0,0,0,.58),0 0 0 1px rgba(255,255,255,.035)}
-  #product-modal-content{background:linear-gradient(135deg,rgba(18,20,27,.98),rgba(12,13,18,.985))}
-  #product-modal-content .modal-image-frame{box-shadow:0 18px 46px rgba(0,0,0,.30)}
-  #product-modal-content .modal-image-frame img{filter:saturate(1.06) contrast(1.03)}
-  #product-modal-content .purchase-badge{box-shadow:0 10px 30px rgba(0,230,168,.08)}
-  .plan-card{background:linear-gradient(180deg,rgba(27,29,38,.92),rgba(20,22,29,.92));box-shadow:0 8px 22px rgba(0,0,0,.12)}
-  .plan-card:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,0,0,.2)}
-  .plan-card.is-selected{box-shadow:0 12px 32px rgba(124,92,255,.18),inset 0 0 0 1px rgba(124,92,255,.65)}
-  #product-modal-content .bg-surface2\/60{background:linear-gradient(180deg,rgba(25,27,35,.65),rgba(15,16,22,.76))}
-  #product-modal-content button[onclick="closeProductModal()"]{transition:transform .16s ease,background .16s ease,color .16s ease}
-  #product-modal-content button[onclick="closeProductModal()"]:hover{transform:rotate(90deg) scale(1.04);color:#fff}
+  #form-modal,#checkout-modal{z-index:60}
+  #form-modal>div,#checkout-content{box-shadow:0 30px 90px rgba(0,0,0,.58),0 0 0 1px rgba(255,255,255,.035)}
+  #product-page-view .product-page-box{background:linear-gradient(135deg,rgba(18,20,27,.98),rgba(12,13,18,.985))}
+  #product-page-view .product-page-box img{filter:saturate(1.06) contrast(1.03)}
+  #product-page-view .purchase-badge{box-shadow:0 10px 30px rgba(0,230,168,.08)}
+  .plan-card,.plan-row{background:linear-gradient(180deg,rgba(27,29,38,.92),rgba(20,22,29,.92));box-shadow:0 8px 22px rgba(0,0,0,.12)}
+  .plan-card:hover,.plan-row:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(0,0,0,.2)}
+  .plan-card.is-selected,.plan-row.is-selected{box-shadow:0 12px 32px rgba(124,92,255,.18),inset 0 0 0 1px rgba(124,92,255,.65)}
+  #product-page-view aside{background:linear-gradient(180deg,rgba(25,27,35,.65),rgba(15,16,22,.76))}
 
   /* Admin visual refresh */
   #view-admin header{background:rgba(14,15,20,.88);backdrop-filter:blur(14px)}
@@ -229,6 +220,22 @@
     100%{transform:translate(var(--dx),calc(var(--dy) + 160px)) rotate(var(--rot)) scale(.5);opacity:0}
   }
 
+  /* ---------------- Página dedicada de produto (SPA) ---------------- */
+  #product-page-view{animation:overlayFadeIn .25s ease}
+  .product-page-box{position:relative;box-shadow:0 25px 70px rgba(0,0,0,.4), 0 0 0 1px rgba(124,92,255,.12)}
+  .product-page-box::after{content:"";position:absolute;inset:-1px;z-index:-1;border-radius:inherit;pointer-events:none;
+    background:radial-gradient(120% 120% at 50% 0%, rgba(124,92,255,.35), transparent 60%)}
+  .page-tab{position:relative;padding:.65rem 0;margin-right:1.75rem;font-size:.8rem;font-weight:700;text-transform:uppercase;
+    letter-spacing:.03em;color:#8b8f9c;transition:color .2s ease;background:none;border:none;cursor:pointer}
+  .page-tab:hover{color:#fff}
+  .page-tab.is-active{color:#fff}
+  .page-tab.is-active::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;border-radius:99px;
+    background:linear-gradient(90deg,#7c5cff,#00e6a8)}
+  .plan-row{transition:.15s ease}
+  .plan-row.is-selected{border-color:#7c5cff;background:rgba(124,92,255,.12);box-shadow:0 0 0 1px #7c5cff inset}
+  .plan-row.is-selected .plan-radio{background:#7c5cff;border-color:#7c5cff}
+  #related-products-grid .product-card{border-color:rgba(255,255,255,.07)!important}
+
 </style>
 </head>
 <body class="min-h-screen bg-noise">
@@ -244,13 +251,13 @@
 
   <header class="sticky top-0 z-40 glass border-b border-border">
     <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-      <a href="#" class="flex items-center gap-2 text-xl font-extrabold tracking-tight font-display">
+      <a href="#" onclick="goBackToStore()" class="flex items-center gap-2 text-xl font-extrabold tracking-tight font-display">
         <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black text-white">N</span>
         <span class="gradient-text">Nova</span><span class="text-white">Store</span>
       </a>
       <nav class="hidden items-center gap-8 text-sm font-medium text-muted md:flex">
-        <a href="#top" class="text-white">Início</a>
-        <a href="#catalogo" class="hover:text-white">Produtos</a>
+        <a href="#top" onclick="goBackToStore()" class="text-white">Início</a>
+        <a href="#catalogo" onclick="goBackToStore()" class="hover:text-white">Produtos</a>
         <a href="#" class="hover:text-white">Contas NFA</a>
         <a href="#" class="hover:text-white">Avaliações</a>
         <a href="#" class="hover:text-white">Suporte</a>
@@ -265,6 +272,7 @@
     </div>
   </header>
 
+  <div id="store-home">
   <section id="hero-section" class="relative min-h-[520px] overflow-hidden bg-grid-fade border-b border-border bg-cover bg-center sm:min-h-[560px] md:min-h-[640px] lg:min-h-[700px]">
     <canvas id="particles-canvas"></canvas>
     <div id="hero-overlay" class="pointer-events-none absolute inset-0"></div>
@@ -407,6 +415,10 @@
       </div>
     </div>
   </section>
+
+  </div><!-- /#store-home -->
+
+  <div id="product-page-view" class="hidden"></div>
 
   <footer class="border-t border-border bg-surface py-10">
     <div class="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-sm text-muted sm:flex-row">
@@ -606,10 +618,6 @@
       <button id="form-submit" class="mt-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">Salvar produto</button>
     </form>
   </div>
-</div>
-
-<div id="product-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeProductModal()">
-  <div class="modal-scroll max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-border bg-surface" id="product-modal-content"></div>
 </div>
 
 <div id="cart-drawer" class="fixed inset-0 z-50 hidden justify-end">
@@ -915,6 +923,7 @@ async function loadProducts() {
   buildCategoryBar();
   populateCategoryOptions();
   renderProducts();
+  checkInitialProductRoute();
 }
 
 window.filterCategory = (key) => {
@@ -1011,10 +1020,8 @@ window.shockThenOpen = (evt, id) => {
     void card.offsetWidth; // reinicia a animação
     card.classList.add("shock-click");
   }
-  // evita que o efeito de inclinação (tilt) fique "preso" num card quando a modal
-  // abre por cima do grid (o mouse "sai" do card sem disparar mouseleave)
   document.querySelectorAll(".product-card.tilt").forEach(resetTilt);
-  openProductModal(id);
+  goToProductPage(id);
 };
 
 /* spotlight elétrico + inclinação 3D (tilt) que seguem o mouse em cima dos cards */
@@ -1048,32 +1055,35 @@ function resetTilt(card) {
   card.style.removeProperty("--ry");
 }
 
-/* ---------------- Product detail modal ---------------- */
+/* ---------------- Página dedicada de produto (SPA) ---------------- */
 
-window.openProductModal = (id) => {
-  const p = ALL_PRODUCTS.find((x) => x.id === id);
-  if (!p) return;
+function relatedProducts(p) {
+  const sameCategory = ALL_PRODUCTS.filter((x) => x.id !== p.id && x.category === p.category);
+  const list = sameCategory.length ? sameCategory : ALL_PRODUCTS.filter((x) => x.id !== p.id);
+  return list.slice(0, 6);
+}
 
+function renderProductPage(p) {
   const cat = categoryMeta(p.category);
   const tags = parseTags(p);
   const features = parseFeatures(p);
   const isSub = p.type === "ASSINATURA";
   const plans = p.plans || [];
+  const id = p.id;
 
   const plansHTML = plans.map((plan, i) => `
     <button type="button" data-plan-index="${i}" onclick='selectPlan(${JSON.stringify(id)}, ${i})'
-      class="plan-card ${i === 0 ? "is-selected" : ""} rounded-xl border border-border bg-surface2 p-3.5 text-left hover:border-primary/50">
-      <div class="mb-2 flex items-center gap-2">
+      class="plan-row ${i === 0 ? "is-selected" : ""} flex w-full items-center justify-between rounded-xl border border-border bg-surface2 p-3.5 text-left hover:border-primary/50">
+      <span class="flex items-center gap-2.5">
         <span class="plan-radio flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border"></span>
-        <p class="text-sm font-bold">${plan.name}</p>
-      </div>
-      <p class="text-base font-extrabold text-white">${fmt(plan.price)}</p>
+        <span class="text-sm font-bold">${plan.name}</span>
+      </span>
+      <span class="text-base font-extrabold text-white">${fmt(plan.price)}</span>
     </button>`).join("");
 
-  const featuresHTML = features.length ? `
-    <div class="mb-6">
-      <p class="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Recursos incluídos</p>
-      <div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+  const featuresListHTML = features.length ? `
+    <div class="mb-5">
+      <div class="grid grid-cols-1 gap-2.5">
         ${features.map((f) => `
           <div class="flex items-center gap-2 text-sm">
             <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">✓</span>
@@ -1083,109 +1093,157 @@ window.openProductModal = (id) => {
     </div>` : "";
 
   const initialPrice = isSub ? (plans[0] ? plans[0].price : null) : p.price;
+  const related = relatedProducts(p);
+  const relatedTitle = cat ? `Mais de ${cat.label}` : "Você também pode gostar";
 
-  document.getElementById("product-modal-content").innerHTML = `
-    <div class="grid grid-cols-1 lg:grid-cols-[1.1fr_1.3fr_0.9fr]">
+  document.getElementById("product-page-view").innerHTML = `
+    <div class="mx-auto max-w-6xl px-4 py-8 sm:px-8 lg:px-10">
 
-      <div class="relative border-b border-border p-6 lg:border-b-0 lg:border-r">
-        <button onclick="closeProductModal()" class="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-lg text-white hover:bg-black/70 lg:hidden">✕</button>
-        <div class="modal-image-frame rounded-xl border border-border bg-surface2">
-          ${p.image_url
-            ? `<img src="${p.image_url}" class="aspect-[4/5] w-full object-cover" />`
-            : `<div class="flex aspect-[4/5] items-center justify-center text-muted">Sem imagem</div>`}
-        </div>
-        <div class="purchase-badge mt-4 flex items-center justify-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-2 text-xs font-bold text-accent">
-          🔥 ${purchaseCount(p.id)} pessoas compraram recentemente
-        </div>
-      </div>
+      <nav class="mb-4 flex flex-wrap items-center gap-1.5 text-xs font-medium text-muted">
+        <button onclick="goBackToStore()" class="hover:text-white">Início</button>
+        <span>/</span>
+        <button onclick="goBackToStore()" class="hover:text-white">Produtos</button>
+        <span>/</span>
+        <span class="text-white">${p.name}</span>
+      </nav>
 
-      <div class="relative p-6 lg:p-7">
-        <button onclick="closeProductModal()" class="absolute right-5 top-5 hidden text-2xl text-muted hover:text-white leading-none lg:block">✕</button>
-        ${cat ? `<span class="mb-3 inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wide lilac">${cat.icon}${cat.label}</span>` : ""}
-        <h2 class="mb-3 font-display text-2xl font-bold uppercase leading-tight sm:text-3xl">${p.name}</h2>
-        ${tags.length ? `<div class="mb-4 flex flex-wrap gap-2">${tags.map((t) => `<span class="tag-chip rounded-full px-2.5 py-1 text-[11px] font-bold">${t}</span>`).join("")}</div>` : ""}
-        <p class="mb-6 leading-relaxed text-muted">${p.description || ""}</p>
+      <button onclick="goBackToStore()" class="mb-8 inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 py-2 text-sm font-semibold text-muted hover:border-primary/60 hover:text-white">
+        ← Voltar
+      </button>
 
-        ${featuresHTML}
-
-        ${isSub ? `
-          <p class="mb-3 text-xs font-bold uppercase tracking-wide text-muted">Escolha o plano</p>
-          <div id="plans-grid" class="grid grid-cols-2 gap-3 sm:grid-cols-2">${plansHTML}</div>
-        ` : ""}
-      </div>
-
-      <div class="flex flex-col gap-5 border-t border-border bg-surface2/60 p-6 lg:border-l lg:border-t-0">
-        <div class="flex items-center gap-2 font-display text-base font-bold uppercase">
-          <span class="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-primary to-[#4b2fd6] text-xs font-black text-white">N</span>
-          <span class="gradient-text">Nova</span>Store
-        </div>
+      <div class="grid grid-cols-1 gap-8 lg:grid-cols-[1.5fr_1fr] lg:items-start">
 
         <div>
-          <p class="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Total</p>
-          <p id="modal-price" class="font-display text-3xl font-bold text-white">${initialPrice != null ? fmt(initialPrice) : "Selecione um plano"}</p>
+          <div class="product-page-box modal-image-frame mx-auto max-w-md overflow-hidden rounded-2xl border border-border bg-surface2 p-4 sm:max-w-lg">
+            ${p.image_url
+              ? `<img src="${p.image_url}" class="aspect-[4/5] w-full rounded-xl object-cover" />`
+              : `<div class="flex aspect-[4/5] items-center justify-center rounded-xl text-muted">Sem imagem</div>`}
+          </div>
+          <div class="purchase-badge mx-auto mt-4 flex w-fit items-center justify-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-2 text-xs font-bold text-accent">
+            🔥 ${purchaseCount(p.id)} pessoas compraram recentemente
+          </div>
+
+          <div class="mt-10 rounded-2xl border border-border bg-surface p-6">
+            <div class="mb-5 flex border-b border-border">
+              <button type="button" class="page-tab is-active" data-tab-btn="sobre" onclick="switchProductTab('sobre')">Sobre o produto</button>
+              ${features.length ? `<button type="button" class="page-tab" data-tab-btn="recursos" onclick="switchProductTab('recursos')">Recursos</button>` : ""}
+            </div>
+            <div data-tab-panel="sobre">
+              <p class="leading-relaxed text-muted">${p.description || "Sem descrição disponível para este produto."}</p>
+            </div>
+            ${features.length ? `<div data-tab-panel="recursos" class="hidden">${featuresListHTML}</div>` : ""}
+          </div>
         </div>
 
-        <div class="flex flex-col gap-2.5">
-          <button onclick='buyNowFromModal(${JSON.stringify(id)})' class="magnetic-btn glow-cta w-full rounded-xl bg-primary py-3.5 font-bold text-white hover:bg-primaryhover active:scale-[0.98] transition-transform">
-            <span>Comprar agora</span>
-          </button>
-          <button onclick='addToCartFromModal(${JSON.stringify(id)})' class="magnetic-btn flex w-full items-center justify-center gap-2 rounded-xl border border-border py-3 font-bold text-white hover:border-primary/60 active:scale-[0.98] transition-transform">
-            <span>🛒 Adicionar ao carrinho</span>
-          </button>
-        </div>
+        <aside class="flex flex-col gap-5 rounded-2xl border border-border bg-surface2/60 p-6 lg:sticky lg:top-24">
+          ${cat ? `<span class="w-fit inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wide lilac">${cat.icon}${cat.label}</span>` : ""}
+          <h1 class="font-display text-2xl font-bold uppercase leading-tight sm:text-3xl">${p.name}</h1>
+          ${tags.length ? `<div class="flex flex-wrap gap-2">${tags.map((t) => `<span class="tag-chip rounded-full px-2.5 py-1 text-[11px] font-bold">${t}</span>`).join("")}</div>` : ""}
 
-        <div class="mt-2 grid grid-cols-3 gap-2 border-t border-border pt-5 text-center text-[11px] text-muted">
-          <div><p class="mb-1 lilac">⚡</p>Pagamento via Pix<br/>Liberação imediata</div>
-          <div><p class="mb-1 lilac">🎧</p>Suporte 24/7<br/>Tire suas dúvidas</div>
-          <div><p class="mb-1 lilac">🛡️</p>Compra segura<br/>Seus dados protegidos</div>
-        </div>
+          ${isSub ? `
+            <div>
+              <p class="mb-2.5 text-xs font-bold uppercase tracking-wide text-muted">Escolha o plano</p>
+              <div id="page-plans-list" class="flex flex-col gap-2.5">${plansHTML}</div>
+            </div>
+          ` : ""}
+
+          <div class="border-t border-border pt-5">
+            <p class="mb-1 text-xs font-bold uppercase tracking-wide text-muted">Total</p>
+            <p id="page-price" class="font-display text-3xl font-bold text-white">${initialPrice != null ? fmt(initialPrice) : "Selecione um plano"}</p>
+          </div>
+
+          <div class="flex flex-col gap-2.5">
+            <button onclick='buyNowFromProductPage(${JSON.stringify(id)})' class="magnetic-btn glow-cta w-full rounded-xl bg-primary py-3.5 font-bold text-white hover:bg-primaryhover active:scale-[0.98] transition-transform">
+              <span>Comprar agora</span>
+            </button>
+            <button onclick='addToCartFromProductPage(${JSON.stringify(id)})' class="magnetic-btn flex w-full items-center justify-center gap-2 rounded-xl border border-border py-3 font-bold text-white hover:border-primary/60 active:scale-[0.98] transition-transform">
+              <span>🛒 Adicionar ao carrinho</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2 border-t border-border pt-5 text-center text-[11px] text-muted">
+            <div><p class="mb-1 lilac">⚡</p>Pagamento via Pix<br/>Liberação imediata</div>
+            <div><p class="mb-1 lilac">🎧</p>Suporte 24/7<br/>Tire suas dúvidas</div>
+            <div><p class="mb-1 lilac">🛡️</p>Compra segura<br/>Seus dados protegidos</div>
+          </div>
+        </aside>
       </div>
+
+      ${related.length ? `
+        <div class="mt-16">
+          <h2 class="section-title-underline mb-6 inline-block font-display text-xl font-bold uppercase tracking-wide text-white">${relatedTitle}</h2>
+          <div id="related-products-grid" class="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            ${related.map((x, i) => productCardHTML(x, i)).join("")}
+          </div>
+        </div>
+      ` : ""}
     </div>
   `;
 
   window._selectedPlan = isSub ? 0 : null;
-  window._productModalClosing = false;
-  const overlay = document.getElementById("product-modal");
-  const content = document.getElementById("product-modal-content");
-  overlay.classList.remove("hidden", "modal-fade-out");
-  overlay.classList.add("flex");
-  content.classList.remove("modal-pop-out");
-  content.classList.add("modal-pop-in");
+  window._currentProductId = id;
+}
+
+window.switchProductTab = (tab) => {
+  document.querySelectorAll(".page-tab").forEach((btn) => btn.classList.toggle("is-active", btn.dataset.tabBtn === tab));
+  document.querySelectorAll("[data-tab-panel]").forEach((panel) => panel.classList.toggle("hidden", panel.dataset.tabPanel !== tab));
 };
 
 window.selectPlan = (id, index) => {
   window._selectedPlan = index;
   const p = ALL_PRODUCTS.find((x) => x.id === id);
-  document.getElementById("modal-price").textContent = fmt(p.plans[index].price);
-  document.querySelectorAll(".plan-card").forEach((card, i) => {
-    card.classList.toggle("is-selected", i === index);
+  document.getElementById("page-price").textContent = fmt(p.plans[index].price);
+  document.querySelectorAll(".plan-row").forEach((row, i) => {
+    row.classList.toggle("is-selected", i === index);
   });
 };
 
-window.closeProductModal = () => {
-  if (window._productModalClosing) return;
-  window._productModalClosing = true;
-  const content = document.getElementById("product-modal-content");
-  const overlay = document.getElementById("product-modal");
+/* mostra a página do produto, esconde a vitrine, rola pro topo e atualiza a URL */
+window.goToProductPage = (id, opts = {}) => {
+  const p = ALL_PRODUCTS.find((x) => x.id === id);
+  if (!p) return;
 
-  // Evita estados de animação presos e garante que o card aberto volte à grade
-  // sem alterar a categoria ou a busca atuais.
-  content.classList.remove("modal-pop-in");
-  content.classList.add("modal-pop-out");
-  overlay.classList.add("modal-fade-out");
+  renderProductPage(p);
+  document.getElementById("store-home").classList.add("hidden");
+  document.getElementById("product-page-view").classList.remove("hidden");
   document.querySelectorAll(".product-card.tilt").forEach(resetTilt);
+  window.scrollTo({ top: 0, behavior: "instant" });
 
-  setTimeout(() => {
-    overlay.classList.add("hidden");
-    overlay.classList.remove("flex", "modal-fade-out");
-    content.classList.remove("modal-pop-out");
-
-    // Re-renderiza somente a apresentação atual da loja. Isso corrige o caso
-    // em que o card fica invisível após fechar pelo X, sem limpar filtros.
-    renderProducts();
-    window._productModalClosing = false;
-  }, 160);
+  if (opts.pushState !== false) {
+    const slug = p.slug || p.id;
+    history.pushState({ novastoreProduct: id }, "", `?produto=${encodeURIComponent(slug)}`);
+  }
 };
+
+/* esconde a página do produto e volta pra vitrine, sem perder categoria/busca atuais */
+window.goBackToStore = (opts = {}) => {
+  document.getElementById("product-page-view").classList.add("hidden");
+  document.getElementById("store-home").classList.remove("hidden");
+  renderProducts();
+  window.scrollTo({ top: 0, behavior: "instant" });
+
+  if (opts.pushState !== false) {
+    history.pushState({}, "", location.pathname + (location.hash || ""));
+  }
+};
+
+/* suporta o botão "voltar" físico do navegador */
+window.addEventListener("popstate", () => {
+  const produto = new URLSearchParams(location.search).get("produto");
+  if (produto) {
+    const p = ALL_PRODUCTS.find((x) => x.slug === produto || x.id === produto);
+    if (p) { goToProductPage(p.id, { pushState: false }); return; }
+  }
+  goBackToStore({ pushState: false });
+});
+
+/* abre direto na página do produto se a URL já vier com ?produto=... (link compartilhado) */
+function checkInitialProductRoute() {
+  const produto = new URLSearchParams(location.search).get("produto");
+  if (!produto) return;
+  const p = ALL_PRODUCTS.find((x) => x.slug === produto || x.id === produto);
+  if (p) goToProductPage(p.id, { pushState: false });
+}
 
 function cartItemFromProduct(p) {
   if (p.type === "ASSINATURA") {
@@ -1196,17 +1254,15 @@ function cartItemFromProduct(p) {
   return { key: p.id, productId: p.id, name: p.name, price: p.price, image: p.image_url };
 }
 
-window.addToCartFromModal = (id) => {
+window.addToCartFromProductPage = (id) => {
   const p = ALL_PRODUCTS.find((x) => x.id === id);
   addToCart(cartItemFromProduct(p));
-  closeProductModal();
   openCart();
 };
 
-window.buyNowFromModal = (id) => {
+window.buyNowFromProductPage = (id) => {
   const p = ALL_PRODUCTS.find((x) => x.id === id);
   addToCart(cartItemFromProduct(p));
-  closeProductModal();
   openCheckout();
 };
 
