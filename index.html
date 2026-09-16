@@ -931,22 +931,6 @@
             <tbody id="anunciantes-table"></tbody>
           </table>
         </div>
-
-        <div class="mb-4 mt-10 flex items-center justify-between">
-          <div>
-            <h2 class="font-display text-xl font-bold uppercase">🤝 Clientes Afiliados</h2>
-            <p class="mt-1 text-sm text-muted">Clientes comuns que viraram afiliados pelo botão "Afiliar conta" na aba Contas — com o código deles, os convites enviados e o desempenho de cada um.</p>
-          </div>
-        </div>
-
-        <div class="overflow-x-auto rounded-2xl border border-border bg-surface">
-          <table class="w-full text-left text-sm">
-            <thead class="border-b border-border text-muted">
-              <tr><th class="px-4 py-3">Cliente</th><th class="px-4 py-3">Código</th><th class="px-4 py-3">Clientes que compraram</th><th class="px-4 py-3">Comissão total</th><th class="px-4 py-3 text-right">Ações</th></tr>
-            </thead>
-            <tbody id="clientes-afiliados-table"></tbody>
-          </table>
-        </div>
       </section>
 
       <section id="admin-tab-sorteios" class="hidden">
@@ -1421,7 +1405,10 @@
   <div class="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-surface p-6">
     <div class="mb-5 flex items-center justify-between">
       <h2 class="font-display text-xl font-bold uppercase" id="afiliado-inspect-title">Inspecionar afiliado</h2>
-      <button onclick="closeInspecionarAfiliado()" class="text-muted hover:text-white">✕</button>
+      <div class="flex items-center gap-3">
+        <button id="afiliado-inspect-reenviar" class="text-xs font-bold hover:underline lilac">↻ Reenviar código</button>
+        <button onclick="closeInspecionarAfiliado()" class="text-muted hover:text-white">✕</button>
+      </div>
     </div>
     <div class="mb-5 grid grid-cols-3 gap-3">
       <div class="painel-stat-card !p-3"><p id="afiliado-inspect-usos" class="font-display text-xl font-bold text-white">0</p><p class="text-[11px] font-bold uppercase text-muted">Vezes que usaram o código</p></div>
@@ -4979,51 +4966,6 @@ function subscribeAdminConvencerThread(customerId) {
     .subscribe();
 }
 
-/* Tabela de "Clientes Afiliados" dentro da aba Anunciantes: junta profiles
-   (quem é afiliado) com afiliados_indicacoes (quem comprou usando o código
-   de cada um e quanto de comissão isso gerou). */
-async function loadClientesAfiliadosTable() {
-  const tbody = document.getElementById("clientes-afiliados-table");
-  if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-6 text-center text-muted">Carregando...</td></tr>`;
-
-  const { data: afiliados, error } = await supabase
-    .from("profiles")
-    .select("id, full_name, codigo_afiliado")
-    .eq("is_afiliado", true)
-    .order("full_name");
-
-  if (error) { tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-6 text-center text-red-400">Erro: ${escapeHTML(error.message)}</td></tr>`; return; }
-  if (!afiliados?.length) { tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-6 text-center text-muted">Nenhum cliente afiliado ainda. Afilie alguém pela aba Contas.</td></tr>`; return; }
-
-  const { data: indicacoes } = await supabase
-    .from("afiliados_indicacoes")
-    .select("afiliado_id, cliente_id, comissao");
-
-  const statsPorAfiliado = new Map();
-  (indicacoes || []).forEach((i) => {
-    if (!statsPorAfiliado.has(i.afiliado_id)) statsPorAfiliado.set(i.afiliado_id, { clientes: new Set(), comissao: 0 });
-    const s = statsPorAfiliado.get(i.afiliado_id);
-    if (i.cliente_id) s.clientes.add(i.cliente_id);
-    s.comissao += Number(i.comissao || 0);
-  });
-
-  tbody.innerHTML = afiliados.map((a) => {
-    const s = statsPorAfiliado.get(a.id) || { clientes: new Set(), comissao: 0 };
-    const nomeEscapado = escapeHTML(a.full_name || "Cliente").replace(/'/g, "\\'");
-    return `
-    <tr class="border-b border-border/60 last:border-0">
-      <td class="px-4 py-3 font-semibold">${escapeHTML(a.full_name || "Cliente")}</td>
-      <td class="px-4 py-3 font-mono font-bold lilac">${escapeHTML(a.codigo_afiliado || "—")}</td>
-      <td class="px-4 py-3 font-bold text-white">${s.clientes.size}</td>
-      <td class="px-4 py-3 font-bold text-accent">${fmt(s.comissao)}</td>
-      <td class="px-4 py-3 text-right whitespace-nowrap">
-        <button onclick="verHistoricoAfiliado('${a.id}')" class="mr-3 text-xs font-bold hover:underline text-white">💬 Ver chat</button>
-        <button onclick="inspecionarAfiliado('${a.id}','${nomeEscapado}')" class="text-xs font-bold hover:underline lilac">🔍 Inspecionar</button>
-      </td>
-    </tr>`;
-  }).join("");
-}
 
 /* versão do reenvio que não depende de ADMIN_CONTAS estar carregado (a aba
    Anunciantes pode ser aberta sem passar pela aba Contas antes) */
@@ -5054,7 +4996,7 @@ window.verHistoricoAfiliado = async (clienteId) => {
 /* modal "🔍 Inspecionar" — comissão total, quantas vezes o código foi usado,
    quantos clientes diferentes compraram e quais produtos foram confirmados
    (junta afiliados_indicacoes com o pedido pra pegar os itens comprados) */
-window.inspecionarAfiliado = async (afiliadoId, nome) => {
+window.inspecionarAfiliado = async (afiliadoId, nome, codigo) => {
   document.getElementById("afiliado-inspect-title").textContent = `Inspecionar — ${nome}`;
   const tbody = document.getElementById("afiliado-inspect-table");
   tbody.innerHTML = `<tr><td colspan="5" class="px-3 py-6 text-center text-muted">Carregando...</td></tr>`;
@@ -5076,6 +5018,7 @@ window.inspecionarAfiliado = async (afiliadoId, nome) => {
   document.getElementById("afiliado-inspect-usos").textContent = lista.length;
   document.getElementById("afiliado-inspect-clientes").textContent = clientesUnicos.size;
   document.getElementById("afiliado-inspect-comissao").textContent = fmt(totalComissao);
+  document.getElementById("afiliado-inspect-reenviar").onclick = () => reenviarCodigoAfiliadoDireto(afiliadoId, nome, codigo);
 
   if (!lista.length) { tbody.innerHTML = `<tr><td colspan="5" class="px-3 py-6 text-center text-muted">Ninguém usou o código dele ainda.</td></tr>`; return; }
 
@@ -5331,24 +5274,57 @@ window.deleteProduct = async (id, name) => {
    ========================================================================= */
 
 async function loadAdminAnunciantes() {
-  loadClientesAfiliadosTable();
-  const { data, error } = await supabase.from("anunciantes").select("*").order("created_at", { ascending: false });
   const tbody = document.getElementById("anunciantes-table");
+  tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-6 text-center text-muted">Carregando...</td></tr>`;
 
-  if (error) { tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-6 text-center text-red-400">Erro: ${error.message}</td></tr>`; return; }
-  if (!data.length) { tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-6 text-center text-muted">Nenhum anunciante cadastrado.</td></tr>`; return; }
+  // "Anunciante" agora é um conceito só: quem tem um código #0000, seja porque foi
+  // cadastrado manualmente (tabela anunciantes) ou porque um cliente foi afiliado
+  // pela aba Contas (profiles.is_afiliado) — os dois aparecem juntos, sem distinção.
+  const [{ data: anunciantes, error }, { data: afiliados }, { data: indicacoes }] = await Promise.all([
+    supabase.from("anunciantes").select("*").order("created_at", { ascending: false }),
+    supabase.from("profiles").select("id, full_name, codigo_afiliado").eq("is_afiliado", true),
+    supabase.from("afiliados_indicacoes").select("afiliado_id"),
+  ]);
 
-  tbody.innerHTML = data.map((a) => `
+  if (error) { tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-6 text-center text-red-400">Erro: ${escapeHTML(error.message)}</td></tr>`; return; }
+
+  const usosPorAfiliado = new Map();
+  (indicacoes || []).forEach((i) => usosPorAfiliado.set(i.afiliado_id, (usosPorAfiliado.get(i.afiliado_id) || 0) + 1));
+
+  const linhas = [
+    ...(anunciantes || []).map((a) => ({ origem: "anunciante", id: a.id, codigo: a.codigo, nome: a.nome, vendas: a.total_vendas ?? 0 })),
+    ...(afiliados || []).map((p) => ({ origem: "afiliado", id: p.id, codigo: p.codigo_afiliado, nome: p.full_name || "Cliente", vendas: usosPorAfiliado.get(p.id) || 0 })),
+  ].sort((a, b) => b.vendas - a.vendas);
+
+  if (!linhas.length) { tbody.innerHTML = `<tr><td colspan="4" class="px-4 py-6 text-center text-muted">Nenhum anunciante cadastrado.</td></tr>`; return; }
+
+  tbody.innerHTML = linhas.map((l) => {
+    const nomeEscapado = escapeHTML(l.nome).replace(/'/g, "\\'");
+    const acoes = l.origem === "anunciante"
+      ? `<button onclick="openAnuncianteHistorico('${l.id}','${nomeEscapado}')" class="mr-3 text-xs font-bold hover:underline lilac">📋 Histórico</button>
+         <button onclick="deleteAnunciante('${l.id}','${nomeEscapado}')" class="text-xs font-bold text-red-400 hover:underline">Excluir</button>`
+      : `<button onclick="verHistoricoAfiliado('${l.id}')" class="mr-3 text-xs font-bold hover:underline text-white">💬 Ver chat</button>
+         <button onclick="inspecionarAfiliado('${l.id}','${nomeEscapado}','${l.codigo}')" class="mr-3 text-xs font-bold hover:underline lilac">🔍 Inspecionar</button>
+         <button onclick="removerAfiliacao('${l.id}','${nomeEscapado}')" class="text-xs font-bold text-red-400 hover:underline">Excluir</button>`;
+
+    return `
     <tr class="border-b border-border/60 last:border-0">
-      <td class="px-4 py-3 font-mono font-bold lilac">${escapeHTML(a.codigo)}</td>
-      <td class="px-4 py-3 font-semibold">${escapeHTML(a.nome)}</td>
-      <td class="px-4 py-3 font-bold text-white">${a.total_vendas ?? 0}</td>
-      <td class="px-4 py-3 text-right whitespace-nowrap">
-        <button onclick="openAnuncianteHistorico('${a.id}','${escapeHTML(a.nome).replace(/'/g,"\\'")}')" class="mr-3 text-xs font-bold hover:underline lilac">📋 Histórico</button>
-        <button onclick="deleteAnunciante('${a.id}','${escapeHTML(a.nome).replace(/'/g,"\\'")}')" class="text-xs font-bold text-red-400 hover:underline">Excluir</button>
-      </td>
-    </tr>`).join("");
+      <td class="px-4 py-3 font-mono font-bold lilac">${escapeHTML(l.codigo || "—")}</td>
+      <td class="px-4 py-3 font-semibold">${escapeHTML(l.nome)}</td>
+      <td class="px-4 py-3 font-bold text-white">${l.vendas}</td>
+      <td class="px-4 py-3 text-right whitespace-nowrap">${acoes}</td>
+    </tr>`;
+  }).join("");
 }
+
+/* remove o status de afiliado de um cliente (o código volta a ficar livre pra
+   ser usado por outro anunciante/afiliado) */
+window.removerAfiliacao = async (clienteId, nome) => {
+  if (!confirm(`Remover "${nome}" da lista de anunciantes? O código dele deixa de funcionar no checkout. Essa ação não pode ser desfeita.`)) return;
+  const { error } = await supabase.from("profiles").update({ is_afiliado: false, codigo_afiliado: null }).eq("id", clienteId);
+  if (error) { alert("Erro ao remover: " + error.message); return; }
+  loadAdminAnunciantes();
+};
 
 window.openAnuncianteForm = () => {
   document.getElementById("anunciante-form").reset();
