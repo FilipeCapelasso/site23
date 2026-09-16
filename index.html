@@ -726,20 +726,17 @@
     <main class="mx-auto max-w-5xl px-3 py-6 sm:px-4 sm:py-10">
       <div class="admin-tabs-scroll mb-8 flex flex-nowrap gap-1 overflow-x-auto border-b border-border sm:gap-2">
         <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-primary px-3 py-3 text-sm font-bold text-white sm:px-4">Produtos</button>
-        <button id="admin-tab-btn-conversas" onclick="switchAdminTab('conversas')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Conversas</button>
-        <button id="admin-tab-btn-mensagens" onclick="switchAdminTab('mensagens')" class="admin-tab-btn relative shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Mensagens
-          <span id="admin-mensagens-unread-badge" class="hidden absolute -right-2 -top-1 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
-        </button>
-        <button id="admin-tab-btn-tickets" onclick="switchAdminTab('tickets')" class="admin-tab-btn relative shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Tickets
-          <span id="admin-tickets-unread-badge" class="hidden absolute -right-2 -top-1 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
+        <button id="admin-tab-btn-conversas" onclick="switchAdminTab('conversas')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Entregas</button>
+        <button id="admin-tab-btn-suporte" onclick="switchAdminTab('suporte')" class="admin-tab-btn relative shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Suporte
+          <span id="admin-suporte-unread-badge" class="hidden absolute -right-2 -top-1 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
         </button>
         <button id="admin-tab-btn-convencer" onclick="switchAdminTab('convencer')" class="admin-tab-btn relative shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">🎯 Convencer Cliente
           <span id="admin-convencer-unread-badge" class="hidden absolute -right-2 -top-1 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
         </button>
-        <button id="admin-tab-btn-appearance" onclick="switchAdminTab('appearance')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Aparência do site</button>
         <button id="admin-tab-btn-anunciantes" onclick="switchAdminTab('anunciantes')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Anunciantes</button>
         <button id="admin-tab-btn-sorteios" onclick="switchAdminTab('sorteios')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Sorteios</button>
         <button id="admin-tab-btn-contas" onclick="switchAdminTab('contas')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Contas</button>
+        <button id="admin-tab-btn-appearance" onclick="switchAdminTab('appearance')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Aparência do site</button>
       </div>
 
       <section id="admin-tab-products">
@@ -759,7 +756,7 @@
       </section>
 
       <section id="admin-tab-conversas" class="hidden">
-        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Conversas</h1>
+        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Entregas</h1>
         <p class="mb-6 text-sm text-muted">Pedidos com pagamento confirmado. Envie aqui a entrega do produto (chave, login, acesso etc.) diretamente para o cliente.</p>
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
           <div class="overflow-hidden rounded-2xl border border-border bg-surface">
@@ -774,34 +771,44 @@
         </div>
       </section>
 
-      <section id="admin-tab-mensagens" class="hidden">
-        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Mensagens</h1>
-        <p class="mb-6 text-sm text-muted">Chat privado (1-para-1) com cada cliente. Use para suporte, entrega de produtos e qualquer contato direto.</p>
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
-          <div class="overflow-hidden rounded-2xl border border-border bg-surface">
-            <div id="admin-mensagens-list" class="max-h-[65vh] overflow-y-auto"></div>
-          </div>
-          <div id="admin-mensagens-detail" class="flex min-h-[65vh] flex-col overflow-hidden rounded-2xl border border-border bg-surface">
-            <div class="flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted">
-              <span class="text-3xl">💬</span>
-              Selecione um cliente à esquerda para ver e responder à conversa.
+      <section id="admin-tab-suporte" class="hidden">
+        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Suporte</h1>
+        <div class="mb-6 flex flex-wrap gap-2">
+          <button id="suporte-subtab-btn-mensagens" onclick="switchSuporteSubTab('mensagens')" class="admin-tab-btn relative rounded-full border border-primary bg-primary px-4 py-2 text-sm font-bold text-white">💬 Mensagens diretas
+            <span id="admin-mensagens-unread-badge" class="hidden absolute -right-2 -top-1.5 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
+          </button>
+          <button id="suporte-subtab-btn-tickets" onclick="switchSuporteSubTab('tickets')" class="admin-tab-btn relative rounded-full border border-border px-4 py-2 text-sm font-bold text-muted hover:text-white">🎫 Tickets
+            <span id="admin-tickets-unread-badge" class="hidden absolute -right-2 -top-1.5 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
+          </button>
+        </div>
+
+        <div id="suporte-sub-mensagens">
+          <p class="mb-6 text-sm text-muted">Chat privado (1-para-1) com cada cliente. Use para suporte, entrega de produtos e qualquer contato direto.</p>
+          <div class="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
+            <div class="overflow-hidden rounded-2xl border border-border bg-surface">
+              <div id="admin-mensagens-list" class="max-h-[65vh] overflow-y-auto"></div>
+            </div>
+            <div id="admin-mensagens-detail" class="flex min-h-[65vh] flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+              <div class="flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted">
+                <span class="text-3xl">💬</span>
+                Selecione um cliente à esquerda para ver e responder à conversa.
+              </div>
             </div>
           </div>
         </div>
-      </section>
 
-      <section id="admin-tab-tickets" class="hidden">
-        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Tickets de suporte</h1>
-        <p class="mb-6 text-sm text-muted">Atendimentos abertos pelos clientes na Central de suporte. Responda e atualize o status de cada ticket.</p>
-        <div class="mb-4 flex flex-wrap gap-2" id="admin-tickets-status-tabs"></div>
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
-          <div class="overflow-hidden rounded-2xl border border-border bg-surface">
-            <div id="admin-tickets-list" class="max-h-[65vh] overflow-y-auto"></div>
-          </div>
-          <div id="admin-ticket-detail" class="flex min-h-[65vh] flex-col overflow-hidden rounded-2xl border border-border bg-surface">
-            <div class="flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted">
-              <span class="text-3xl">🎫</span>
-              Selecione um ticket à esquerda para ver e responder ao cliente.
+        <div id="suporte-sub-tickets" class="hidden">
+          <p class="mb-6 text-sm text-muted">Atendimentos abertos pelos clientes na Central de suporte. Responda e atualize o status de cada ticket.</p>
+          <div class="mb-4 flex flex-wrap gap-2" id="admin-tickets-status-tabs"></div>
+          <div class="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
+            <div class="overflow-hidden rounded-2xl border border-border bg-surface">
+              <div id="admin-tickets-list" class="max-h-[65vh] overflow-y-auto"></div>
+            </div>
+            <div id="admin-ticket-detail" class="flex min-h-[65vh] flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+              <div class="flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted">
+                <span class="text-3xl">🎫</span>
+                Selecione um ticket à esquerda para ver e responder ao cliente.
+              </div>
             </div>
           </div>
         </div>
@@ -1405,6 +1412,29 @@
           <tr><th class="px-3 py-2">Produto</th><th class="px-3 py-2">Valor</th><th class="px-3 py-2">Cliente</th><th class="px-3 py-2">Data/Hora</th></tr>
         </thead>
         <tbody id="anunciante-historico-table"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="afiliado-inspect-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeInspecionarAfiliado()">
+  <div class="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-surface p-6">
+    <div class="mb-5 flex items-center justify-between">
+      <h2 class="font-display text-xl font-bold uppercase" id="afiliado-inspect-title">Inspecionar afiliado</h2>
+      <button onclick="closeInspecionarAfiliado()" class="text-muted hover:text-white">✕</button>
+    </div>
+    <div class="mb-5 grid grid-cols-3 gap-3">
+      <div class="painel-stat-card !p-3"><p id="afiliado-inspect-usos" class="font-display text-xl font-bold text-white">0</p><p class="text-[11px] font-bold uppercase text-muted">Vezes que usaram o código</p></div>
+      <div class="painel-stat-card !p-3"><p id="afiliado-inspect-clientes" class="font-display text-xl font-bold text-white">0</p><p class="text-[11px] font-bold uppercase text-muted">Clientes diferentes</p></div>
+      <div class="painel-stat-card !p-3"><p id="afiliado-inspect-comissao" class="font-display text-xl font-bold text-accent">R$ 0,00</p><p class="text-[11px] font-bold uppercase text-muted">Comissão total</p></div>
+    </div>
+    <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Compras confirmadas com o código dele</h3>
+    <div class="overflow-x-auto rounded-xl border border-border">
+      <table class="w-full text-left text-sm">
+        <thead class="border-b border-border bg-surface2 text-muted">
+          <tr><th class="px-3 py-2">Produto(s)</th><th class="px-3 py-2">Cliente</th><th class="px-3 py-2">Valor da venda</th><th class="px-3 py-2">Comissão</th><th class="px-3 py-2">Data</th></tr>
+        </thead>
+        <tbody id="afiliado-inspect-table"></tbody>
       </table>
     </div>
   </div>
@@ -3433,7 +3463,7 @@ function stopLightningEffect() {
 }
 
 window.switchAdminTab = (tab) => {
-  const tabs = ["products", "conversas", "mensagens", "tickets", "convencer", "appearance", "anunciantes", "sorteios", "contas"];
+  const tabs = ["products", "conversas", "suporte", "convencer", "appearance", "anunciantes", "sorteios", "contas"];
   tabs.forEach((t) => {
     const isActive = t === tab;
     document.getElementById(`admin-tab-${t}`).classList.toggle("hidden", !isActive);
@@ -3445,13 +3475,43 @@ window.switchAdminTab = (tab) => {
   });
   if (tab === "appearance") populateAppearanceForm();
   if (tab === "conversas") loadAdminConversas();
-  if (tab === "mensagens") loadAdminMensagens();
-  if (tab === "tickets") loadAdminTickets();
+  if (tab === "suporte") switchSuporteSubTab(currentSuporteSubTab);
   if (tab === "convencer") loadAdminConvencer();
   if (tab === "anunciantes") loadAdminAnunciantes();
   if (tab === "sorteios") loadAdminSorteios();
   if (tab === "contas") loadAdminContas();
 };
+
+/* a aba "Suporte" reúne duas caixas de entrada antigas (Mensagens diretas e Tickets)
+   como sub-abas em forma de pílula, sem mudar nada do funcionamento de cada uma */
+let currentSuporteSubTab = "mensagens";
+window.switchSuporteSubTab = (sub) => {
+  currentSuporteSubTab = sub;
+  const subs = ["mensagens", "tickets"];
+  subs.forEach((s) => {
+    const isActive = s === sub;
+    document.getElementById(`suporte-sub-${s}`).classList.toggle("hidden", !isActive);
+    const btn = document.getElementById(`suporte-subtab-btn-${s}`);
+    btn.classList.toggle("border-primary", isActive);
+    btn.classList.toggle("bg-primary", isActive);
+    btn.classList.toggle("text-white", isActive);
+    btn.classList.toggle("border-border", !isActive);
+    btn.classList.toggle("text-muted", !isActive);
+  });
+  if (sub === "mensagens") loadAdminMensagens();
+  if (sub === "tickets") loadAdminTickets();
+};
+
+/* soma os dois badges de não-lidos (mensagens + tickets) no botão "Suporte" do menu */
+function refreshSuporteBadge() {
+  const badge = document.getElementById("admin-suporte-unread-badge");
+  if (!badge) return;
+  const nMsg = Number(document.getElementById("admin-mensagens-unread-badge")?.textContent || 0);
+  const nTix = Number(document.getElementById("admin-tickets-unread-badge")?.textContent || 0);
+  const total = nMsg + nTix;
+  badge.classList.toggle("hidden", !total);
+  if (total) badge.textContent = total > 9 ? "9+" : String(total);
+}
 
 function populateAppearanceForm() {
   currentHeroUrl = SITE_SETTINGS.hero_image_url || "";
@@ -4685,6 +4745,7 @@ function updateAdminMensagensTabBadge(count) {
   if (!badge) return;
   badge.classList.toggle("hidden", !count);
   if (count) badge.textContent = count > 9 ? "9+" : String(count);
+  refreshSuporteBadge();
 }
 
 window.openAdminMensagem = async (customerId) => {
@@ -4957,8 +5018,8 @@ async function loadClientesAfiliadosTable() {
       <td class="px-4 py-3 font-bold text-white">${s.clientes.size}</td>
       <td class="px-4 py-3 font-bold text-accent">${fmt(s.comissao)}</td>
       <td class="px-4 py-3 text-right whitespace-nowrap">
-        <button onclick="reenviarCodigoAfiliadoDireto('${a.id}','${nomeEscapado}','${a.codigo_afiliado}')" class="mr-3 text-xs font-bold hover:underline lilac">↻ Reenviar</button>
-        <button onclick="verHistoricoAfiliado('${a.id}')" class="text-xs font-bold hover:underline text-white">📋 Ver histórico</button>
+        <button onclick="verHistoricoAfiliado('${a.id}')" class="mr-3 text-xs font-bold hover:underline text-white">💬 Ver chat</button>
+        <button onclick="inspecionarAfiliado('${a.id}','${nomeEscapado}')" class="text-xs font-bold hover:underline lilac">🔍 Inspecionar</button>
       </td>
     </tr>`;
   }).join("");
@@ -4984,9 +5045,57 @@ window.verHistoricoAfiliado = async (clienteId) => {
 
   if (error || !ticket) { alert("Esse cliente ainda não tem histórico de mensagens de afiliado."); return; }
 
-  switchAdminTab("tickets");
+  switchAdminTab("suporte");
+  switchSuporteSubTab("tickets");
   await loadAdminTickets();
   openAdminTicket(ticket.id);
+};
+
+/* modal "🔍 Inspecionar" — comissão total, quantas vezes o código foi usado,
+   quantos clientes diferentes compraram e quais produtos foram confirmados
+   (junta afiliados_indicacoes com o pedido pra pegar os itens comprados) */
+window.inspecionarAfiliado = async (afiliadoId, nome) => {
+  document.getElementById("afiliado-inspect-title").textContent = `Inspecionar — ${nome}`;
+  const tbody = document.getElementById("afiliado-inspect-table");
+  tbody.innerHTML = `<tr><td colspan="5" class="px-3 py-6 text-center text-muted">Carregando...</td></tr>`;
+  document.getElementById("afiliado-inspect-modal").classList.remove("hidden");
+  document.getElementById("afiliado-inspect-modal").classList.add("flex");
+
+  const { data, error } = await supabase
+    .from("afiliados_indicacoes")
+    .select("*, orders(items, customer_name)")
+    .eq("afiliado_id", afiliadoId)
+    .order("created_at", { ascending: false });
+
+  if (error) { tbody.innerHTML = `<tr><td colspan="5" class="px-3 py-6 text-center text-red-400">Erro: ${escapeHTML(error.message)}</td></tr>`; return; }
+
+  const lista = data || [];
+  const clientesUnicos = new Set(lista.map((i) => i.cliente_id).filter(Boolean));
+  const totalComissao = lista.filter((i) => i.status === "pago").reduce((s, i) => s + Number(i.comissao || 0), 0);
+
+  document.getElementById("afiliado-inspect-usos").textContent = lista.length;
+  document.getElementById("afiliado-inspect-clientes").textContent = clientesUnicos.size;
+  document.getElementById("afiliado-inspect-comissao").textContent = fmt(totalComissao);
+
+  if (!lista.length) { tbody.innerHTML = `<tr><td colspan="5" class="px-3 py-6 text-center text-muted">Ninguém usou o código dele ainda.</td></tr>`; return; }
+
+  tbody.innerHTML = lista.map((i) => {
+    const produtos = (i.orders?.items || []).map((it) => it.name).join(", ") || "—";
+    const cliente = i.orders?.customer_name || "—";
+    return `
+    <tr class="border-b border-border/60 last:border-0">
+      <td class="px-3 py-2">${escapeHTML(produtos)}</td>
+      <td class="px-3 py-2 text-muted">${escapeHTML(cliente)}</td>
+      <td class="px-3 py-2 font-semibold text-white">${fmt(i.valor_venda)}</td>
+      <td class="px-3 py-2 font-semibold text-accent">${fmt(i.comissao)}</td>
+      <td class="px-3 py-2 text-muted">${new Date(i.created_at).toLocaleDateString("pt-BR")}</td>
+    </tr>`;
+  }).join("");
+};
+
+window.closeInspecionarAfiliado = () => {
+  document.getElementById("afiliado-inspect-modal").classList.add("hidden");
+  document.getElementById("afiliado-inspect-modal").classList.remove("flex");
 };
 
 /* mantém a lista da esquerda e o badge da aba atualizados em tempo real
@@ -5075,6 +5184,7 @@ function updateAdminTicketsTabBadge() {
   const openCount = ADMIN_TICKETS.filter((t) => t.status === "aberto").length;
   badge.classList.toggle("hidden", !openCount);
   if (openCount) badge.textContent = openCount > 9 ? "9+" : String(openCount);
+  refreshSuporteBadge();
 }
 
 window.openAdminTicket = async (ticketId) => {
@@ -5911,8 +6021,8 @@ window.openContaDetalhe = async (clienteId) => {
     </div>` : ""}
 
     <div class="flex flex-col gap-2.5 sm:flex-row">
-      <button onclick="mandarMensagemPara('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}')" class="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-white hover:bg-primaryhover">📩 Mandar mensagem</button>
-      ${!conta?.is_afiliado ? `<button onclick="afiliarConta('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}')" class="flex-1 rounded-xl border border-accent/50 py-3 text-sm font-bold text-accent hover:bg-accent/10">🤝 Afiliar conta e enviar código</button>` : ""}
+      <button onclick="mandarMensagemPara('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}')" class="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-white hover:bg-primaryhover">🎯 Convencer Cliente</button>
+      ${!conta?.is_afiliado ? `<button onclick="afiliarConta('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}')" class="flex-1 rounded-xl border border-accent/50 py-3 text-sm font-bold text-accent hover:bg-accent/10">🤝 Afiliar conta</button>` : ""}
     </div>
   `;
 };
