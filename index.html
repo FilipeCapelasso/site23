@@ -4053,7 +4053,10 @@ window.goToProductPage = (id, opts = {}) => {
 
   // registra que o cliente logado abriu esse produto (visível na aba Contas do admin)
   if (CURRENT_USER) {
-    supabase.from("product_views").insert({ cliente_id: CURRENT_USER.id, product_id: p.id, product_nome: p.name }).then(() => {}, () => {});
+    supabase.from("product_views").insert({ cliente_id: CURRENT_USER.id, product_id: p.id, product_nome: p.name })
+      .then(({ error }) => { if (error) console.error("Falha ao registrar visualização do produto:", error.message, error); });
+  } else {
+    console.warn("Visualização não registrada: visitante não está logado (CURRENT_USER é null).");
   }
 
   if (opts.pushState !== false) {
@@ -5922,10 +5925,12 @@ window.openContaDetalhe = async (clienteId) => {
 
   const conta = ADMIN_CONTAS.find((c) => c.id === clienteId);
 
-  const [{ data: orders }, { data: views }] = await Promise.all([
+  const [{ data: orders }, { data: views, error: viewsError }] = await Promise.all([
     supabase.from("orders").select("*").eq("customer_id", clienteId).order("created_at", { ascending: false }),
     supabase.from("product_views").select("*").eq("cliente_id", clienteId).order("created_at", { ascending: false }),
   ]);
+
+  if (viewsError) console.error("Erro ao carregar visualizações de produto:", viewsError.message, viewsError);
 
   const allOrders = orders || [];
   const totalPedidos = allOrders.length;
@@ -5983,7 +5988,7 @@ window.openContaDetalhe = async (clienteId) => {
 
     <div class="mb-6">
       <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Produtos que já visualizou</h3>
-      ${viewList.length ? `
+      ${viewsError ? `<p class="text-sm text-red-400">Erro ao carregar: ${escapeHTML(viewsError.message)}</p>` : viewList.length ? `
       <div class="flex flex-wrap gap-2">
         ${viewList.map((v) => `<span class="rounded-full border border-border bg-surface2 px-3 py-1.5 text-xs text-white">${escapeHTML(v.nome)} <span class="text-muted">· ${v.count}x</span></span>`).join("")}
       </div>` : `<p class="text-sm text-muted">Ainda não visualizou nenhum produto.</p>`}
