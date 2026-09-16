@@ -112,6 +112,29 @@
     .font-display.text-3xl{font-size:clamp(1.35rem,6vw,1.875rem)}
   }
 
+  /* ================= PAINEL DO CLIENTE ================= */
+  .painel-nav-link{display:flex;align-items:center;gap:.65rem;border-radius:.7rem;padding:.65rem .75rem;
+    font-weight:600;color:#8b8fa3;border-left:2px solid transparent;transition:.15s ease}
+  .painel-nav-link svg{flex-shrink:0}
+  .painel-nav-link:hover{background:rgba(255,255,255,.05);color:#fff}
+  .painel-nav-link.is-active{background:rgba(124,92,255,.12);color:#fff;border-left-color:#7c5cff;
+    box-shadow:inset 0 0 0 1px rgba(124,92,255,.18)}
+  .painel-nav-link.is-active svg{color:#a78bfa;filter:drop-shadow(0 0 5px rgba(124,92,255,.6))}
+  #painel-sidebar.is-open{transform:translateX(0)}
+  .painel-quick-card{display:flex;flex-direction:column;gap:.35rem;border-radius:1rem;border:1px solid rgba(255,255,255,.1);
+    background:rgba(255,255,255,.03);padding:1.1rem;text-align:left;transition:.2s ease}
+  .painel-quick-card:hover{border-color:rgba(124,92,255,.5);background:rgba(124,92,255,.07);transform:translateY(-2px)}
+  .painel-stat-card{border-radius:1rem;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);padding:1rem 1.1rem}
+  .painel-status-badge{display:inline-block;border-radius:999px;padding:.3rem .65rem;font-size:10.5px;font-weight:800;letter-spacing:.02em}
+  .painel-filter-btn{flex-shrink:0;border-radius:999px;border:1px solid #23262f;background:#111318;padding:.5rem 1rem;
+    font-size:12px;font-weight:700;color:#8b8fa3;white-space:nowrap;transition:.15s ease}
+  .painel-filter-btn.is-active{background:#7c5cff;border-color:#7c5cff;color:#fff}
+  .painel-star{font-size:22px;color:#3a3d47;transition:transform .1s ease}
+  .painel-star.is-filled{color:#00e6a8}
+  @media(max-width:1023px){
+    #painel-sidebar{box-shadow:0 0 60px rgba(0,0,0,.6)}
+  }
+
   /* ---------- animações de impacto nos produtos ---------- */
   @keyframes cardIn{from{opacity:0;transform:translateY(22px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
   .card-in{opacity:0;animation:cardIn .55s cubic-bezier(.16,.9,.3,1) forwards}
@@ -400,25 +423,13 @@
         </button>
         <div class="relative">
           <button id="btn-login" onclick="openAuthModal('login')" class="whitespace-nowrap rounded-full bg-primary px-3.5 py-2 text-sm font-bold text-white hover:bg-primaryhover sm:px-5">Login</button>
-          <button id="btn-user" onclick="toggleUserMenu()" class="hidden items-center gap-2 rounded-full border border-border bg-surface py-1.5 pl-1.5 pr-3 hover:border-primary/60">
+          <button id="btn-user" onclick="goToPainel()" class="hidden items-center gap-2 rounded-full border border-border bg-surface py-1.5 pl-1.5 pr-3 hover:border-primary/60">
             <span class="relative shrink-0">
               <span id="user-avatar" class="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-xs font-black text-white">?</span>
               <span id="profile-unread-dot" class="pulse-glow absolute -right-0.5 -top-0.5 hidden h-2.5 w-2.5 rounded-full bg-accent ring-2 ring-surface"></span>
             </span>
             <span id="user-first-name" class="text-sm font-semibold text-white"></span>
-            <span class="text-[10px] text-muted">▾</span>
           </button>
-          <div id="user-menu" class="absolute right-0 top-[calc(100%+10px)] z-50 hidden w-48 rounded-xl border border-border bg-surface p-2 shadow-2xl">
-            <div id="user-menu-code" class="hidden mb-1 rounded-lg bg-surface2/60 px-3 py-2 text-[11px] text-muted"></div>
-            <button onclick="toggleUserMenu(true); location.hash='#sorteio';" class="mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted hover:bg-white/5 hover:text-white">
-              <span>🎁 Sorteio</span>
-            </button>
-            <button onclick="toggleUserMenu(true); openChatModal();" class="relative flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm text-muted hover:bg-white/5 hover:text-white">
-              <span>💬 Meus chats</span>
-              <span id="menu-chat-unread-badge" class="hidden min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
-            </button>
-            <button onclick="logoutUser()" class="block w-full rounded-lg px-3 py-2 text-left text-sm text-muted hover:bg-white/5 hover:text-white">🚪 Sair</button>
-          </div>
         </div>
         <button onclick="toggleMobileMenu()" title="Menu" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60 md:hidden">
           <span id="mobile-menu-icon">☰</span>
@@ -432,6 +443,7 @@
       <a href="#" onclick="event.preventDefault(); toggleMobileMenu(true); openChatModal();" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white">Suporte</a>
       <a href="#sorteio" onclick="toggleMobileMenu(true);" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white">🎁 Sorteio</a>
       <a href="#" onclick="event.preventDefault(); toggleMobileMenu(true); openGlobalChatModal();" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white sm:hidden">🌐 Chat global</a>
+      <a href="#painel" onclick="toggleMobileMenu(true); goToPainel();" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white">👤 Meu painel</a>
     </div>
   </header>
 
@@ -826,6 +838,304 @@
   </div>
 </div>
 
+<!-- ================= PAINEL DO CLIENTE ================= -->
+<div id="view-painel" class="hidden min-h-screen bg-bg">
+  <header class="sticky top-0 z-40 glass border-b border-border">
+    <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
+      <div class="flex items-center gap-2.5">
+        <button onclick="togglePainelSidebar()" class="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-surface text-muted hover:text-white lg:hidden" aria-label="Menu">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <button onclick="goToStore()" class="flex items-center gap-2 text-lg font-extrabold tracking-tight font-display">
+          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black text-white">N</span>
+          <span class="gradient-text">Nova</span><span class="text-white">Store</span>
+        </button>
+      </div>
+      <button onclick="goToStore()" class="rounded-full border border-border bg-surface px-3.5 py-2 text-xs font-bold text-muted hover:border-primary/60 hover:text-white sm:px-4 sm:text-sm">← Voltar à loja</button>
+    </div>
+  </header>
+
+  <div id="painel-sidebar-overlay" onclick="togglePainelSidebar(true)" class="fixed inset-0 z-40 hidden bg-black/70 backdrop-blur-sm lg:hidden"></div>
+
+  <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:flex lg:items-start lg:gap-6 lg:px-8">
+    <!-- SIDEBAR -->
+    <aside id="painel-sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[280px] -translate-x-full flex-col overflow-y-auto border-r border-white/10 bg-[#0d0e13]/98 p-4 backdrop-blur-2xl transition-transform duration-300 ease-out lg:sticky lg:top-20 lg:h-[calc(100vh-6rem)] lg:w-64 lg:shrink-0 lg:translate-x-0 lg:rounded-2xl lg:border lg:border-white/10 lg:bg-white/[0.03] lg:p-3">
+      <div class="mb-4 flex items-center justify-between lg:hidden">
+        <span class="font-display text-sm font-bold uppercase text-white">Menu</span>
+        <button onclick="togglePainelSidebar(true)" class="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:text-white">✕</button>
+      </div>
+
+      <div class="mb-4 flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
+        <span id="painel-avatar" class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-lg font-black text-white shadow-[0_0_18px_-2px_rgba(124,92,255,.7)]">?</span>
+        <div class="min-w-0">
+          <p id="painel-user-name" class="truncate text-sm font-bold text-white">—</p>
+          <span id="painel-user-tag" class="mt-1 inline-block rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide lilac">Cliente</span>
+        </div>
+      </div>
+
+      <nav class="flex flex-1 flex-col gap-1 text-sm">
+        <button data-painel-tab="overview" onclick="switchPainelTab('overview')" class="painel-nav-link">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+          Visão geral
+        </button>
+        <button data-painel-tab="pedidos" onclick="switchPainelTab('pedidos')" class="painel-nav-link">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16l-1.5 12.5a1 1 0 0 1-1 .9H6.5a1 1 0 0 1-1-.9L4 7Z"/><path d="M8 7V5a4 4 0 0 1 8 0v2"/></svg>
+          Meus pedidos
+        </button>
+        <button data-painel-tab="avaliar" onclick="switchPainelTab('avaliar')" class="painel-nav-link">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.6 5.6 6 .7-4.4 4.2 1.1 6-5.3-3-5.3 3 1.1-6-4.4-4.2 6-.7L12 3Z"/></svg>
+          Avaliar produtos
+        </button>
+        <button onclick="goToSorteio()" class="painel-nav-link">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><path d="M12 3v3M21 12h-3M12 21v-3M3 12h3"/></svg>
+          Roleta diária
+        </button>
+        <button data-painel-tab="inventario" onclick="switchPainelTab('inventario')" class="painel-nav-link">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5v-7Z"/><path d="M3 8.5 12 13l9-4.5M12 13v7"/></svg>
+          Inventário
+        </button>
+        <button data-painel-tab="suporte" onclick="switchPainelTab('suporte')" class="painel-nav-link relative">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13.5V12a8 8 0 0 1 16 0v1.5"/><rect x="2.5" y="13" width="5" height="6" rx="1.5"/><rect x="16.5" y="13" width="5" height="6" rx="1.5"/></svg>
+          Suporte
+          <span id="painel-suporte-unread-badge" class="hidden ml-auto min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
+        </button>
+        <a href="https://discord.gg/SEU-CONVITE" target="_blank" rel="noopener" class="painel-nav-link">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="4"/><circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/></svg>
+          Discord
+        </a>
+        <button data-painel-tab="afiliado" onclick="switchPainelTab('afiliado')" class="painel-nav-link">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.6"/><path d="M2.5 20a5.5 5.5 0 0 1 11 0M14 20a4.5 4.5 0 0 1 8-2.8"/></svg>
+          Afiliado
+        </button>
+        <button data-painel-tab="perfil" onclick="switchPainelTab('perfil')" class="painel-nav-link">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>
+          Meu perfil
+        </button>
+      </nav>
+
+      <button onclick="logoutUser()" class="mt-3 flex w-full items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-left text-sm font-bold text-red-400 transition hover:bg-red-500/15">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+        Sair
+      </button>
+    </aside>
+
+    <!-- CONTEÚDO -->
+    <main class="min-w-0 flex-1 pb-10">
+
+      <!-- A) VISÃO GERAL -->
+      <section id="painel-tab-overview">
+        <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 class="font-display text-2xl font-bold text-white sm:text-3xl">Olá, <span id="painel-overview-name" class="gradient-text">cliente</span> 👋</h1>
+            <p id="painel-overview-date" class="mt-1 text-sm text-muted"></p>
+          </div>
+          <button onclick="goToStore(); setTimeout(()=>document.getElementById('catalogo')?.scrollIntoView({behavior:'smooth'}),30);" class="shrink-0 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white shadow-glow hover:bg-primaryhover">Explorar produtos</button>
+        </div>
+
+        <div id="painel-stats-grid" class="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4"></div>
+
+        <div class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
+          <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+            <div class="mb-3 flex items-center justify-between">
+              <h2 class="font-display text-base font-bold uppercase text-white">Pedidos recentes</h2>
+              <button onclick="switchPainelTab('pedidos')" class="text-xs font-bold lilac hover:underline">Ver todos</button>
+            </div>
+            <div id="painel-overview-orders" class="overflow-x-auto"></div>
+          </div>
+
+          <div class="relative overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/15 via-surface to-surface p-5">
+            <div class="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary/25 blur-3xl"></div>
+            <p class="mb-1 text-xs font-bold uppercase tracking-wide lilac">🎰 Roleta diária</p>
+            <h3 class="mb-3 font-display text-lg font-bold text-white">Gire e ganhe recompensas</h3>
+            <div class="relative mx-auto mb-4 flex h-28 w-28 items-center justify-center">
+              <svg viewBox="0 0 100 100" class="h-28 w-28 -rotate-90">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="10"/>
+                <circle id="painel-roleta-progress" cx="50" cy="50" r="42" fill="none" stroke="#7c5cff" stroke-width="10" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264"/>
+              </svg>
+              <span id="painel-roleta-pct" class="absolute font-display text-lg font-bold text-white">0%</span>
+            </div>
+            <p id="painel-roleta-msg" class="mb-4 text-center text-xs text-muted">Compre para desbloquear a roleta de prêmios.</p>
+            <button onclick="goToSorteio()" class="block w-full rounded-xl border border-primary/40 bg-primary/15 py-2.5 text-center text-sm font-bold text-white hover:bg-primary/25">Ver sorteio atual</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <button onclick="switchPainelTab('inventario')" class="painel-quick-card">
+            <span class="text-2xl">🎒</span>
+            <p class="font-display text-sm font-bold uppercase text-white">Meu inventário</p>
+            <p class="text-xs text-muted">Veja tudo que você já comprou</p>
+          </button>
+          <button onclick="switchPainelTab('avaliar')" class="painel-quick-card">
+            <span class="text-2xl">⭐</span>
+            <p class="font-display text-sm font-bold uppercase text-white">Minhas avaliações</p>
+            <p class="text-xs text-muted">Avalie compras e ganhe destaque</p>
+          </button>
+          <button onclick="switchPainelTab('suporte')" class="painel-quick-card">
+            <span class="text-2xl">🎧</span>
+            <p class="font-display text-sm font-bold uppercase text-white">Central de suporte</p>
+            <p class="text-xs text-muted">Fale com nossa equipe</p>
+          </button>
+        </div>
+      </section>
+
+      <!-- B) MEUS PEDIDOS -->
+      <section id="painel-tab-pedidos" class="hidden">
+        <div class="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <h1 class="font-display text-2xl font-bold text-white">Meus pedidos</h1>
+          <button onclick="goToStore(); setTimeout(()=>document.getElementById('catalogo')?.scrollIntoView({behavior:'smooth'}),30);" class="shrink-0 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">+ Nova compra</button>
+        </div>
+
+        <div id="painel-pedidos-summary" class="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4"></div>
+
+        <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <input id="painel-pedidos-search" oninput="renderPainelPedidosTable()" placeholder="Buscar por produto ou nº do pedido..." class="w-full rounded-lg border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary sm:max-w-xs" />
+          <div id="painel-pedidos-filters" class="hide-scrollbar flex gap-2 overflow-x-auto"></div>
+        </div>
+
+        <div class="overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03]">
+          <table class="w-full text-left text-sm">
+            <thead class="border-b border-white/10 text-muted">
+              <tr><th class="px-4 py-3">Pedido</th><th class="px-4 py-3">Produto</th><th class="px-4 py-3">Data</th><th class="px-4 py-3">Pagamento</th><th class="px-4 py-3">Valor</th><th class="px-4 py-3">Status</th><th class="px-4 py-3"></th></tr>
+            </thead>
+            <tbody id="painel-pedidos-table"></tbody>
+          </table>
+        </div>
+        <p id="painel-pedidos-pagination" class="mt-4 text-center text-xs text-muted"></p>
+      </section>
+
+      <!-- C) AVALIAR PRODUTOS -->
+      <section id="painel-tab-avaliar" class="hidden">
+        <h1 class="font-display text-2xl font-bold text-white">Avaliar produtos</h1>
+        <p class="mt-1 text-sm text-muted">Conte sua experiência com o que você comprou — sua opinião ajuda outros clientes (e alguns cupons podem estar rolando por aí 😉).</p>
+
+        <div class="my-5 grid grid-cols-2 gap-3 sm:max-w-sm">
+          <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p id="painel-avaliar-pendentes-count" class="font-display text-2xl font-bold text-white">0</p>
+            <p class="text-xs text-muted">Aguardando avaliação</p>
+          </div>
+          <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p id="painel-avaliar-enviadas-count" class="font-display text-2xl font-bold text-white">0</p>
+            <p class="text-xs text-muted">Avaliações enviadas</p>
+          </div>
+        </div>
+
+        <h2 class="mb-3 font-display text-sm font-bold uppercase tracking-wide text-muted">Aguardando avaliação</h2>
+        <div id="painel-avaliar-pendentes" class="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2"></div>
+
+        <h2 class="mb-3 font-display text-sm font-bold uppercase tracking-wide text-muted">Suas avaliações enviadas</h2>
+        <div id="painel-avaliar-enviadas" class="grid grid-cols-1 gap-4 sm:grid-cols-2"></div>
+      </section>
+
+      <!-- INVENTÁRIO -->
+      <section id="painel-tab-inventario" class="hidden">
+        <h1 class="mb-1 font-display text-2xl font-bold text-white">Inventário</h1>
+        <p class="mb-5 text-sm text-muted">Todos os produtos que você já adquiriu na NovaStore.</p>
+        <div id="painel-inventario-grid" class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"></div>
+      </section>
+
+      <!-- D) MEU PERFIL -->
+      <section id="painel-tab-perfil" class="hidden">
+        <div class="mb-6 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-center gap-4">
+            <span id="painel-perfil-avatar" class="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-2xl font-black text-white">?</span>
+            <div>
+              <p id="painel-perfil-name" class="font-display text-lg font-bold text-white">—</p>
+              <p id="painel-perfil-email" class="text-sm text-muted">—</p>
+              <p id="painel-perfil-membro-desde" class="text-xs text-muted"></p>
+            </div>
+          </div>
+          <span id="painel-perfil-verificado" class="hidden shrink-0 self-start rounded-full bg-accent/15 px-3 py-1.5 text-xs font-bold text-accent sm:self-center">✓ E-mail verificado</span>
+        </div>
+
+        <div class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
+          <div class="flex flex-col gap-5">
+            <!-- ranking -->
+            <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+              <div class="mb-3 flex items-center justify-between">
+                <h2 class="font-display text-sm font-bold uppercase tracking-wide text-white">Ranking</h2>
+                <span id="painel-rank-atual" class="rounded-full bg-primary/15 px-3 py-1 text-xs font-bold lilac">Bronze</span>
+              </div>
+              <div class="mb-2 h-2.5 w-full overflow-hidden rounded-full bg-white/10">
+                <div id="painel-rank-bar" class="h-full rounded-full bg-gradient-to-r from-primary to-accent transition-all duration-700" style="width:0%"></div>
+              </div>
+              <p id="painel-rank-msg" class="mb-4 text-xs text-muted">Continue comprando para subir de nível.</p>
+              <div class="grid grid-cols-4 gap-2 text-center text-[10px] font-bold uppercase text-muted">
+                <div class="rounded-lg border border-white/10 py-2">🥉 Bronze</div>
+                <div class="rounded-lg border border-white/10 py-2">🥈 Silver</div>
+                <div class="rounded-lg border border-white/10 py-2">🥇 Gold</div>
+                <div class="rounded-lg border border-white/10 py-2">💎 Diamond</div>
+              </div>
+            </div>
+
+            <!-- dados pessoais -->
+            <form id="painel-profile-form" class="rounded-2xl border border-white/10 bg-white/[0.03] p-5" onsubmit="event.preventDefault(); savePainelProfile();">
+              <h2 class="mb-4 font-display text-sm font-bold uppercase tracking-wide text-white">Dados pessoais</h2>
+              <div class="mb-3">
+                <label class="mb-1 block text-xs font-semibold text-muted">Nome de usuário</label>
+                <input id="painel-profile-name-input" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+              </div>
+              <div class="mb-3">
+                <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
+                <input id="painel-profile-email-input" disabled class="w-full cursor-not-allowed rounded-lg border border-border bg-surface2/50 px-3 py-2.5 text-sm text-muted outline-none" />
+              </div>
+              <div class="mb-4">
+                <label class="mb-1 block text-xs font-semibold text-muted">Telefone</label>
+                <div class="flex gap-2">
+                  <span class="flex items-center rounded-lg border border-border bg-surface2 px-3 text-sm text-muted">🇧🇷 +55</span>
+                  <input id="painel-profile-phone-input" placeholder="(00) 00000-0000" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+                </div>
+              </div>
+              <div id="painel-profile-msg" class="hidden mb-3 rounded-lg px-3 py-2 text-xs"></div>
+              <button id="painel-profile-save-btn" class="rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">Salvar alterações</button>
+            </form>
+          </div>
+
+          <!-- benefícios -->
+          <div class="h-fit rounded-2xl border border-accent/25 bg-accent/[0.06] p-5">
+            <p class="mb-3 flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-accent">✓ Cliente verificado</p>
+            <ul class="mb-4 flex flex-col gap-2.5 text-sm text-muted">
+              <li class="flex items-start gap-2"><span class="text-accent">✓</span> Compras liberadas com entrega imediata</li>
+              <li class="flex items-start gap-2"><span class="text-accent">✓</span> Participação na roleta e sorteios</li>
+              <li class="flex items-start gap-2"><span class="text-accent">✓</span> Prioridade no suporte</li>
+            </ul>
+            <p id="painel-perfil-codigo" class="hidden mb-4 rounded-lg bg-surface2/60 px-3 py-2 text-[11px] text-muted"></p>
+            <p class="text-[11px] leading-relaxed text-muted">🔒 Seus dados são usados apenas para identificação de pedidos e suporte. Nunca compartilhamos suas informações com terceiros.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- E) SUPORTE -->
+      <section id="painel-tab-suporte" class="hidden">
+        <h1 class="mb-1 font-display text-2xl font-bold text-white">Central de suporte</h1>
+        <p class="mb-5 text-sm text-muted">Precisa de ajuda com um pedido ou tem alguma dúvida? Fale com a gente.</p>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <button onclick="openChatModal()" class="painel-quick-card items-start text-left">
+            <span class="text-2xl">🎧</span>
+            <p class="font-display text-sm font-bold uppercase text-white">Abrir chat de suporte</p>
+            <p class="text-xs text-muted">Converse direto com a equipe da NovaStore</p>
+          </button>
+          <a href="https://discord.gg/SEU-CONVITE" target="_blank" rel="noopener" class="painel-quick-card items-start text-left">
+            <span class="text-2xl">💬</span>
+            <p class="font-display text-sm font-bold uppercase text-white">Comunidade no Discord</p>
+            <p class="text-xs text-muted">Entre no servidor oficial da NovaStore</p>
+          </a>
+        </div>
+      </section>
+
+      <!-- AFILIADO -->
+      <section id="painel-tab-afiliado" class="hidden">
+        <h1 class="mb-5 font-display text-2xl font-bold text-white">Programa de afiliados</h1>
+        <div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-6 py-16 text-center">
+          <span class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-3xl">🤝</span>
+          <h2 class="font-display text-lg font-bold text-white">Sua conta ainda não é afiliada</h2>
+          <p class="mt-2 max-w-sm text-sm text-muted">Quando sua conta for ativada no programa de afiliados, suas estatísticas de indicações, comissões e links aparecerão aqui.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+<!-- =============== /PAINEL DO CLIENTE =============== -->
+
 <div id="anunciante-form-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeAnuncianteForm()">
   <div class="w-full max-w-sm rounded-2xl border border-border bg-surface p-6">
     <h2 class="mb-5 font-display text-xl font-bold uppercase">Novo Anunciante</h2>
@@ -1166,6 +1476,10 @@ async function handleAuthChange(session) {
   }
   renderAuthUI();
   updatePrivateUnreadBadge();
+  if (location.hash === "#painel") {
+    if (!CURRENT_USER) { location.hash = ""; }
+    else loadPainelCliente();
+  }
 }
 
 async function refreshCurrentProfile() {
@@ -1191,24 +1505,24 @@ function renderAuthUI() {
       avatarEl.textContent = firstName.charAt(0).toUpperCase();
     }
     const codeEl = document.getElementById("user-menu-code");
-    if (CURRENT_PROFILE?.codigo_cliente) {
-      codeEl.textContent = `Seu código de sorteio: ${CURRENT_PROFILE.codigo_cliente}`;
-      codeEl.classList.remove("hidden");
-    } else {
-      codeEl.classList.add("hidden");
+    if (codeEl) {
+      if (CURRENT_PROFILE?.codigo_cliente) {
+        codeEl.textContent = `Seu código de sorteio: ${CURRENT_PROFILE.codigo_cliente}`;
+        codeEl.classList.remove("hidden");
+      } else {
+        codeEl.classList.add("hidden");
+      }
     }
   } else {
     btnLogin.classList.remove("hidden");
     btnUser.classList.add("hidden");
     btnUser.classList.remove("flex");
-    document.getElementById("user-menu").classList.add("hidden");
   }
 }
 
-window.toggleUserMenu = (forceClose = false) => {
-  const menu = document.getElementById("user-menu");
-  if (forceClose) { menu.classList.add("hidden"); return; }
-  menu.classList.toggle("hidden");
+window.goToPainel = () => {
+  if (!CURRENT_USER) { openAuthModal("login"); return; }
+  location.hash = "#painel";
 };
 
 window.toggleMobileMenu = (forceClose = false) => {
@@ -1249,7 +1563,7 @@ window.mobileNavGo = (target) => {
 
 window.openMobileProfileMenu = () => {
   if (!CURRENT_USER) { openAuthModal("login"); return; }
-  toggleUserMenu();
+  goToPainel();
 };
 
 function setActiveMobileNav(target) {
@@ -1258,17 +1572,9 @@ function setActiveMobileNav(target) {
   });
 }
 
-document.addEventListener("click", (e) => {
-  const menu = document.getElementById("user-menu");
-  const trigger = document.getElementById("btn-user");
-  if (menu && !menu.classList.contains("hidden") && !menu.contains(e.target) && !trigger.contains(e.target)) {
-    menu.classList.add("hidden");
-  }
-});
-
 window.logoutUser = async () => {
   await supabase.auth.signOut();
-  toggleUserMenu(true);
+  goToStore();
 };
 
 window.openAuthModal = (tab = "login") => {
@@ -1448,9 +1754,15 @@ function subscribeToPrivateChat() {
 async function updatePrivateUnreadBadge() {
   const dot = document.getElementById("profile-unread-dot");
   const badge = document.getElementById("menu-chat-unread-badge");
-  if (!dot || !badge) return;
+  const painelBadge = document.getElementById("painel-suporte-unread-badge");
+  if (!dot && !badge && !painelBadge) return;
 
-  if (!CURRENT_USER) { dot.classList.add("hidden"); badge.classList.add("hidden"); return; }
+  if (!CURRENT_USER) {
+    dot?.classList.add("hidden");
+    badge?.classList.add("hidden");
+    painelBadge?.classList.add("hidden");
+    return;
+  }
 
   const { count } = await supabase
     .from("chat_privado")
@@ -1460,9 +1772,13 @@ async function updatePrivateUnreadBadge() {
     .is("read_at", null);
 
   const hasUnread = !!count;
-  dot.classList.toggle("hidden", !hasUnread);
-  badge.classList.toggle("hidden", !hasUnread);
-  if (hasUnread) badge.textContent = count > 9 ? "9+" : String(count);
+  dot?.classList.toggle("hidden", !hasUnread);
+  badge?.classList.toggle("hidden", !hasUnread);
+  if (badge && hasUnread) badge.textContent = count > 9 ? "9+" : String(count);
+  if (painelBadge) {
+    painelBadge.classList.toggle("hidden", !hasUnread);
+    painelBadge.textContent = count > 9 ? "9+" : String(count);
+  }
   document.getElementById("mobile-profile-unread-dot")?.classList.toggle("hidden", !hasUnread);
 }
 
@@ -2400,6 +2716,7 @@ function route() {
   document.getElementById("view-store").classList.add("hidden");
   document.getElementById("view-admin").classList.add("hidden");
   document.getElementById("view-sorteio").classList.add("hidden");
+  document.getElementById("view-painel").classList.add("hidden");
 
   if (location.hash === "#admin") {
     document.getElementById("view-admin").classList.remove("hidden");
@@ -2408,6 +2725,11 @@ function route() {
     document.getElementById("view-sorteio").classList.remove("hidden");
     loadSorteioPage();
     window.scrollTo({ top: 0, behavior: "instant" });
+  } else if (location.hash === "#painel") {
+    if (!CURRENT_USER) { location.hash = ""; openAuthModal("login"); return; }
+    document.getElementById("view-painel").classList.remove("hidden");
+    window.scrollTo({ top: 0, behavior: "instant" });
+    loadPainelCliente();
   } else {
     document.getElementById("view-store").classList.remove("hidden");
   }
@@ -4511,6 +4833,396 @@ window.confirmSpinWinner = async () => {
   if (error) { alert("Erro ao salvar vencedor: " + error.message); return; }
   closeSpinModal();
   loadAdminSorteios();
+};
+
+/* ================================================================
+   PAINEL DO CLIENTE — dashboard completo (#painel)
+   Usa dados reais das tabelas: profiles, orders, avaliacoes, chat_privado
+   ================================================================ */
+
+const fmtDate = (iso) => iso ? new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+
+let PAINEL_ORDERS = [];
+let PAINEL_REVIEWS = [];
+let painelPedidosFilter = "todos";
+let painelPendingRatings = {}; // { [productId]: 1..5 }
+
+window.togglePainelSidebar = (forceClose = false) => {
+  const sidebar = document.getElementById("painel-sidebar");
+  const overlay = document.getElementById("painel-sidebar-overlay");
+  if (!sidebar) return;
+  if (forceClose) {
+    sidebar.classList.remove("is-open");
+    overlay.classList.add("hidden");
+    return;
+  }
+  const willOpen = !sidebar.classList.contains("is-open");
+  sidebar.classList.toggle("is-open", willOpen);
+  overlay.classList.toggle("hidden", !willOpen);
+};
+
+window.switchPainelTab = (tab) => {
+  document.querySelectorAll("[id^='painel-tab-']").forEach((el) => el.classList.add("hidden"));
+  document.getElementById(`painel-tab-${tab}`)?.classList.remove("hidden");
+  document.querySelectorAll(".painel-nav-link[data-painel-tab]").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.painelTab === tab);
+  });
+  togglePainelSidebar(true);
+  document.querySelector("#view-painel main")?.scrollIntoView({ behavior: "instant", block: "start" });
+
+  if (tab === "avaliar") renderPainelAvaliar();
+  if (tab === "inventario") renderPainelInventario();
+  if (tab === "pedidos") renderPainelPedidosTable();
+};
+
+/* ---- carrega tudo que o painel precisa (chamado ao entrar em #painel) ---- */
+async function loadPainelCliente() {
+  if (!CURRENT_USER) return;
+
+  const name = CURRENT_PROFILE?.full_name || CURRENT_USER.email.split("@")[0];
+  const firstName = name.trim().split(" ")[0];
+
+  document.getElementById("painel-user-name").textContent = name;
+  document.getElementById("painel-overview-name").textContent = firstName;
+  const avatarHTML = CURRENT_PROFILE?.avatar_url
+    ? `<img src="${CURRENT_PROFILE.avatar_url}" class="h-full w-full object-cover" />`
+    : firstName.charAt(0).toUpperCase();
+  document.getElementById("painel-avatar").innerHTML = avatarHTML;
+  document.getElementById("painel-perfil-avatar").innerHTML = avatarHTML;
+
+  document.getElementById("painel-overview-date").textContent = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+
+  const { data: orders, error } = await supabase.from("orders").select("*").eq("customer_id", CURRENT_USER.id).order("created_at", { ascending: false });
+  if (error) { console.error(error); }
+  PAINEL_ORDERS = orders || [];
+
+  const { data: reviews } = await supabase.from("avaliacoes").select("*").eq("customer_id", CURRENT_USER.id);
+  PAINEL_REVIEWS = reviews || [];
+
+  renderPainelOverviewStats();
+  renderPainelOverviewOrders();
+  renderPainelRoleta();
+  renderPainelPedidosSummary();
+  renderPainelPedidosFilters();
+  renderPainelPedidosTable();
+  renderPainelPerfil();
+  updatePrivateUnreadBadge();
+
+  // se nenhuma aba estiver visível ainda (primeira entrada), mostra a visão geral
+  const anyVisible = [...document.querySelectorAll("[id^='painel-tab-']")].some((el) => !el.classList.contains("hidden"));
+  if (!anyVisible) switchPainelTab("overview");
+}
+
+function painelOrderStatus(status) {
+  const map = {
+    PAGO: { label: "Entregue", cls: "bg-accent/15 text-accent" },
+    PENDENTE: { label: "Pendente", cls: "bg-yellow-500/15 text-yellow-400" },
+    CANCELADO: { label: "Cancelado", cls: "bg-red-500/15 text-red-400" },
+    EXPIRADO: { label: "Expirado", cls: "bg-red-500/15 text-red-400" },
+  };
+  return map[status] || { label: status || "—", cls: "bg-white/10 text-muted" };
+}
+
+function painelOrderProductLabel(o) {
+  const first = (o.items || [])[0];
+  if (!first) return "Pedido";
+  const extra = o.items.length > 1 ? ` +${o.items.length - 1}` : "";
+  return `${first.name}${first.planName ? ` (${first.planName})` : ""}${extra}`;
+}
+
+/* ---------------- A) Visão geral ---------------- */
+function renderPainelOverviewStats() {
+  const totalPedidos = PAINEL_ORDERS.length;
+  const totalGasto = PAINEL_ORDERS.filter((o) => o.status === "PAGO").reduce((s, o) => s + Number(o.total || 0), 0);
+  const pendentes = PAINEL_ORDERS.filter((o) => o.status === "PENDENTE").length;
+  const entregues = PAINEL_ORDERS.filter((o) => o.status === "PAGO").length;
+
+  const cards = [
+    { icon: "🧾", label: "Pedidos totais", value: totalPedidos, sub: "Desde que você entrou" },
+    { icon: "💰", label: "Total gasto", value: fmt(totalGasto), sub: "Em pedidos entregues" },
+    { icon: "⏳", label: "Pagamentos pendentes", value: pendentes, sub: "Aguardando confirmação do Pix" },
+    { icon: "✅", label: "Pedidos entregues", value: entregues, sub: "Liberados automaticamente" },
+  ];
+
+  document.getElementById("painel-stats-grid").innerHTML = cards.map((c) => `
+    <div class="painel-stat-card">
+      <span class="text-xl">${c.icon}</span>
+      <p class="mt-2 font-display text-xl font-bold text-white sm:text-2xl">${c.value}</p>
+      <p class="text-[11px] font-bold uppercase tracking-wide text-muted">${c.label}</p>
+      <p class="mt-1 text-[11px] text-muted">${c.sub}</p>
+    </div>`).join("");
+}
+
+function renderPainelOverviewOrders() {
+  const el = document.getElementById("painel-overview-orders");
+  const recent = PAINEL_ORDERS.slice(0, 5);
+  if (!recent.length) {
+    el.innerHTML = `<div class="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted"><span class="text-3xl">🛒</span>Você ainda não fez nenhum pedido.</div>`;
+    return;
+  }
+  el.innerHTML = `<table class="w-full text-left text-sm">
+    <thead class="border-b border-white/10 text-muted"><tr><th class="py-2 pr-3">Pedido</th><th class="py-2 pr-3">Produto</th><th class="py-2 pr-3">Data</th><th class="py-2 pr-3">Valor</th><th class="py-2">Status</th></tr></thead>
+    <tbody>${recent.map((o) => {
+      const st = painelOrderStatus(o.status);
+      return `<tr class="border-b border-white/5 last:border-0">
+        <td class="py-2.5 pr-3 font-mono text-xs text-muted">#${o.id.slice(0, 6).toUpperCase()}</td>
+        <td class="py-2.5 pr-3 text-white">${escapeHTML(painelOrderProductLabel(o))}</td>
+        <td class="py-2.5 pr-3 text-muted">${fmtDate(o.created_at)}</td>
+        <td class="py-2.5 pr-3 font-bold text-white">${fmt(o.total)}</td>
+        <td class="py-2.5"><span class="painel-status-badge ${st.cls}">${st.label}</span></td>
+      </tr>`;
+    }).join("")}</tbody></table>`;
+}
+
+/* card gamificado — meta simples de R$150 para "girar" (visual, sem mecânica própria:
+   aponta pro sistema de sorteio real que já existe no site) */
+function renderPainelRoleta() {
+  const GOAL = 150;
+  const gasto = PAINEL_ORDERS.filter((o) => o.status === "PAGO").reduce((s, o) => s + Number(o.total || 0), 0);
+  const pct = Math.max(0, Math.min(100, Math.round((gasto / GOAL) * 100)));
+  const circumference = 264;
+  const offset = circumference - (circumference * pct) / 100;
+  document.getElementById("painel-roleta-progress").setAttribute("stroke-dashoffset", offset);
+  document.getElementById("painel-roleta-pct").textContent = `${pct}%`;
+  document.getElementById("painel-roleta-msg").textContent = pct >= 100
+    ? "Meta atingida! Você já concorre no sorteio ativo 🎉"
+    : `Faltam ${fmt(Math.max(0, GOAL - gasto))} em compras para concorrer com prioridade.`;
+}
+
+/* ---------------- B) Meus pedidos ---------------- */
+function renderPainelPedidosSummary() {
+  const total = PAINEL_ORDERS.length;
+  const entregues = PAINEL_ORDERS.filter((o) => o.status === "PAGO").length;
+  const andamento = PAINEL_ORDERS.filter((o) => o.status === "PENDENTE").length;
+  const investido = PAINEL_ORDERS.filter((o) => o.status === "PAGO").reduce((s, o) => s + Number(o.total || 0), 0);
+  const cards = [
+    { label: "Total de pedidos", value: total },
+    { label: "Entregues", value: entregues },
+    { label: "Em andamento", value: andamento },
+    { label: "Total investido", value: fmt(investido) },
+  ];
+  document.getElementById("painel-pedidos-summary").innerHTML = cards.map((c) => `
+    <div class="painel-stat-card"><p class="font-display text-xl font-bold text-white">${c.value}</p><p class="text-[11px] font-bold uppercase text-muted">${c.label}</p></div>
+  `).join("");
+}
+
+function renderPainelPedidosFilters() {
+  const filters = [
+    { key: "todos", label: "Todos" },
+    { key: "PAGO", label: "Entregue" },
+    { key: "PENDENTE", label: "Pendente" },
+    { key: "CANCELADO", label: "Cancelado" },
+  ];
+  document.getElementById("painel-pedidos-filters").innerHTML = filters.map((f) => `
+    <button onclick="painelPedidosFilter='${f.key}'; renderPainelPedidosFilters(); renderPainelPedidosTable();" class="painel-filter-btn ${painelPedidosFilter === f.key ? "is-active" : ""}">${f.label}</button>
+  `).join("");
+}
+
+window.renderPainelPedidosTable = () => {
+  const tbody = document.getElementById("painel-pedidos-table");
+  if (!tbody) return;
+  const q = (document.getElementById("painel-pedidos-search")?.value || "").trim().toLowerCase();
+
+  let rows = PAINEL_ORDERS;
+  if (painelPedidosFilter !== "todos") rows = rows.filter((o) => o.status === painelPedidosFilter);
+  if (q) rows = rows.filter((o) => o.id.toLowerCase().includes(q) || painelOrderProductLabel(o).toLowerCase().includes(q));
+
+  const PAGE_SIZE = 8;
+  const page = 1; // paginação simples de uma página por vez, dá pra evoluir depois
+  const shown = rows.slice(0, PAGE_SIZE);
+
+  if (!shown.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-8 text-center text-sm text-muted">Nenhum pedido encontrado.</td></tr>`;
+  } else {
+    tbody.innerHTML = shown.map((o) => {
+      const st = painelOrderStatus(o.status);
+      return `<tr class="border-b border-white/5 last:border-0">
+        <td class="px-4 py-3 font-mono text-xs text-muted">#${o.id.slice(0, 6).toUpperCase()}</td>
+        <td class="px-4 py-3 text-white">${escapeHTML(painelOrderProductLabel(o))}</td>
+        <td class="px-4 py-3 text-muted">${fmtDate(o.created_at)}</td>
+        <td class="px-4 py-3 text-muted">Pix</td>
+        <td class="px-4 py-3 font-bold text-white">${fmt(o.total)}</td>
+        <td class="px-4 py-3"><span class="painel-status-badge ${st.cls}">${st.label}</span></td>
+        <td class="px-4 py-3 text-right"><button onclick="togglePainelOrderDetail('${o.id}')" class="text-muted hover:text-white">▾</button></td>
+      </tr>
+      <tr id="painel-order-detail-${o.id}" class="hidden border-b border-white/5 bg-white/[0.02]">
+        <td colspan="7" class="px-4 py-3 text-xs text-muted">
+          ${(o.items || []).map((it) => `• ${escapeHTML(it.name)}${it.planName ? ` (${escapeHTML(it.planName)})` : ""} — ${fmt(it.price)} x${it.quantity || 1}`).join("<br/>")}
+          <div class="mt-2"><button onclick="openChatModal()" class="text-xs font-bold lilac hover:underline">💬 Falar com o suporte sobre este pedido</button></div>
+        </td>
+      </tr>`;
+    }).join("");
+  }
+  document.getElementById("painel-pedidos-pagination").textContent = rows.length > PAGE_SIZE
+    ? `Mostrando ${shown.length} de ${rows.length} pedidos`
+    : (rows.length ? `${rows.length} pedido${rows.length > 1 ? "s" : ""}` : "");
+};
+
+window.togglePainelOrderDetail = (id) => {
+  document.getElementById(`painel-order-detail-${id}`)?.classList.toggle("hidden");
+};
+
+/* ---------------- Inventário (produtos comprados) ---------------- */
+function renderPainelInventario() {
+  const grid = document.getElementById("painel-inventario-grid");
+  const paidOrders = PAINEL_ORDERS.filter((o) => o.status === "PAGO");
+  const items = paidOrders.flatMap((o) => (o.items || []).map((it) => ({ ...it, orderId: o.id, date: o.created_at })));
+
+  if (!items.length) {
+    grid.innerHTML = `<div class="col-span-full flex flex-col items-center gap-2 rounded-2xl border border-dashed border-white/15 py-16 text-center text-sm text-muted"><span class="text-3xl">🎒</span>Seu inventário está vazio por enquanto.</div>`;
+    return;
+  }
+
+  grid.innerHTML = items.map((it) => {
+    const product = ALL_PRODUCTS.find((p) => p.id === it.productId);
+    return `<div class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3.5">
+      <div class="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-surface2">
+        ${product?.image_url ? `<img src="${product.image_url}" class="h-full w-full object-cover" />` : `<div class="flex h-full items-center justify-center text-muted">📦</div>`}
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-sm font-bold text-white">${escapeHTML(it.name)}${it.planName ? ` <span class="text-muted font-normal">(${escapeHTML(it.planName)})</span>` : ""}</p>
+        <p class="text-xs text-muted">Comprado em ${fmtDate(it.date)}</p>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+/* ---------------- C) Avaliar produtos ---------------- */
+async function renderPainelAvaliar() {
+  const paidOrders = PAINEL_ORDERS.filter((o) => o.status === "PAGO");
+  const purchasedMap = new Map();
+  paidOrders.forEach((o) => (o.items || []).forEach((it) => { if (!purchasedMap.has(it.productId)) purchasedMap.set(it.productId, it.name); }));
+
+  const reviewedIds = new Set(PAINEL_REVIEWS.map((r) => r.product_id));
+  const pending = [...purchasedMap.entries()].filter(([id]) => !reviewedIds.has(id));
+
+  document.getElementById("painel-avaliar-pendentes-count").textContent = pending.length;
+  document.getElementById("painel-avaliar-enviadas-count").textContent = PAINEL_REVIEWS.length;
+
+  const pendEl = document.getElementById("painel-avaliar-pendentes");
+  if (!pending.length) {
+    pendEl.innerHTML = `<div class="col-span-full flex flex-col items-center gap-2 rounded-2xl border border-dashed border-white/15 py-12 text-center text-sm text-muted"><span class="text-3xl">🎉</span>Você avaliou tudo que comprou. Obrigado!</div>`;
+  } else {
+    pendEl.innerHTML = pending.map(([productId, name]) => `
+      <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <p class="truncate text-sm font-bold text-white">${escapeHTML(name)}</p>
+          <span class="shrink-0 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-bold text-accent">Compra verificada</span>
+        </div>
+        <div class="mb-2 flex gap-1" id="painel-stars-${productId}">
+          ${[1, 2, 3, 4, 5].map((n) => `<button type="button" onclick="setPainelRating('${productId}', ${n})" class="painel-star" data-star="${n}">★</button>`).join("")}
+        </div>
+        <textarea id="painel-comment-${productId}" maxlength="500" oninput="document.getElementById('painel-count-${productId}').textContent = this.value.length" placeholder="Conte como foi sua experiência..." class="mb-1 w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" rows="3"></textarea>
+        <p class="mb-3 text-right text-[10px] text-muted"><span id="painel-count-${productId}">0</span>/500</p>
+        <button onclick="submitPainelReview('${productId}')" class="w-full rounded-lg bg-primary py-2.5 text-sm font-bold text-white hover:bg-primaryhover">Enviar avaliação</button>
+      </div>`).join("");
+  }
+
+  const sentEl = document.getElementById("painel-avaliar-enviadas");
+  sentEl.innerHTML = PAINEL_REVIEWS.length ? PAINEL_REVIEWS.map((r) => `
+    <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <p class="mb-1 text-sm font-bold text-white">${escapeHTML(purchasedMap.get(r.product_id) || "Produto")}</p>
+      <div class="mb-2 text-sm text-accent">${"★".repeat(r.rating)}${"☆".repeat(5 - r.rating)}</div>
+      <p class="text-xs text-muted">${escapeHTML(r.comment || "")}</p>
+    </div>`).join("") : `<div class="col-span-full text-sm text-muted">Você ainda não enviou nenhuma avaliação.</div>`;
+}
+
+window.setPainelRating = (productId, n) => {
+  painelPendingRatings[productId] = n;
+  document.querySelectorAll(`#painel-stars-${productId} .painel-star`).forEach((btn) => {
+    btn.classList.toggle("is-filled", Number(btn.dataset.star) <= n);
+  });
+};
+
+window.submitPainelReview = async (productId) => {
+  const rating = painelPendingRatings[productId];
+  const comment = document.getElementById(`painel-comment-${productId}`)?.value.trim();
+  if (!rating) { alert("Selecione de 1 a 5 estrelas."); return; }
+  if (!comment) { alert("Escreva um comentário rápido sobre o produto."); return; }
+
+  const customerName = CURRENT_PROFILE?.full_name || CURRENT_USER.email.split("@")[0];
+  const { error } = await supabase.from("avaliacoes").upsert({
+    customer_id: CURRENT_USER.id, product_id: productId, customer_name: customerName, rating, comment,
+  }, { onConflict: "customer_id,product_id" });
+
+  if (error) { alert("Erro ao enviar avaliação: " + error.message); return; }
+
+  const { data: reviews } = await supabase.from("avaliacoes").select("*").eq("customer_id", CURRENT_USER.id);
+  PAINEL_REVIEWS = reviews || [];
+  renderPainelAvaliar();
+  renderDepoimentosMarquee();
+};
+
+/* ---------------- D) Meu perfil ---------------- */
+function painelRankTier(totalGasto) {
+  if (totalGasto >= 1500) return { name: "Diamond", next: null, floor: 1500 };
+  if (totalGasto >= 500) return { name: "Gold", next: { name: "Diamond", goal: 1500 }, floor: 500 };
+  if (totalGasto >= 200) return { name: "Silver", next: { name: "Gold", goal: 500 }, floor: 200 };
+  return { name: "Bronze", next: { name: "Silver", goal: 200 }, floor: 0 };
+}
+
+function renderPainelPerfil() {
+  const name = CURRENT_PROFILE?.full_name || CURRENT_USER.email.split("@")[0];
+  document.getElementById("painel-perfil-name").textContent = name;
+  document.getElementById("painel-perfil-email").textContent = CURRENT_USER.email;
+  document.getElementById("painel-profile-name-input").value = CURRENT_PROFILE?.full_name || "";
+  document.getElementById("painel-profile-email-input").value = CURRENT_USER.email;
+  document.getElementById("painel-profile-phone-input").value = CURRENT_PROFILE?.phone || "";
+
+  const memberSince = CURRENT_USER.created_at ? fmtDate(CURRENT_USER.created_at) : "—";
+  document.getElementById("painel-perfil-membro-desde").textContent = `Membro desde ${memberSince}`;
+  document.getElementById("painel-perfil-verificado").classList.toggle("hidden", !CURRENT_USER.email_confirmed_at);
+
+  const codeEl = document.getElementById("painel-perfil-codigo");
+  if (CURRENT_PROFILE?.codigo_cliente) {
+    codeEl.textContent = `Seu código de sorteio: ${CURRENT_PROFILE.codigo_cliente}`;
+    codeEl.classList.remove("hidden");
+  } else {
+    codeEl.classList.add("hidden");
+  }
+
+  const totalGasto = PAINEL_ORDERS.filter((o) => o.status === "PAGO").reduce((s, o) => s + Number(o.total || 0), 0);
+  const tier = painelRankTier(totalGasto);
+  document.getElementById("painel-rank-atual").textContent = tier.name;
+  if (tier.next) {
+    const span = tier.next.goal - tier.floor;
+    const progressed = totalGasto - tier.floor;
+    const pct = Math.max(4, Math.min(100, Math.round((progressed / span) * 100)));
+    document.getElementById("painel-rank-bar").style.width = `${pct}%`;
+    document.getElementById("painel-rank-msg").textContent = `Faltam ${fmt(Math.max(0, tier.next.goal - totalGasto))} para o nível ${tier.next.name}.`;
+  } else {
+    document.getElementById("painel-rank-bar").style.width = "100%";
+    document.getElementById("painel-rank-msg").textContent = "Você atingiu o nível máximo. 💎";
+  }
+}
+
+window.savePainelProfile = async () => {
+  const btn = document.getElementById("painel-profile-save-btn");
+  const msgEl = document.getElementById("painel-profile-msg");
+  const full_name = document.getElementById("painel-profile-name-input").value.trim();
+  const phone = document.getElementById("painel-profile-phone-input").value.trim();
+
+  btn.disabled = true;
+  btn.textContent = "Salvando...";
+  msgEl.classList.add("hidden");
+
+  const { error } = await supabase.from("profiles").update({ full_name, phone }).eq("id", CURRENT_USER.id);
+
+  btn.disabled = false;
+  btn.textContent = "Salvar alterações";
+  msgEl.classList.remove("hidden");
+  if (error) {
+    msgEl.className = "mb-3 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400";
+    msgEl.textContent = error.message.includes("phone")
+      ? "Erro ao salvar telefone — verifique se a coluna 'phone' existe na tabela profiles."
+      : "Erro ao salvar: " + error.message;
+    return;
+  }
+  msgEl.className = "mb-3 rounded-lg bg-accent/10 px-3 py-2 text-xs text-accent";
+  msgEl.textContent = "Alterações salvas com sucesso!";
+  await refreshCurrentProfile();
+  renderAuthUI();
+  renderPainelPerfil();
 };
 
 route();
