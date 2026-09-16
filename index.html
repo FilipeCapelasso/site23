@@ -733,6 +733,9 @@
         <button id="admin-tab-btn-tickets" onclick="switchAdminTab('tickets')" class="admin-tab-btn relative shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Tickets
           <span id="admin-tickets-unread-badge" class="hidden absolute -right-2 -top-1 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
         </button>
+        <button id="admin-tab-btn-convencer" onclick="switchAdminTab('convencer')" class="admin-tab-btn relative shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">🎯 Convencer Cliente
+          <span id="admin-convencer-unread-badge" class="hidden absolute -right-2 -top-1 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
+        </button>
         <button id="admin-tab-btn-appearance" onclick="switchAdminTab('appearance')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Aparência do site</button>
         <button id="admin-tab-btn-anunciantes" onclick="switchAdminTab('anunciantes')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Anunciantes</button>
         <button id="admin-tab-btn-sorteios" onclick="switchAdminTab('sorteios')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Sorteios</button>
@@ -799,6 +802,22 @@
             <div class="flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted">
               <span class="text-3xl">🎫</span>
               Selecione um ticket à esquerda para ver e responder ao cliente.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="admin-tab-convencer" class="hidden">
+        <h1 class="mb-6 font-display text-2xl font-bold uppercase">🎯 Convencer Cliente</h1>
+        <p class="mb-6 text-sm text-muted">Contato direto e proativo para ajudar um cliente indeciso a fechar a compra. A conversa acontece pelo chat de Amigos dele — nele, você aparece como <span class="font-bold text-white">"ADMIN 👑"</span>, nunca com o seu perfil pessoal.</p>
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
+          <div class="overflow-hidden rounded-2xl border border-border bg-surface">
+            <div id="admin-convencer-list" class="max-h-[65vh] overflow-y-auto"></div>
+          </div>
+          <div id="admin-convencer-detail" class="flex min-h-[65vh] flex-col overflow-hidden rounded-2xl border border-border bg-surface">
+            <div class="flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted">
+              <span class="text-3xl">🎯</span>
+              Selecione uma conversa à esquerda, ou clique em "📩 Mandar mensagem" no perfil de um cliente na aba Contas.
             </div>
           </div>
         </div>
@@ -903,6 +922,22 @@
               <tr><th class="px-4 py-3">Código</th><th class="px-4 py-3">Nome do Anunciante</th><th class="px-4 py-3">Total de Vendas</th><th class="px-4 py-3 text-right">Ações</th></tr>
             </thead>
             <tbody id="anunciantes-table"></tbody>
+          </table>
+        </div>
+
+        <div class="mb-4 mt-10 flex items-center justify-between">
+          <div>
+            <h2 class="font-display text-xl font-bold uppercase">🤝 Clientes Afiliados</h2>
+            <p class="mt-1 text-sm text-muted">Clientes comuns que viraram afiliados pelo botão "Afiliar conta" na aba Contas — com o código deles, os convites enviados e o desempenho de cada um.</p>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto rounded-2xl border border-border bg-surface">
+          <table class="w-full text-left text-sm">
+            <thead class="border-b border-border text-muted">
+              <tr><th class="px-4 py-3">Cliente</th><th class="px-4 py-3">Código</th><th class="px-4 py-3">Clientes que compraram</th><th class="px-4 py-3">Comissão total</th><th class="px-4 py-3 text-right">Ações</th></tr>
+            </thead>
+            <tbody id="clientes-afiliados-table"></tbody>
           </table>
         </div>
       </section>
@@ -3398,7 +3433,7 @@ function stopLightningEffect() {
 }
 
 window.switchAdminTab = (tab) => {
-  const tabs = ["products", "conversas", "mensagens", "tickets", "appearance", "anunciantes", "sorteios", "contas"];
+  const tabs = ["products", "conversas", "mensagens", "tickets", "convencer", "appearance", "anunciantes", "sorteios", "contas"];
   tabs.forEach((t) => {
     const isActive = t === tab;
     document.getElementById(`admin-tab-${t}`).classList.toggle("hidden", !isActive);
@@ -3412,6 +3447,7 @@ window.switchAdminTab = (tab) => {
   if (tab === "conversas") loadAdminConversas();
   if (tab === "mensagens") loadAdminMensagens();
   if (tab === "tickets") loadAdminTickets();
+  if (tab === "convencer") loadAdminConvencer();
   if (tab === "anunciantes") loadAdminAnunciantes();
   if (tab === "sorteios") loadAdminSorteios();
   if (tab === "contas") loadAdminContas();
@@ -4724,6 +4760,235 @@ function subscribeAdminMensagemThread(customerId) {
     .subscribe();
 }
 
+/* =========================================================================
+   PAINEL ADMIN — ABA "🎯 CONVENCER CLIENTE": mesmo sistema de Amigos/Mensagens
+   (tabela mensagens_privadas) usado pela função "📩 Mandar mensagem" na aba
+   Contas. É uma caixa de entrada só para essas conversas de venda proativa —
+   totalmente separada do chat de suporte geral (aba "Mensagens") e dos
+   tickets formais (aba "Tickets").
+   ========================================================================= */
+
+let ADMIN_CONVENCER_CLIENTES = [];
+let currentAdminConvencerCustomerId = null;
+let adminConvencerRealtimeChannel = null;
+let adminConvencerListChannel = null;
+
+async function loadAdminConvencer() {
+  const list = document.getElementById("admin-convencer-list");
+  list.innerHTML = `<div class="p-4 text-sm text-muted">Carregando conversas...</div>`;
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const adminId = session.user.id;
+
+  const { data: msgs, error } = await supabase
+    .from("mensagens_privadas")
+    .select("sender_id, receiver_id, message_text, read_at, created_at")
+    .or(`sender_id.eq.${adminId},receiver_id.eq.${adminId}`)
+    .order("created_at", { ascending: false });
+
+  if (error) { list.innerHTML = `<div class="p-4 text-sm text-red-400">Erro: ${error.message}</div>`; return; }
+
+  const byCustomer = new Map();
+  for (const m of msgs || []) {
+    const clienteId = m.sender_id === adminId ? m.receiver_id : m.sender_id;
+    if (!byCustomer.has(clienteId)) byCustomer.set(clienteId, { last: m, unread: 0 });
+    if (m.receiver_id === adminId && !m.read_at) byCustomer.get(clienteId).unread++;
+  }
+
+  const customerIds = [...byCustomer.keys()];
+  updateAdminConvencerTabBadge([...byCustomer.values()].reduce((sum, c) => sum + c.unread, 0));
+
+  if (!customerIds.length) {
+    list.innerHTML = `<div class="p-4 text-sm text-muted">Nenhuma conversa iniciada ainda. Use "📩 Mandar mensagem" no perfil de um cliente na aba Contas.</div>`;
+    ADMIN_CONVENCER_CLIENTES = [];
+    subscribeAdminConvencerList(adminId);
+    return;
+  }
+
+  const { data: profiles } = await supabase.from("profiles").select("id, full_name, avatar_url").in("id", customerIds);
+  const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+
+  ADMIN_CONVENCER_CLIENTES = customerIds.map((id) => ({
+    id,
+    name: profileMap.get(id)?.full_name || "Cliente",
+    ...byCustomer.get(id),
+  }));
+
+  list.innerHTML = ADMIN_CONVENCER_CLIENTES.map((c) => `
+    <button onclick='openAdminConvencer(${JSON.stringify(c.id)})' data-customer-id="${c.id}" class="admin-convencer-item block w-full border-b border-border/60 px-4 py-3.5 text-left hover:bg-white/5">
+      <div class="flex items-center justify-between gap-2">
+        <span class="truncate text-sm font-bold text-white">${escapeHTML(c.name)}</span>
+        ${c.unread ? `<span class="shrink-0 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">${c.unread > 9 ? "9+" : c.unread}</span>` : ""}
+      </div>
+      <p class="truncate text-xs text-muted">${escapeHTML(c.last.message_text || "")}</p>
+    </button>`).join("");
+
+  subscribeAdminConvencerList(adminId);
+}
+
+function updateAdminConvencerTabBadge(count) {
+  const badge = document.getElementById("admin-convencer-unread-badge");
+  if (!badge) return;
+  badge.classList.toggle("hidden", !count);
+  if (count) badge.textContent = count > 9 ? "9+" : String(count);
+}
+
+window.openAdminConvencer = async (customerId) => {
+  currentAdminConvencerCustomerId = customerId;
+  document.querySelectorAll(".admin-convencer-item").forEach((el) => el.classList.toggle("bg-white/5", el.dataset.customerId === customerId));
+  const client = ADMIN_CONVENCER_CLIENTES.find((c) => c.id === customerId);
+  const detail = document.getElementById("admin-convencer-detail");
+
+  detail.innerHTML = `
+    <div class="border-b border-border p-4">
+      <p class="text-sm font-bold text-white">${escapeHTML(client?.name || "Cliente")}</p>
+      <p class="text-[11px] text-muted">Você aparece pra ele(a) como "ADMIN 👑"</p>
+    </div>
+    <div id="admin-convencer-messages" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
+    <form id="admin-convencer-form" class="flex items-center gap-2 border-t border-border p-3">
+      <input id="admin-convencer-input" autocomplete="off" maxlength="500" placeholder="Digite a mensagem..." class="flex-1 rounded-full border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary" />
+      <button class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white hover:bg-primaryhover">➤</button>
+    </form>
+  `;
+  document.getElementById("admin-convencer-form").onsubmit = (e) => { e.preventDefault(); sendAdminConvencerMessage(customerId); };
+  await loadAdminConvencerThread(customerId);
+  subscribeAdminConvencerThread(customerId);
+};
+
+async function loadAdminConvencerThread(customerId) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const adminId = session.user.id;
+
+  const { data: msgs } = await supabase
+    .from("mensagens_privadas")
+    .select("*")
+    .or(`and(sender_id.eq.${adminId},receiver_id.eq.${customerId}),and(sender_id.eq.${customerId},receiver_id.eq.${adminId})`)
+    .order("created_at", { ascending: true });
+
+  renderAdminConvencerThread(msgs || [], adminId);
+
+  const unreadIds = (msgs || []).filter((m) => m.receiver_id === adminId && !m.read_at).map((m) => m.id);
+  if (unreadIds.length) {
+    await supabase.from("mensagens_privadas").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
+    updateAdminConvencerTabBadge(0);
+  }
+}
+
+function renderAdminConvencerThread(msgs, adminId) {
+  const el = document.getElementById("admin-convencer-messages");
+  if (!el) return;
+  if (!msgs.length) {
+    el.innerHTML = `<div class="flex h-full items-center justify-center p-6 text-center text-sm text-muted">Nenhuma mensagem ainda.</div>`;
+    return;
+  }
+  el.innerHTML = msgs.map((m) => {
+    const fromAdmin = m.sender_id === adminId;
+    return `<div class="flex ${fromAdmin ? "justify-end" : "justify-start"}">
+      <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${fromAdmin ? "bg-primary text-white" : "bg-surface2 text-white"}">
+        ${m.message_text ? escapeHTML(m.message_text) : (m.image_url ? `<img src="${m.image_url}" class="max-w-[200px] rounded-lg" />` : "")}
+      </div>
+    </div>`;
+  }).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendAdminConvencerMessage(customerId) {
+  const input = document.getElementById("admin-convencer-input");
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const { error } = await supabase.from("mensagens_privadas").insert({
+    sender_id: session.user.id,
+    receiver_id: customerId,
+    message_text: text,
+  });
+  if (error) alert("Erro ao enviar mensagem: " + error.message);
+}
+
+function subscribeAdminConvencerThread(customerId) {
+  if (adminConvencerRealtimeChannel) supabase.removeChannel(adminConvencerRealtimeChannel);
+  adminConvencerRealtimeChannel = supabase
+    .channel(`admin-convencer-${customerId}`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "mensagens_privadas" }, (payload) => {
+      const m = payload.new;
+      if (m.sender_id === customerId || m.receiver_id === customerId) loadAdminConvencerThread(customerId);
+    })
+    .subscribe();
+}
+
+/* Tabela de "Clientes Afiliados" dentro da aba Anunciantes: junta profiles
+   (quem é afiliado) com afiliados_indicacoes (quem comprou usando o código
+   de cada um e quanto de comissão isso gerou). */
+async function loadClientesAfiliadosTable() {
+  const tbody = document.getElementById("clientes-afiliados-table");
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-6 text-center text-muted">Carregando...</td></tr>`;
+
+  const { data: afiliados, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, codigo_afiliado")
+    .eq("is_afiliado", true)
+    .order("full_name");
+
+  if (error) { tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-6 text-center text-red-400">Erro: ${escapeHTML(error.message)}</td></tr>`; return; }
+  if (!afiliados?.length) { tbody.innerHTML = `<tr><td colspan="5" class="px-4 py-6 text-center text-muted">Nenhum cliente afiliado ainda. Afilie alguém pela aba Contas.</td></tr>`; return; }
+
+  const { data: indicacoes } = await supabase
+    .from("afiliados_indicacoes")
+    .select("afiliado_id, cliente_id, comissao");
+
+  const statsPorAfiliado = new Map();
+  (indicacoes || []).forEach((i) => {
+    if (!statsPorAfiliado.has(i.afiliado_id)) statsPorAfiliado.set(i.afiliado_id, { clientes: new Set(), comissao: 0 });
+    const s = statsPorAfiliado.get(i.afiliado_id);
+    if (i.cliente_id) s.clientes.add(i.cliente_id);
+    s.comissao += Number(i.comissao || 0);
+  });
+
+  tbody.innerHTML = afiliados.map((a) => {
+    const s = statsPorAfiliado.get(a.id) || { clientes: new Set(), comissao: 0 };
+    const nomeEscapado = escapeHTML(a.full_name || "Cliente").replace(/'/g, "\\'");
+    return `
+    <tr class="border-b border-border/60 last:border-0">
+      <td class="px-4 py-3 font-semibold">${escapeHTML(a.full_name || "Cliente")}</td>
+      <td class="px-4 py-3 font-mono font-bold lilac">${escapeHTML(a.codigo_afiliado || "—")}</td>
+      <td class="px-4 py-3 font-bold text-white">${s.clientes.size}</td>
+      <td class="px-4 py-3 font-bold text-accent">${fmt(s.comissao)}</td>
+      <td class="px-4 py-3 text-right whitespace-nowrap">
+        <button onclick="reenviarCodigoAfiliadoDireto('${a.id}','${nomeEscapado}','${a.codigo_afiliado}')" class="mr-3 text-xs font-bold hover:underline lilac">↻ Reenviar</button>
+        <button onclick="verHistoricoAfiliado('${a.id}')" class="text-xs font-bold hover:underline text-white">📋 Ver histórico</button>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+/* versão do reenvio que não depende de ADMIN_CONTAS estar carregado (a aba
+   Anunciantes pode ser aberta sem passar pela aba Contas antes) */
+window.reenviarCodigoAfiliadoDireto = async (clienteId, nome, codigo) => {
+  if (!confirm(`Reenviar o código de afiliado de "${nome}" pelo ticket "Programa de Afiliados!"?`)) return;
+  await enviarMensagemCodigoAfiliado(clienteId, codigo, true);
+  alert("Código reenviado no ticket do cliente!");
+};
+
+/* pula pra aba Tickets já abrindo o ticket "Programa de Afiliados!" desse cliente —
+   é lá que fica o histórico de parabéns e reenvios de código */
+window.verHistoricoAfiliado = async (clienteId) => {
+  const { data: ticket, error } = await supabase
+    .from("tickets")
+    .select("id")
+    .eq("customer_id", clienteId)
+    .eq("assunto", "Programa de Afiliados!")
+    .maybeSingle();
+
+  if (error || !ticket) { alert("Esse cliente ainda não tem histórico de mensagens de afiliado."); return; }
+
+  switchAdminTab("tickets");
+  await loadAdminTickets();
+  openAdminTicket(ticket.id);
+};
+
 /* mantém a lista da esquerda e o badge da aba atualizados em tempo real
    enquanto o admin está no painel, mesmo sem estar dentro de uma conversa */
 function subscribeAdminMensagensList() {
@@ -4956,6 +5221,7 @@ window.deleteProduct = async (id, name) => {
    ========================================================================= */
 
 async function loadAdminAnunciantes() {
+  loadClientesAfiliadosTable();
   const { data, error } = await supabase.from("anunciantes").select("*").order("created_at", { ascending: false });
   const tbody = document.getElementById("anunciantes-table");
 
@@ -5656,18 +5922,37 @@ window.closeContaDetalhe = () => {
   document.getElementById("admin-conta-detail-modal").classList.remove("flex");
 };
 
-/* Mensagem inicial de "quebra-gelo" enviada quando o admin aborda um cliente
-   proativamente (venda proativa). Só é usada na primeira vez — depois disso
-   a conversa segue livre nos dois sentidos. */
-const MENSAGEM_QUEBRA_GELO_ADMIN =
-  "Olá! Vi aqui no nosso sistema que você está dando uma olhada em alguns produtos e parece um pouco indeciso(a). Está tudo bem? Posso te ajudar a decidir qual o melhor produto para o que você precisa ou te dar uma recomendação?";
+/* Monta a mensagem de "quebra-gelo" citando o produto que o cliente mais
+   visualizou (tabela product_views), pra parecer uma recomendação de
+   verdade e não um texto genérico. Se ele ainda não visualizou nada,
+   cai numa versão mais neutra. */
+async function montarMensagemQuebraGelo(clienteId) {
+  const { data: views } = await supabase
+    .from("product_views")
+    .select("product_nome")
+    .eq("cliente_id", clienteId);
+
+  const contagem = new Map();
+  (views || []).forEach((v) => contagem.set(v.product_nome, (contagem.get(v.product_nome) || 0) + 1));
+
+  let maisVisto = null, maiorCount = 0;
+  for (const [nome, count] of contagem) {
+    if (count > maiorCount) { maisVisto = nome; maiorCount = count; }
+  }
+
+  if (maisVisto) {
+    return `Olá! Vi aqui no nosso sistema que você deu uma olhada em "${maisVisto}" ${maiorCount > 1 ? `(${maiorCount} vezes) ` : ""}e parece um pouco indeciso(a). Está tudo bem? Posso te ajudar a decidir se esse é o produto certo pra você, ou te dar outra recomendação com base no que você precisa — é só me contar!`;
+  }
+  return "Olá! Vi aqui no nosso sistema que você está dando uma olhada em alguns produtos e parece um pouco indeciso(a). Está tudo bem? Posso te ajudar a decidir qual o melhor produto para o que você precisa ou te dar uma recomendação?";
+}
 
 /* Abre uma conversa direta (1-para-1) com o cliente usando o MESMO sistema de
    Amigos/Mensagens (tabela mensagens_privadas) que os clientes usam entre si.
    Só que, do lado do cliente, o admin nunca aparece com o nome/avatar da
    própria conta pessoal — aparece como "ADMIN 👑". Isso é feito guardando
    esse nome na linha da tabela "amigos" (que é de onde o app lê o nome
-   exibido de cada contato). */
+   exibido de cada contato). Do lado do admin, a conversa é gerenciada
+   dentro do próprio painel administrativo, na aba "🎯 Convencer Cliente". */
 window.mandarMensagemPara = async (clienteId, nome) => {
   if (!confirm(`Iniciar uma conversa direta com "${nome}" pelo sistema de Amigos/Mensagens? Você vai aparecer para ele(a) como "ADMIN 👑", não com o seu perfil pessoal.`)) return;
 
@@ -5709,15 +5994,20 @@ window.mandarMensagemPara = async (clienteId, nome) => {
     .or(`and(sender_id.eq.${adminId},receiver_id.eq.${clienteId}),and(sender_id.eq.${clienteId},receiver_id.eq.${adminId})`);
 
   if (!count) {
+    const mensagem = await montarMensagemQuebraGelo(clienteId);
     const { error } = await supabase.from("mensagens_privadas").insert({
-      sender_id: adminId, receiver_id: clienteId, message_text: MENSAGEM_QUEBRA_GELO_ADMIN,
+      sender_id: adminId, receiver_id: clienteId, message_text: mensagem,
     });
     if (error) { alert("Conversa iniciada, mas houve um erro ao enviar a mensagem: " + error.message); }
   }
 
-  // abre o modal de Amigos do próprio admin já direto nessa conversa (do lado
-  // do admin, o nome mostrado é o nome real do cliente, sem nenhum disfarce)
-  await openFriendsModalToThread(clienteId, nome, null);
+  // abre a conversa dentro do próprio painel admin, na aba "🎯 Convencer Cliente"
+  switchAdminTab("convencer");
+  await loadAdminConvencer();
+  if (!ADMIN_CONVENCER_CLIENTES.find((c) => c.id === clienteId)) {
+    ADMIN_CONVENCER_CLIENTES.push({ id: clienteId, name: nome, last: { message_text: "" }, unread: 0 });
+  }
+  openAdminConvencer(clienteId);
 };
 
 /* gera um código no formato padrão da loja: "#" + 4 dígitos aleatórios (ex: #4827).
