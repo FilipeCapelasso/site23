@@ -5641,7 +5641,7 @@ window.openContaDetalhe = async (clienteId) => {
     <div class="mb-5 rounded-xl border border-accent/30 bg-accent/[0.06] p-4">
       <p class="mb-1 text-xs font-bold uppercase tracking-wide text-accent">🤝 Conta afiliada</p>
       <p class="text-sm text-muted">Código: <span class="font-display font-bold text-white">${escapeHTML(conta.codigo_afiliado || "—")}</span></p>
-      <button onclick="reenviarCodigoAfiliado('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}')" class="mt-2 text-xs font-bold hover:underline lilac">↻ Reenviar código por mensagem</button>
+      <button onclick="reenviarCodigoAfiliado('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}')" class="mt-2 text-xs font-bold hover:underline lilac">↻ Reenviar código por ticket</button>
     </div>` : ""}
 
     <div class="flex flex-col gap-2.5 sm:flex-row">
@@ -5656,14 +5656,68 @@ window.closeContaDetalhe = () => {
   document.getElementById("admin-conta-detail-modal").classList.remove("flex");
 };
 
+/* Mensagem inicial de "quebra-gelo" enviada quando o admin aborda um cliente
+   proativamente (venda proativa). Só é usada na primeira vez — depois disso
+   a conversa segue livre nos dois sentidos. */
+const MENSAGEM_QUEBRA_GELO_ADMIN =
+  "Olá! Vi aqui no nosso sistema que você está dando uma olhada em alguns produtos e parece um pouco indeciso(a). Está tudo bem? Posso te ajudar a decidir qual o melhor produto para o que você precisa ou te dar uma recomendação?";
+
+/* Abre uma conversa direta (1-para-1) com o cliente usando o MESMO sistema de
+   Amigos/Mensagens (tabela mensagens_privadas) que os clientes usam entre si.
+   Só que, do lado do cliente, o admin nunca aparece com o nome/avatar da
+   própria conta pessoal — aparece como "ADMIN 👑". Isso é feito guardando
+   esse nome na linha da tabela "amigos" (que é de onde o app lê o nome
+   exibido de cada contato). */
 window.mandarMensagemPara = async (clienteId, nome) => {
+  if (!confirm(`Iniciar uma conversa direta com "${nome}" pelo sistema de Amigos/Mensagens? Você vai aparecer para ele(a) como "ADMIN 👑", não com o seu perfil pessoal.`)) return;
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const adminId = session.user.id;
   closeContaDetalhe();
-  switchAdminTab("mensagens");
-  await loadAdminMensagens();
-  if (!ADMIN_MENSAGENS_CLIENTES.find((c) => c.id === clienteId)) {
-    ADMIN_MENSAGENS_CLIENTES.push({ id: clienteId, name: nome, last: { message_text: "Nenhuma mensagem ainda." }, unread: 0 });
+
+  // garante que exista uma amizade "aceita" entre o admin e o cliente — é o
+  // que faz essa conversa aparecer na lista de Amigos dele. Se por acaso já
+  // existir uma linha em qualquer sentido, não duplica; só corrige o nome
+  // exibido pro lado do cliente pra sempre ser "ADMIN 👑".
+  const { data: existente } = await supabase
+    .from("amigos")
+    .select("id, requester_id")
+    .or(`and(requester_id.eq.${adminId},addressee_id.eq.${clienteId}),and(requester_id.eq.${clienteId},addressee_id.eq.${adminId})`)
+    .maybeSingle();
+
+  if (!existente) {
+    const { error } = await supabase.from("amigos").insert({
+      requester_id: adminId,
+      addressee_id: clienteId,
+      requester_name: "ADMIN 👑",
+      requester_avatar_url: null,
+      addressee_name: nome,
+      addressee_avatar_url: null,
+      status: "accepted",
+    });
+    if (error) { alert("Erro ao iniciar a conversa: " + error.message); return; }
+  } else {
+    const campoNomeAdmin = existente.requester_id === adminId ? { requester_name: "ADMIN 👑" } : { addressee_name: "ADMIN 👑" };
+    await supabase.from("amigos").update({ status: "accepted", ...campoNomeAdmin }).eq("id", existente.id);
   }
-  openAdminMensagem(clienteId);
+
+  // manda a mensagem de quebra-gelo só se essa conversa ainda estiver vazia
+  // (evita reenviar toda vez que o admin clicar de novo em "Mandar mensagem")
+  const { count } = await supabase
+    .from("mensagens_privadas")
+    .select("id", { count: "exact", head: true })
+    .or(`and(sender_id.eq.${adminId},receiver_id.eq.${clienteId}),and(sender_id.eq.${clienteId},receiver_id.eq.${adminId})`);
+
+  if (!count) {
+    const { error } = await supabase.from("mensagens_privadas").insert({
+      sender_id: adminId, receiver_id: clienteId, message_text: MENSAGEM_QUEBRA_GELO_ADMIN,
+    });
+    if (error) { alert("Conversa iniciada, mas houve um erro ao enviar a mensagem: " + error.message); }
+  }
+
+  // abre o modal de Amigos do próprio admin já direto nessa conversa (do lado
+  // do admin, o nome mostrado é o nome real do cliente, sem nenhum disfarce)
+  await openFriendsModalToThread(clienteId, nome, null);
 };
 
 /* gera um código no formato padrão da loja: "#" + 4 dígitos aleatórios (ex: #4827).
@@ -5695,7 +5749,7 @@ async function gerarCodigoUnico() {
 /* transforma a conta de um cliente em conta afiliada: gera o código, salva em profiles
    e avisa o cliente na mensagem privada dele (tabela chat_privado) */
 window.afiliarConta = async (clienteId, nome) => {
-  if (!confirm(`Afiliar a conta de "${nome}"? Um código de afiliado será gerado e enviado a ele por mensagem privada.`)) return;
+  if (!confirm(`Afiliar a conta de "${nome}"? Um código de afiliado será gerado e enviado a ele por um ticket de suporte ("Programa de Afiliados!").`)) return;
 
   const codigo = await gerarCodigoUnico();
   if (!codigo) { alert("Não consegui gerar um código livre agora. Tente de novo."); return; }
@@ -5716,13 +5770,15 @@ window.afiliarConta = async (clienteId, nome) => {
 window.reenviarCodigoAfiliado = async (clienteId, nome) => {
   const conta = ADMIN_CONTAS.find((c) => c.id === clienteId);
   if (!conta?.codigo_afiliado) return;
-  if (!confirm(`Reenviar o código de afiliado de "${nome}" na mensagem privada?`)) return;
+  if (!confirm(`Reenviar o código de afiliado de "${nome}" pelo ticket "Programa de Afiliados!"?`)) return;
   await enviarMensagemCodigoAfiliado(clienteId, conta.codigo_afiliado, true);
-  alert("Código reenviado!");
+  alert("Código reenviado no ticket do cliente!");
 };
 
+/* Cria (ou reaproveita) o ticket "Programa de Afiliados!" do cliente e registra
+   nele a mensagem do admin com o código. Aparece em "Suporte" -> "Meus tickets"
+   -> "Todos", exatamente como um atendimento normal. */
 async function enviarMensagemCodigoAfiliado(clienteId, codigo, reenvio = false) {
-  const { data: { session } } = await supabase.auth.getSession();
   const texto = reenvio
     ? `🤝 Aqui está seu código de afiliado de novo: ${codigo}
 
@@ -5730,27 +5786,35 @@ COMO USAR:
 Quem digitar ${codigo} no campo "Código de Anunciante / Afiliado" ao finalizar a compra ganha 10% de desconto em pedidos a partir de R$ 80,00 — e você recebe 10% de comissão sobre essa venda.
 
 Acompanhe suas indicações e comissões no seu painel, na aba "Afiliado".`
-    : `🎉 Parabéns! Sua conta agora faz parte do Programa de Afiliados da NovaStore.
+    : `🎉 Sua conta agora faz parte do nosso Programa de Afiliados! Seu código de afiliado é: ${codigo}. Compartilhe esse código com seus amigos e clientes. Toda vez que alguém usar ele numa compra, você acumula comissão — dá pra acompanhar tudo (indicações e comissões) direto no seu painel, na aba "Afiliado".`;
 
-Seu código exclusivo é: ${codigo}
+  // procura um ticket "Programa de Afiliados!" já existente pra esse cliente,
+  // pra não empilhar um ticket novo toda vez que reenviar o código
+  const { data: ticketExistente } = await supabase
+    .from("tickets")
+    .select("id")
+    .eq("customer_id", clienteId)
+    .eq("assunto", "Programa de Afiliados!")
+    .maybeSingle();
 
-COMO FUNCIONA:
-1. Compartilhe o código ${codigo} com seus amigos.
-2. Na hora de finalizar a compra, a pessoa cola o código no campo "Código de Anunciante / Afiliado".
-3. Ela ganha 10% de desconto em compras a partir de R$ 80,00.
-4. Você recebe 10% de comissão sobre cada venda feita com o seu código.
+  let ticketId = ticketExistente?.id;
 
-Todo código da loja tem o formato #0000 (quatro dígitos). Acompanhe suas indicações, clientes e comissões no seu painel, na aba "Afiliado".
+  if (!ticketId) {
+    const { data: novoTicket, error: ticketError } = await supabase
+      .from("tickets")
+      .insert({ customer_id: clienteId, categoria: "Programa de Afiliados", assunto: "Programa de Afiliados!", status: "respondido" })
+      .select().single();
+    if (ticketError) { alert("Erro ao criar o ticket de afiliado: " + ticketError.message); return; }
+    ticketId = novoTicket.id;
+  } else {
+    // reabre/atualiza o ticket como "respondido", já que é o admin quem está falando
+    await supabase.from("tickets").update({ status: "respondido" }).eq("id", ticketId);
+  }
 
-Bom trabalho e boas vendas! 🚀`;
-
-  const { error } = await supabase.from("chat_privado").insert({
-    customer_id: clienteId,
-    sender_id: session.user.id,
-    sender_role: "admin",
-    message_text: texto,
+  const { error: msgError } = await supabase.from("ticket_mensagens").insert({
+    ticket_id: ticketId, sender_role: "admin", message_text: texto,
   });
-  if (error) alert("Conta afiliada, mas houve um erro ao enviar a mensagem: " + error.message);
+  if (msgError) alert("Ticket criado, mas houve um erro ao salvar a mensagem: " + msgError.message);
 }
 
 window.openSorteioForm = () => {
