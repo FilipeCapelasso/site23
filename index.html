@@ -132,7 +132,7 @@
   }
 
   /* ================= PAINEL DO CLIENTE ================= */
-  .painel-nav-link{display:flex;align-items:center;gap:.65rem;border-radius:.7rem;padding:.65rem .75rem;
+  .painel-nav-link{display:flex;align-items:center;gap:.75rem;border-radius:.75rem;padding:.8rem .9rem;font-size:.925rem;
     font-weight:600;color:#8b8fa3;border-left:2px solid transparent;transition:.15s ease}
   .painel-nav-link svg{flex-shrink:0}
   .painel-nav-link:hover{background:rgba(255,255,255,.05);color:#fff}
@@ -140,10 +140,10 @@
     box-shadow:inset 0 0 0 1px rgba(124,92,255,.18)}
   .painel-nav-link.is-active svg{color:#a78bfa;filter:drop-shadow(0 0 5px rgba(124,92,255,.6))}
   #painel-sidebar.is-open{transform:translateX(0)}
-  .painel-quick-card{display:flex;flex-direction:column;gap:.35rem;border-radius:1rem;border:1px solid rgba(255,255,255,.1);
-    background:rgba(255,255,255,.03);padding:1.1rem;text-align:left;transition:.2s ease}
+  .painel-quick-card{display:flex;flex-direction:column;gap:.45rem;border-radius:1.1rem;border:1px solid rgba(255,255,255,.1);
+    background:rgba(255,255,255,.03);padding:1.5rem;text-align:left;transition:.2s ease}
   .painel-quick-card:hover{border-color:rgba(124,92,255,.5);background:rgba(124,92,255,.07);transform:translateY(-2px)}
-  .painel-stat-card{border-radius:1rem;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);padding:1rem 1.1rem}
+  .painel-stat-card{border-radius:1.1rem;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);padding:1.35rem 1.5rem}
   .painel-status-badge{display:inline-block;border-radius:999px;padding:.3rem .65rem;font-size:10.5px;font-weight:800;letter-spacing:.02em}
   .painel-filter-btn{flex-shrink:0;border-radius:999px;border:1px solid #23262f;background:#111318;padding:.5rem 1rem;
     font-size:12px;font-weight:700;color:#8b8fa3;white-space:nowrap;transition:.15s ease}
@@ -921,7 +921,7 @@
 <!-- ================= PAINEL DO CLIENTE ================= -->
 <div id="view-painel" class="hidden min-h-screen bg-bg">
   <header class="sticky top-0 z-40 glass border-b border-border">
-    <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
+    <div class="mx-auto flex max-w-[1800px] items-center justify-between px-5 py-4 sm:px-8 xl:px-12">
       <div class="flex items-center gap-2.5">
         <button onclick="togglePainelSidebar()" class="flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-surface text-muted hover:text-white lg:hidden" aria-label="Menu">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
@@ -937,18 +937,18 @@
 
   <div id="painel-sidebar-overlay" onclick="togglePainelSidebar(true)" class="fixed inset-0 z-40 hidden bg-black/70 backdrop-blur-sm lg:hidden"></div>
 
-  <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:flex lg:items-start lg:gap-6 lg:px-8">
+  <div class="mx-auto max-w-[1800px] px-5 py-8 sm:px-8 lg:flex lg:items-start lg:gap-8 xl:px-12">
     <!-- SIDEBAR -->
-    <aside id="painel-sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[280px] -translate-x-full flex-col overflow-y-auto border-r border-white/10 bg-[#0d0e13]/98 p-4 backdrop-blur-2xl transition-transform duration-300 ease-out lg:sticky lg:top-20 lg:h-[calc(100vh-6rem)] lg:w-64 lg:shrink-0 lg:translate-x-0 lg:rounded-2xl lg:border lg:border-white/10 lg:bg-white/[0.03] lg:p-3">
+    <aside id="painel-sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[280px] -translate-x-full flex-col overflow-y-auto border-r border-white/10 bg-[#0d0e13]/98 p-4 backdrop-blur-2xl transition-transform duration-300 ease-out lg:sticky lg:top-24 lg:h-[calc(100vh-7rem)] lg:w-72 lg:shrink-0 lg:translate-x-0 lg:rounded-2xl lg:border lg:border-white/10 lg:bg-white/[0.03] lg:p-4">
       <div class="mb-4 flex items-center justify-between lg:hidden">
         <span class="font-display text-sm font-bold uppercase text-white">Menu</span>
         <button onclick="togglePainelSidebar(true)" class="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:text-white">✕</button>
       </div>
 
-      <div class="mb-4 flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3">
-        <span id="painel-avatar" class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-lg font-black text-white shadow-[0_0_18px_-2px_rgba(124,92,255,.7)]">?</span>
+      <div class="mb-5 flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 p-3.5">
+        <span id="painel-avatar" class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-xl font-black text-white shadow-[0_0_18px_-2px_rgba(124,92,255,.7)]">?</span>
         <div class="min-w-0">
-          <p id="painel-user-name" class="truncate text-sm font-bold text-white">—</p>
+          <p id="painel-user-name" class="truncate text-base font-bold text-white">—</p>
           <span id="painel-user-tag" class="mt-1 inline-block rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide lilac">Cliente</span>
         </div>
       </div>
@@ -1006,54 +1006,54 @@
       <section id="painel-tab-overview">
         <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 class="font-display text-2xl font-bold text-white sm:text-3xl">Olá, <span id="painel-overview-name" class="gradient-text">cliente</span> 👋</h1>
-            <p id="painel-overview-date" class="mt-1 text-sm text-muted"></p>
+            <h1 class="font-display text-3xl font-bold text-white sm:text-4xl">Olá, <span id="painel-overview-name" class="gradient-text">cliente</span> 👋</h1>
+            <p id="painel-overview-date" class="mt-1.5 text-sm text-muted"></p>
           </div>
           <button onclick="goToStore(); setTimeout(()=>document.getElementById('catalogo')?.scrollIntoView({behavior:'smooth'}),30);" class="shrink-0 rounded-xl bg-primary px-5 py-3 text-sm font-bold text-white shadow-glow hover:bg-primaryhover">Explorar produtos</button>
         </div>
 
-        <div id="painel-stats-grid" class="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4"></div>
+        <div id="painel-stats-grid" class="mb-8 grid grid-cols-2 gap-4 sm:gap-5 lg:grid-cols-4"></div>
 
-        <div class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
-          <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
-            <div class="mb-3 flex items-center justify-between">
-              <h2 class="font-display text-base font-bold uppercase text-white">Pedidos recentes</h2>
-              <button onclick="switchPainelTab('pedidos')" class="text-xs font-bold lilac hover:underline">Ver todos</button>
+        <div class="mb-8 grid grid-cols-1 gap-5 lg:grid-cols-[1.6fr_1fr]">
+          <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6">
+            <div class="mb-4 flex items-center justify-between">
+              <h2 class="font-display text-lg font-bold uppercase text-white">Pedidos recentes</h2>
+              <button onclick="switchPainelTab('pedidos')" class="text-sm font-bold lilac hover:underline">Ver todos</button>
             </div>
             <div id="painel-overview-orders" class="overflow-x-auto"></div>
           </div>
 
-          <div class="relative overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/15 via-surface to-surface p-5">
+          <div class="relative overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/15 via-surface to-surface p-6">
             <div class="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary/25 blur-3xl"></div>
-            <p class="mb-1 text-xs font-bold uppercase tracking-wide lilac">🎁 Sorteio</p>
-            <h3 class="mb-3 font-display text-lg font-bold text-white">Compre e concorra a prêmios</h3>
-            <div class="relative mx-auto mb-4 flex h-28 w-28 items-center justify-center">
-              <svg viewBox="0 0 100 100" class="h-28 w-28 -rotate-90">
+            <p class="mb-1.5 text-xs font-bold uppercase tracking-wide lilac">🎁 Sorteio</p>
+            <h3 class="mb-4 font-display text-xl font-bold text-white">Compre e concorra a prêmios</h3>
+            <div class="relative mx-auto mb-5 flex h-32 w-32 items-center justify-center">
+              <svg viewBox="0 0 100 100" class="h-32 w-32 -rotate-90">
                 <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="10"/>
                 <circle id="painel-sorteio-progress" cx="50" cy="50" r="42" fill="none" stroke="#7c5cff" stroke-width="10" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264"/>
               </svg>
-              <span id="painel-sorteio-pct" class="absolute font-display text-lg font-bold text-white">0%</span>
+              <span id="painel-sorteio-pct" class="absolute font-display text-xl font-bold text-white">0%</span>
             </div>
-            <p id="painel-sorteio-msg" class="mb-4 text-center text-xs text-muted">Compre para concorrer no sorteio.</p>
-            <button onclick="goToSorteio()" class="block w-full rounded-xl border border-primary/40 bg-primary/15 py-2.5 text-center text-sm font-bold text-white hover:bg-primary/25">Ver sorteio atual</button>
+            <p id="painel-sorteio-msg" class="mb-5 text-center text-sm text-muted">Compre para concorrer no sorteio.</p>
+            <button onclick="goToSorteio()" class="block w-full rounded-xl border border-primary/40 bg-primary/15 py-3 text-center text-sm font-bold text-white hover:bg-primary/25">Ver sorteio atual</button>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div class="grid grid-cols-1 gap-5 sm:grid-cols-3">
           <button onclick="switchPainelTab('inventario')" class="painel-quick-card">
-            <span class="text-2xl">🎒</span>
-            <p class="font-display text-sm font-bold uppercase text-white">Meu inventário</p>
-            <p class="text-xs text-muted">Veja tudo que você já comprou</p>
+            <span class="text-3xl">🎒</span>
+            <p class="font-display text-base font-bold uppercase text-white">Meu inventário</p>
+            <p class="text-sm text-muted">Veja tudo que você já comprou</p>
           </button>
           <button onclick="switchPainelTab('avaliar')" class="painel-quick-card">
-            <span class="text-2xl">⭐</span>
-            <p class="font-display text-sm font-bold uppercase text-white">Minhas avaliações</p>
-            <p class="text-xs text-muted">Avalie compras e ganhe destaque</p>
+            <span class="text-3xl">⭐</span>
+            <p class="font-display text-base font-bold uppercase text-white">Minhas avaliações</p>
+            <p class="text-sm text-muted">Avalie compras e ganhe destaque</p>
           </button>
           <button onclick="switchPainelTab('suporte')" class="painel-quick-card">
-            <span class="text-2xl">🎧</span>
-            <p class="font-display text-sm font-bold uppercase text-white">Central de suporte</p>
-            <p class="text-xs text-muted">Fale com nossa equipe</p>
+            <span class="text-3xl">🎧</span>
+            <p class="font-display text-base font-bold uppercase text-white">Central de suporte</p>
+            <p class="text-sm text-muted">Fale com nossa equipe</p>
           </button>
         </div>
       </section>
@@ -5502,10 +5502,10 @@ function renderPainelOverviewStats() {
 
   document.getElementById("painel-stats-grid").innerHTML = cards.map((c) => `
     <div class="painel-stat-card">
-      <span class="text-xl">${c.icon}</span>
-      <p class="mt-2 font-display text-xl font-bold text-white sm:text-2xl">${c.value}</p>
-      <p class="text-[11px] font-bold uppercase tracking-wide text-muted">${c.label}</p>
-      <p class="mt-1 text-[11px] text-muted">${c.sub}</p>
+      <span class="text-2xl">${c.icon}</span>
+      <p class="mt-2.5 font-display text-2xl font-bold text-white sm:text-3xl">${c.value}</p>
+      <p class="text-xs font-bold uppercase tracking-wide text-muted">${c.label}</p>
+      <p class="mt-1 text-xs text-muted">${c.sub}</p>
     </div>`).join("");
 }
 
