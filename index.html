@@ -79,6 +79,39 @@
     #btn-login{padding-left:.75rem;padding-right:.75rem}
   }
 
+  /* ================= MOBILE APP-LIKE POLISH ================= */
+
+  /* -- bottom navigation bar -- */
+  .mobile-nav-btn{display:flex;flex:1 1 0;min-height:52px;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;padding:6px 2px;font-size:10px;font-weight:700;color:#8b8fa3;position:relative;
+    transition:color .15s ease,transform .15s ease;-webkit-tap-highlight-color:transparent}
+  .mobile-nav-btn svg{width:22px;height:22px;flex-shrink:0}
+  .mobile-nav-btn:active{transform:scale(.92)}
+  .mobile-nav-btn.is-active{color:#fff}
+  .mobile-nav-btn.is-active svg{color:#7c5cff;filter:drop-shadow(0 0 6px rgba(124,92,255,.75))}
+
+  /* -- touch targets: garante no mínimo ~44px de área clicável no mobile -- */
+  @media(max-width:767px){
+    button, a.mobile-nav-btn, .tg-icon-btn, select, input[type=checkbox], input[type=radio]{ min-height:44px }
+    input[type=text], input[type=email], input[type=password], input[type=number], input[type=search], input[type=tel], textarea, select{
+      min-height:44px; font-size:16px; /* evita zoom automático no iOS */
+    }
+    #global-emoji-btn, #friend-emoji-btn{ min-height:40px }
+    .cat-btn{ min-height:44px }
+  }
+
+  /* -- carrosséis com swipe suave e sem barra de rolagem -- */
+  .cat-scroll{scroll-snap-type:x mandatory !important;-webkit-overflow-scrolling:touch;scroll-padding-left:1rem}
+  .hide-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
+  .hide-scrollbar::-webkit-scrollbar{display:none}
+
+  /* -- tipografia fluida: títulos não quebram feio em telas de 320–430px -- */
+  h1, h2, h3{overflow-wrap:break-word;word-break:normal;hyphens:auto}
+  @media(max-width:380px){
+    .font-display.text-2xl{font-size:clamp(1.15rem,5vw,1.5rem)}
+    .font-display.text-3xl{font-size:clamp(1.35rem,6vw,1.875rem)}
+  }
+
   /* ---------- animações de impacto nos produtos ---------- */
   @keyframes cardIn{from{opacity:0;transform:translateY(22px) scale(.94)}to{opacity:1;transform:translateY(0) scale(1)}}
   .card-in{opacity:0;animation:cardIn .55s cubic-bezier(.16,.9,.3,1) forwards}
@@ -529,6 +562,30 @@
       </div>
     </div>
   </footer>
+
+  <!-- reserva o espaço ocupado pela bottom nav no mobile, pra nada ficar escondido atrás dela -->
+  <div class="h-16 md:hidden" aria-hidden="true"></div>
+
+  <nav id="mobile-bottom-nav" class="fixed inset-x-0 bottom-0 z-40 flex items-stretch justify-around border-t border-white/10 bg-surface/85 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden">
+    <button onclick="mobileNavGo('home')" data-mobile-nav="home" class="mobile-nav-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg>
+      <span>Início</span>
+    </button>
+    <button onclick="mobileNavGo('catalogo')" data-mobile-nav="catalogo" class="mobile-nav-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+      <span>Catálogo</span>
+    </button>
+    <button onclick="openCart()" data-mobile-nav="cart" class="mobile-nav-btn relative">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3h2l2.3 11.4a2 2 0 0 0 2 1.6h7.4a2 2 0 0 0 2-1.6L20 7H6"/></svg>
+      <span>Carrinho</span>
+      <span id="mobile-cart-count" class="absolute right-3 top-0.5 hidden h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-white">0</span>
+    </button>
+    <button onclick="openMobileProfileMenu()" data-mobile-nav="profile" class="mobile-nav-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>
+      <span>Perfil</span>
+      <span id="mobile-profile-unread-dot" class="pulse-glow absolute right-3.5 top-0.5 hidden h-2 w-2 rounded-full bg-accent"></span>
+    </button>
+  </nav>
 </div>
 
 <div id="view-sorteio" class="hidden min-h-screen bg-noise">
@@ -1178,6 +1235,29 @@ document.addEventListener("click", (e) => {
   }
 });
 
+/* ---------------- Bottom navigation bar (mobile) ---------------- */
+window.mobileNavGo = (target) => {
+  if (target === "home") {
+    goBackToStore();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } else if (target === "catalogo") {
+    goBackToStore();
+    setTimeout(() => document.getElementById("catalogo")?.scrollIntoView({ behavior: "smooth", block: "start" }), 30);
+  }
+  setActiveMobileNav(target);
+};
+
+window.openMobileProfileMenu = () => {
+  if (!CURRENT_USER) { openAuthModal("login"); return; }
+  toggleUserMenu();
+};
+
+function setActiveMobileNav(target) {
+  document.querySelectorAll(".mobile-nav-btn").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.mobileNav === target);
+  });
+}
+
 document.addEventListener("click", (e) => {
   const menu = document.getElementById("user-menu");
   const trigger = document.getElementById("btn-user");
@@ -1383,6 +1463,7 @@ async function updatePrivateUnreadBadge() {
   dot.classList.toggle("hidden", !hasUnread);
   badge.classList.toggle("hidden", !hasUnread);
   if (hasUnread) badge.textContent = count > 9 ? "9+" : String(count);
+  document.getElementById("mobile-profile-unread-dot")?.classList.toggle("hidden", !hasUnread);
 }
 
 function subscribeToPrivateBadge() {
@@ -3108,6 +3189,13 @@ async function renderCart() {
   countEl.classList.toggle("hidden", count === 0);
   countEl.classList.toggle("flex", count > 0);
 
+  const mobileCountEl = document.getElementById("mobile-cart-count");
+  if (mobileCountEl) {
+    mobileCountEl.textContent = count;
+    mobileCountEl.classList.toggle("hidden", count === 0);
+    mobileCountEl.classList.toggle("flex", count > 0);
+  }
+
   const itemsEl = document.getElementById("cart-items");
   const footerEl = document.getElementById("cart-footer");
 
@@ -4008,7 +4096,8 @@ document.getElementById("product-form").onsubmit = async (e) => {
   if (!canvas || !canvas.getContext) return;
   const ctx = canvas.getContext("2d");
   const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const isMobile = window.matchMedia("(max-width: 767px)").matches;
+  const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
   const COLORS = ["124,92,255", "0,230,168"];
   let width = 0, height = 0, particles = [], raf = null;
 
@@ -4021,7 +4110,10 @@ document.getElementById("product-form").onsubmit = async (e) => {
   }
 
   function seed() {
-    const count = Math.max(24, Math.min(70, Math.floor((width * height) / 16000)));
+    // no mobile usamos bem menos partículas (economiza CPU/bateria)
+    const count = isMobile
+      ? Math.max(10, Math.min(24, Math.floor((width * height) / 26000)))
+      : Math.max(24, Math.min(70, Math.floor((width * height) / 16000)));
     particles = Array.from({ length: count }, () => ({
       x: Math.random() * width,
       y: Math.random() * height,
@@ -4053,18 +4145,22 @@ document.getElementById("product-form").onsubmit = async (e) => {
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
       ctx.fill();
     }
-    for (let i = 0; i < particles.length; i++) {
-      for (let j = i + 1; j < particles.length; j++) {
-        const a = particles[i], b = particles[j];
-        const dx = a.x - b.x, dy = a.y - b.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 130) {
-          ctx.beginPath();
-          ctx.strokeStyle = `rgba(124,92,255,${0.16 * (1 - dist / 130)})`;
-          ctx.lineWidth = 1;
-          ctx.moveTo(a.x, a.y);
-          ctx.lineTo(b.x, b.y);
-          ctx.stroke();
+    // as linhas de conexão custam O(n²); no mobile isso é o que mais pesa
+    // na bateria, então pulamos e mantemos só as partículas se movendo.
+    if (!isMobile) {
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const a = particles[i], b = particles[j];
+          const dx = a.x - b.x, dy = a.y - b.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 130) {
+            ctx.beginPath();
+            ctx.strokeStyle = `rgba(124,92,255,${0.16 * (1 - dist / 130)})`;
+            ctx.lineWidth = 1;
+            ctx.moveTo(a.x, a.y);
+            ctx.lineTo(b.x, b.y);
+            ctx.stroke();
+          }
         }
       }
     }
@@ -4420,6 +4516,7 @@ window.confirmSpinWinner = async () => {
 route();
 loadSiteSettings();
 loadProducts().then(() => { renderCart(); renderDepoimentosMarquee(); });
+setActiveMobileNav("home");
 </script>
 </body>
 </html>
