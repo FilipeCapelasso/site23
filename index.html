@@ -888,7 +888,7 @@
         </button>
         <button onclick="goToSorteio()" class="painel-nav-link">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><path d="M12 3v3M21 12h-3M12 21v-3M3 12h3"/></svg>
-          Roleta diária
+          Sorteio
         </button>
         <button data-painel-tab="inventario" onclick="switchPainelTab('inventario')" class="painel-nav-link">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5v-7Z"/><path d="M3 8.5 12 13l9-4.5M12 13v7"/></svg>
@@ -945,16 +945,16 @@
 
           <div class="relative overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/15 via-surface to-surface p-5">
             <div class="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary/25 blur-3xl"></div>
-            <p class="mb-1 text-xs font-bold uppercase tracking-wide lilac">🎰 Roleta diária</p>
-            <h3 class="mb-3 font-display text-lg font-bold text-white">Gire e ganhe recompensas</h3>
+            <p class="mb-1 text-xs font-bold uppercase tracking-wide lilac">🎁 Sorteio</p>
+            <h3 class="mb-3 font-display text-lg font-bold text-white">Compre e concorra a prêmios</h3>
             <div class="relative mx-auto mb-4 flex h-28 w-28 items-center justify-center">
               <svg viewBox="0 0 100 100" class="h-28 w-28 -rotate-90">
                 <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="10"/>
-                <circle id="painel-roleta-progress" cx="50" cy="50" r="42" fill="none" stroke="#7c5cff" stroke-width="10" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264"/>
+                <circle id="painel-sorteio-progress" cx="50" cy="50" r="42" fill="none" stroke="#7c5cff" stroke-width="10" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264"/>
               </svg>
-              <span id="painel-roleta-pct" class="absolute font-display text-lg font-bold text-white">0%</span>
+              <span id="painel-sorteio-pct" class="absolute font-display text-lg font-bold text-white">0%</span>
             </div>
-            <p id="painel-roleta-msg" class="mb-4 text-center text-xs text-muted">Compre para desbloquear a roleta de prêmios.</p>
+            <p id="painel-sorteio-msg" class="mb-4 text-center text-xs text-muted">Compre para concorrer no sorteio.</p>
             <button onclick="goToSorteio()" class="block w-full rounded-xl border border-primary/40 bg-primary/15 py-2.5 text-center text-sm font-bold text-white hover:bg-primary/25">Ver sorteio atual</button>
           </div>
         </div>
@@ -1095,7 +1095,7 @@
             <p class="mb-3 flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-accent">✓ Cliente verificado</p>
             <ul class="mb-4 flex flex-col gap-2.5 text-sm text-muted">
               <li class="flex items-start gap-2"><span class="text-accent">✓</span> Compras liberadas com entrega imediata</li>
-              <li class="flex items-start gap-2"><span class="text-accent">✓</span> Participação na roleta e sorteios</li>
+              <li class="flex items-start gap-2"><span class="text-accent">✓</span> Participação nos sorteios</li>
               <li class="flex items-start gap-2"><span class="text-accent">✓</span> Prioridade no suporte</li>
             </ul>
             <p id="painel-perfil-codigo" class="hidden mb-4 rounded-lg bg-surface2/60 px-3 py-2 text-[11px] text-muted"></p>
@@ -4901,7 +4901,7 @@ async function loadPainelCliente() {
 
   renderPainelOverviewStats();
   renderPainelOverviewOrders();
-  renderPainelRoleta();
+  renderPainelSorteioProgress();
   renderPainelPedidosSummary();
   renderPainelPedidosFilters();
   renderPainelPedidosTable();
@@ -4974,17 +4974,18 @@ function renderPainelOverviewOrders() {
     }).join("")}</tbody></table>`;
 }
 
-/* card gamificado — meta simples de R$150 para "girar" (visual, sem mecânica própria:
-   aponta pro sistema de sorteio real que já existe no site) */
-function renderPainelRoleta() {
+/* card gamificado — meta simples de R$150 de compras para concorrer com prioridade
+   no sorteio (visual, sem mecânica própria: aponta pro sistema de sorteio real que
+   já existe no site, em #sorteio) */
+function renderPainelSorteioProgress() {
   const GOAL = 150;
   const gasto = PAINEL_ORDERS.filter((o) => o.status === "PAGO").reduce((s, o) => s + Number(o.total || 0), 0);
   const pct = Math.max(0, Math.min(100, Math.round((gasto / GOAL) * 100)));
   const circumference = 264;
   const offset = circumference - (circumference * pct) / 100;
-  document.getElementById("painel-roleta-progress").setAttribute("stroke-dashoffset", offset);
-  document.getElementById("painel-roleta-pct").textContent = `${pct}%`;
-  document.getElementById("painel-roleta-msg").textContent = pct >= 100
+  document.getElementById("painel-sorteio-progress").setAttribute("stroke-dashoffset", offset);
+  document.getElementById("painel-sorteio-pct").textContent = `${pct}%`;
+  document.getElementById("painel-sorteio-msg").textContent = pct >= 100
     ? "Meta atingida! Você já concorre no sorteio ativo 🎉"
     : `Faltam ${fmt(Math.max(0, GOAL - gasto))} em compras para concorrer com prioridade.`;
 }
