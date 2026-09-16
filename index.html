@@ -262,8 +262,14 @@
   @keyframes depoimentosScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
   .depoimento-card{width:300px;flex:none}
   @media(max-width:640px){.depoimentos-track{animation-duration:60s}.depoimento-card{width:260px}}
-  #category-bar{padding-top:2px;padding-bottom:6px;scrollbar-width:none}
-  #category-bar::-webkit-scrollbar{display:none}
+  #category-bar{padding-top:2px;padding-bottom:12px;scrollbar-width:thin;scrollbar-color:rgba(124,92,255,.55) transparent;cursor:grab}
+  #category-bar:active{cursor:grabbing}
+  #category-bar::-webkit-scrollbar{height:7px}
+  #category-bar::-webkit-scrollbar-track{background:rgba(255,255,255,.04);border-radius:99px}
+  #category-bar::-webkit-scrollbar-thumb{background:linear-gradient(90deg,#7c5cff,#00e6a8);border-radius:99px}
+  #category-bar::-webkit-scrollbar-thumb:hover{background:linear-gradient(90deg,#8f74ff,#2dffc9)}
+  #category-bar.is-dragging{cursor:grabbing;scroll-snap-type:none!important}
+  #category-bar.is-dragging .game-tile{pointer-events:none}
   .cat-btn{--accent:#7c5cff;--accent-dark:#5b3fd6;--accent-soft:rgba(124,92,255,.16);--accent-mid:rgba(124,92,255,.42);--accent-glow:rgba(124,92,255,.5);
     min-width:96px;position:relative;overflow:hidden;backdrop-filter:blur(10px);box-shadow:0 8px 24px rgba(0,0,0,.12);
     transition:background .25s ease,border-color .25s ease,color .2s ease,transform .2s ease,box-shadow .25s ease}
@@ -3403,6 +3409,49 @@ function populateCategoryOptions() {
 /* monta a barra de categorias da home a partir dos jogos que realmente existem nos produtos —
    assim que um jogo novo é cadastrado, o botão dele aparece sozinho aqui */
 const categoryBarEl = document.getElementById("category-bar");
+
+/* =========================================================================
+   ROLAGEM LATERAL da barra "Escolha seu jogo" — como a barra tem mais jogos
+   do que cabem na tela, sem isso dava pra achar que só existiam os visíveis.
+   1) roda do mouse (vertical) também rola a barra pro lado;
+   2) clicar e arrastar com o mouse rola a barra (estilo "grab/drag");
+   3) além disso já tem uma barrinha de rolagem fina e visível (ver CSS).
+   ========================================================================= */
+if (categoryBarEl) {
+  categoryBarEl.addEventListener("wheel", (e) => {
+    // só assume a rolagem se o gesto for predominantemente vertical
+    // (evita "roubar" o scroll de quem já está rolando de lado num trackpad)
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      e.preventDefault();
+      categoryBarEl.scrollLeft += e.deltaY;
+    }
+  }, { passive: false });
+
+  let isDragging = false, dragStartX = 0, dragStartScroll = 0, dragMoved = false;
+  categoryBarEl.addEventListener("mousedown", (e) => {
+    isDragging = true; dragMoved = false;
+    dragStartX = e.pageX;
+    dragStartScroll = categoryBarEl.scrollLeft;
+    categoryBarEl.classList.add("is-dragging");
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!isDragging) return;
+    const delta = e.pageX - dragStartX;
+    if (Math.abs(delta) > 4) dragMoved = true;
+    categoryBarEl.scrollLeft = dragStartScroll - delta;
+  });
+  window.addEventListener("mouseup", () => {
+    if (!isDragging) return;
+    isDragging = false;
+    categoryBarEl.classList.remove("is-dragging");
+    // se o mouse realmente arrastou (não foi só um clique), evita que o
+    // clique solto em cima de um card dispare o filtro da categoria sem querer
+    if (dragMoved) {
+      const swallowClick = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+      categoryBarEl.addEventListener("click", swallowClick, { capture: true, once: true });
+    }
+  });
+}
 
 function buildCategoryBar() {
   /* agrupa os produtos pela chave NORMALIZADA (categoryKeyOf), não pelo texto cru digitado
