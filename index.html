@@ -88,6 +88,7 @@
   .plan-card.is-selected .plan-radio{background:#7c5cff;border-color:#7c5cff}
   .tag-chip{background:rgba(124,92,255,.12);border:1px solid rgba(124,92,255,.3);color:#c9b6ff}
   input[type=number]::-webkit-inner-spin-button{opacity:1}
+  .modal-scroll{max-height:90vh}
   @media(min-width:1024px){.modal-scroll{max-height:88vh}}
   .admin-tabs-scroll{-ms-overflow-style:none;scrollbar-width:none}
   .admin-tabs-scroll::-webkit-scrollbar{display:none}
@@ -1227,6 +1228,24 @@
           </div>
         </div>
 
+        <!-- MENSAGENS DIRETAS DA LOJA (chat_privado) — é aqui que caem os avisos
+             do admin, como o código de afiliado. Sem esta caixa, a bolinha de
+             notificação apontava para um lugar que não existia na tela. -->
+        <div class="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wide lilac">Direto da equipe</p>
+              <h2 class="font-display text-lg font-bold uppercase text-white">Mensagens da loja</h2>
+            </div>
+            <span id="painel-msg-loja-badge" class="hidden shrink-0 rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold text-white">novas</span>
+          </div>
+          <div id="painel-msg-loja-thread" class="mb-3 flex max-h-80 flex-col gap-2.5 overflow-y-auto rounded-xl bg-bg/40 p-3"></div>
+          <form id="painel-msg-loja-form" class="flex items-center gap-2">
+            <input id="painel-msg-loja-input" autocomplete="off" maxlength="500" placeholder="Escreva para a equipe..." class="flex-1 rounded-full border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary" />
+            <button class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-white hover:bg-primaryhover">➤</button>
+          </form>
+        </div>
+
         <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
           <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -1511,7 +1530,7 @@
 </div>
 
 <div id="checkout-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeCheckout()">
-  <div class="w-full max-w-md rounded-2xl border border-border bg-surface p-6" id="checkout-content"></div>
+  <div class="modal-scroll w-full max-w-xl overflow-y-auto rounded-2xl border border-border bg-surface p-6 sm:p-8" id="checkout-content"></div>
 </div>
 
 <div id="auth-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeAuthModal()">
@@ -1930,6 +1949,87 @@ function subscribeToPrivateChat() {
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_privado", filter: `customer_id=eq.${CURRENT_USER.id}` }, () => loadPrivateChatMessages())
     .subscribe();
 }
+
+/* ================================================================
+   MENSAGENS DA LOJA no painel do cliente (aba Suporte)
+   Mesma tabela chat_privado usada pelo admin. É por aqui que chega o
+   aviso do código de afiliado — antes o contador acendia mas não havia
+   nenhuma tela mostrando a mensagem.
+   ================================================================ */
+let painelMsgLojaChannel = null;
+
+window.renderPainelMensagensLoja = async () => {
+  const thread = document.getElementById("painel-msg-loja-thread");
+  if (!thread || !CURRENT_USER) return;
+
+  const form = document.getElementById("painel-msg-loja-form");
+  if (form && !form.dataset.wired) {
+    form.dataset.wired = "1";
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const input = document.getElementById("painel-msg-loja-input");
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      const { error } = await supabase.from("chat_privado").insert({
+        customer_id: CURRENT_USER.id,
+        sender_id: CURRENT_USER.id,
+        sender_role: "client",
+        message_text: text,
+      });
+      if (error) alert("Erro ao enviar mensagem: " + error.message);
+      renderPainelMensagensLoja();
+    };
+  }
+
+  thread.innerHTML = `<p class="py-6 text-center text-xs text-muted">Carregando mensagens...</p>`;
+
+  const { data: msgs, error } = await supabase
+    .from("chat_privado")
+    .select("*")
+    .eq("customer_id", CURRENT_USER.id)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    thread.innerHTML = `<p class="py-6 text-center text-xs text-red-400">Erro ao carregar: ${escapeHTML(error.message)}</p>`;
+    return;
+  }
+
+  const lista = msgs || [];
+  if (!lista.length) {
+    thread.innerHTML = `<div class="flex flex-col items-center gap-2 py-8 text-center text-xs text-muted"><span class="text-2xl">💬</span>Nenhuma mensagem ainda. Escreva abaixo e a equipe responde por aqui.</div>`;
+  } else {
+    thread.innerHTML = lista.map((m) => {
+      const mine = m.sender_role === "client";
+      const hora = new Date(m.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      return `<div class="flex ${mine ? "justify-end" : "justify-start"}">
+        <div class="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm ${mine ? "bg-primary text-white" : "border border-accent/25 bg-surface2 text-white"}">
+          ${mine ? "" : `<p class="mb-1 text-[10px] font-bold uppercase tracking-wide text-accent">NovaStore</p>`}
+          <p class="whitespace-pre-wrap leading-relaxed">${escapeHTML(m.message_text || "")}</p>
+          <p class="mt-1 text-right text-[10px] ${mine ? "text-white/60" : "text-muted"}">${hora}</p>
+        </div>
+      </div>`;
+    }).join("");
+    thread.scrollTop = thread.scrollHeight;
+  }
+
+  // marca as mensagens do admin como lidas (some a bolinha de notificação)
+  const naoLidas = lista.filter((m) => m.sender_role === "admin" && !m.read_at).map((m) => m.id);
+  document.getElementById("painel-msg-loja-badge")?.classList.toggle("hidden", naoLidas.length === 0);
+  if (naoLidas.length) {
+    await supabase.from("chat_privado").update({ read_at: new Date().toISOString() }).in("id", naoLidas);
+    updatePrivateUnreadBadge();
+  }
+
+  // atualiza em tempo real enquanto a aba estiver aberta
+  if (painelMsgLojaChannel) supabase.removeChannel(painelMsgLojaChannel);
+  painelMsgLojaChannel = supabase
+    .channel(`painel-msg-loja-${CURRENT_USER.id}`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_privado", filter: `customer_id=eq.${CURRENT_USER.id}` }, () => {
+      if (!document.getElementById("painel-tab-suporte")?.classList.contains("hidden")) renderPainelMensagensLoja();
+    })
+    .subscribe();
+};
 
 /* mantém o badge (bolinha vermelha no perfil + contador em "Meus chats")
    atualizado mesmo com o modal fechado */
@@ -5624,8 +5724,25 @@ window.reenviarCodigoAfiliado = async (clienteId, nome) => {
 async function enviarMensagemCodigoAfiliado(clienteId, codigo, reenvio = false) {
   const { data: { session } } = await supabase.auth.getSession();
   const texto = reenvio
-    ? `🤝 Aqui está seu código de afiliado de novo: ${codigo}\n\nCompartilhe com seus amigos! Quando alguém usar esse código numa compra, ela aparece automaticamente no seu painel em "Afiliado".`
-    : `🎉 Sua conta agora faz parte do nosso Programa de Afiliados!\n\nSeu código de afiliado é: ${codigo}\n\nCompartilhe esse código com seus amigos e clientes. Toda vez que alguém usar ele numa compra, você acumula comissão — dá pra acompanhar tudo (indicações e comissões) direto no seu painel, na aba "Afiliado".`;
+    ? `🤝 Aqui está seu código de afiliado de novo: ${codigo}
+
+COMO USAR:
+Quem digitar ${codigo} no campo "Código de Anunciante / Afiliado" ao finalizar a compra ganha 10% de desconto em pedidos a partir de R$ 80,00 — e você recebe 10% de comissão sobre essa venda.
+
+Acompanhe suas indicações e comissões no seu painel, na aba "Afiliado".`
+    : `🎉 Parabéns! Sua conta agora faz parte do Programa de Afiliados da NovaStore.
+
+Seu código exclusivo é: ${codigo}
+
+COMO FUNCIONA:
+1. Compartilhe o código ${codigo} com seus amigos.
+2. Na hora de finalizar a compra, a pessoa cola o código no campo "Código de Anunciante / Afiliado".
+3. Ela ganha 10% de desconto em compras a partir de R$ 80,00.
+4. Você recebe 10% de comissão sobre cada venda feita com o seu código.
+
+Todo código da loja tem o formato #0000 (quatro dígitos). Acompanhe suas indicações, clientes e comissões no seu painel, na aba "Afiliado".
+
+Bom trabalho e boas vendas! 🚀`;
 
   const { error } = await supabase.from("chat_privado").insert({
     customer_id: clienteId,
@@ -5808,8 +5925,10 @@ window.switchPainelTab = (tab) => {
 
   if (tab === "avaliar") renderPainelAvaliar();
   if (tab === "pedidos") renderPainelPedidosTable();
-  if (tab === "suporte") loadMeusTickets();
-  if (tab === "afiliado") renderPainelAfiliado();
+  if (tab === "suporte") { loadMeusTickets(); renderPainelMensagensLoja(); }
+  // o admin pode ter afiliado a conta durante esta sessão, então o perfil
+  // em memória pode estar desatualizado — recarrega antes de desenhar
+  if (tab === "afiliado") refreshCurrentProfile().then(renderPainelAfiliado);
 };
 
 /* ---- carrega tudo que o painel precisa (chamado ao entrar em #painel) ---- */
