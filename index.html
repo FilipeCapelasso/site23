@@ -1246,10 +1246,12 @@
       <!-- AFILIADO -->
       <section id="painel-tab-afiliado" class="hidden">
         <h1 class="mb-5 font-display text-2xl font-bold text-white">Programa de afiliados</h1>
-        <div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-6 py-16 text-center">
-          <span class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-3xl">🤝</span>
-          <h2 class="font-display text-lg font-bold text-white">Sua conta ainda não é afiliada</h2>
-          <p class="mt-2 max-w-sm text-sm text-muted">Quando sua conta for ativada no programa de afiliados, suas estatísticas de indicações, comissões e links aparecerão aqui.</p>
+        <div id="painel-afiliado-content">
+          <div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-6 py-16 text-center">
+            <span class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-3xl">🤝</span>
+            <h2 class="font-display text-lg font-bold text-white">Sua conta ainda não é afiliada</h2>
+            <p class="mt-2 max-w-sm text-sm text-muted">Quando sua conta for ativada no programa de afiliados, suas estatísticas de indicações, comissões e links aparecerão aqui.</p>
+          </div>
         </div>
       </section>
     </main>
@@ -4049,6 +4051,7 @@ window.openCheckout = () => {
   }
   closeCart();
   appliedAnuncianteCode = null;
+  appliedAfiliadoId = null;
   const prefName = CURRENT_PROFILE?.full_name || "";
   const prefEmail = CURRENT_USER.email || "";
   const total = cartTotal();
@@ -4097,32 +4100,44 @@ window.openCheckout = () => {
 };
 
 let appliedAnuncianteCode = null;
+let appliedAfiliadoId = null;
 
 window.applyAnuncianteCode = async () => {
   const input = document.getElementById("checkout-anunciante-code");
   const statusEl = document.getElementById("anunciante-code-status");
   let code = input.value.trim();
+  appliedAnuncianteCode = null;
+  appliedAfiliadoId = null;
   if (!code) {
-    appliedAnuncianteCode = null;
     statusEl.textContent = "";
     return;
   }
-  if (!code.startsWith("#")) code = "#" + code;
 
   statusEl.textContent = "Verificando...";
   statusEl.className = "mt-1.5 min-h-[14px] text-xs text-muted";
 
-  const { data, error } = await supabase.from("anunciantes").select("codigo,nome").eq("codigo", code).maybeSingle();
-
-  if (error || !data) {
-    appliedAnuncianteCode = null;
-    statusEl.textContent = "Código não encontrado.";
-    statusEl.className = "mt-1.5 min-h-[14px] text-xs text-red-400";
+  // primeiro tenta como código de anunciante (formato #1234)
+  const codeComHash = code.startsWith("#") ? code : "#" + code;
+  const { data: anunciante } = await supabase.from("anunciantes").select("codigo,nome").eq("codigo", codeComHash).maybeSingle();
+  if (anunciante) {
+    appliedAnuncianteCode = anunciante.codigo;
+    statusEl.textContent = `Código aplicado! Indicado por ${anunciante.nome}.`;
+    statusEl.className = "mt-1.5 min-h-[14px] text-xs text-accent";
     return;
   }
-  appliedAnuncianteCode = data.codigo;
-  statusEl.textContent = `Código aplicado! Indicado por ${data.nome}.`;
-  statusEl.className = "mt-1.5 min-h-[14px] text-xs text-accent";
+
+  // se não achou, tenta como código de afiliado (cliente comum afiliado à loja)
+  const codeAfiliado = code.replace("#", "").toUpperCase();
+  const { data: afiliado } = await supabase.from("profiles").select("id, full_name").eq("codigo_afiliado", codeAfiliado).eq("is_afiliado", true).maybeSingle();
+  if (afiliado) {
+    appliedAfiliadoId = afiliado.id;
+    statusEl.textContent = `Código aplicado! Indicado por ${afiliado.full_name || "um afiliado"}.`;
+    statusEl.className = "mt-1.5 min-h-[14px] text-xs text-accent";
+    return;
+  }
+
+  statusEl.textContent = "Código não encontrado.";
+  statusEl.className = "mt-1.5 min-h-[14px] text-xs text-red-400";
 };
 
 window.closeCheckout = () => {
@@ -4150,6 +4165,7 @@ async function submitCheckout(e) {
       p_items: cart.map((i) => ({ productId: i.productId, planId: i.planId ?? null, name: i.name, planName: i.planName ?? null, price: i.price, quantity: i.quantity })),
       p_customer_id: CURRENT_USER?.id || null,
       p_anunciante_codigo: appliedAnuncianteCode,
+      p_afiliado_id: appliedAfiliadoId,
       p_usar_cupom: usarCupom,
     });
 
@@ -5329,7 +5345,7 @@ async function loadAdminContas() {
 
   const { data: profiles, error } = await supabase
     .from("profiles")
-    .select("id, full_name, email, avatar_url, role, created_at")
+    .select("id, full_name, email, avatar_url, role, created_at, is_afiliado, codigo_afiliado")
     .eq("role", "client")
     .order("created_at", { ascending: false });
 
@@ -5454,7 +5470,17 @@ window.openContaDetalhe = async (clienteId) => {
       </div>` : `<p class="text-sm text-muted">Ainda não visualizou nenhum produto.</p>`}
     </div>
 
-    <button onclick="mandarMensagemPara('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}')" class="w-full rounded-xl bg-primary py-3 text-sm font-bold text-white hover:bg-primaryhover">📩 Mandar mensagem</button>
+    ${conta?.is_afiliado ? `
+    <div class="mb-5 rounded-xl border border-accent/30 bg-accent/[0.06] p-4">
+      <p class="mb-1 text-xs font-bold uppercase tracking-wide text-accent">🤝 Conta afiliada</p>
+      <p class="text-sm text-muted">Código: <span class="font-display font-bold text-white">${escapeHTML(conta.codigo_afiliado || "—")}</span></p>
+      <button onclick="reenviarCodigoAfiliado('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}')" class="mt-2 text-xs font-bold hover:underline lilac">↻ Reenviar código por mensagem</button>
+    </div>` : ""}
+
+    <div class="flex flex-col gap-2.5 sm:flex-row">
+      <button onclick="mandarMensagemPara('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}')" class="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-white hover:bg-primaryhover">📩 Mandar mensagem</button>
+      ${!conta?.is_afiliado ? `<button onclick="afiliarConta('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}')" class="flex-1 rounded-xl border border-accent/50 py-3 text-sm font-bold text-accent hover:bg-accent/10">🤝 Afiliar conta e enviar código</button>` : ""}
+    </div>
   `;
 };
 
@@ -5472,6 +5498,69 @@ window.mandarMensagemPara = async (clienteId, nome) => {
   }
   openAdminMensagem(clienteId);
 };
+
+/* gera um código de afiliado único e legível a partir do primeiro nome do cliente,
+   ex: "MARIA482" — sem acento, maiúsculo, com 3 dígitos aleatórios no final */
+function gerarCodigoAfiliado(nome) {
+  const base = (nome || "CLIENTE")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .split(" ")[0]
+    .replace(/[^a-zA-Z]/g, "")
+    .toUpperCase()
+    .slice(0, 8) || "CLIENTE";
+  const numero = Math.floor(100 + Math.random() * 900);
+  return `${base}${numero}`;
+}
+
+/* transforma a conta de um cliente em conta afiliada: gera o código, salva em profiles
+   e avisa o cliente na mensagem privada dele (tabela chat_privado) */
+window.afiliarConta = async (clienteId, nome) => {
+  if (!confirm(`Afiliar a conta de "${nome}"? Um código de afiliado será gerado e enviado a ele por mensagem privada.`)) return;
+
+  let codigo = gerarCodigoAfiliado(nome);
+
+  // garante que o código gerado não colide com um já existente
+  for (let tentativa = 0; tentativa < 5; tentativa++) {
+    const { data: existente } = await supabase.from("profiles").select("id").eq("codigo_afiliado", codigo).maybeSingle();
+    if (!existente) break;
+    codigo = gerarCodigoAfiliado(nome);
+  }
+
+  const { error } = await supabase.from("profiles").update({ is_afiliado: true, codigo_afiliado: codigo }).eq("id", clienteId);
+  if (error) { alert("Erro ao afiliar conta: " + error.message); return; }
+
+  await enviarMensagemCodigoAfiliado(clienteId, codigo);
+
+  const conta = ADMIN_CONTAS.find((c) => c.id === clienteId);
+  if (conta) { conta.is_afiliado = true; conta.codigo_afiliado = codigo; }
+  renderContasTable();
+  openContaDetalhe(clienteId);
+};
+
+/* reenvia o código de afiliado já existente pra mensagem privada do cliente
+   (útil se ele perdeu a mensagem ou pediu de novo) */
+window.reenviarCodigoAfiliado = async (clienteId, nome) => {
+  const conta = ADMIN_CONTAS.find((c) => c.id === clienteId);
+  if (!conta?.codigo_afiliado) return;
+  if (!confirm(`Reenviar o código de afiliado de "${nome}" na mensagem privada?`)) return;
+  await enviarMensagemCodigoAfiliado(clienteId, conta.codigo_afiliado, true);
+  alert("Código reenviado!");
+};
+
+async function enviarMensagemCodigoAfiliado(clienteId, codigo, reenvio = false) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const texto = reenvio
+    ? `🤝 Aqui está seu código de afiliado de novo: ${codigo}\n\nCompartilhe com seus amigos! Quando alguém usar esse código numa compra, ela aparece automaticamente no seu painel em "Afiliado".`
+    : `🎉 Sua conta agora faz parte do nosso Programa de Afiliados!\n\nSeu código de afiliado é: ${codigo}\n\nCompartilhe esse código com seus amigos e clientes. Toda vez que alguém usar ele numa compra, você acumula comissão — dá pra acompanhar tudo (indicações e comissões) direto no seu painel, na aba "Afiliado".`;
+
+  const { error } = await supabase.from("chat_privado").insert({
+    customer_id: clienteId,
+    sender_id: session.user.id,
+    sender_role: "admin",
+    message_text: texto,
+  });
+  if (error) alert("Conta afiliada, mas houve um erro ao enviar a mensagem: " + error.message);
+}
 
 window.openSorteioForm = () => {
   document.getElementById("sorteio-form").reset();
@@ -5646,6 +5735,7 @@ window.switchPainelTab = (tab) => {
   if (tab === "avaliar") renderPainelAvaliar();
   if (tab === "pedidos") renderPainelPedidosTable();
   if (tab === "suporte") loadMeusTickets();
+  if (tab === "afiliado") renderPainelAfiliado();
 };
 
 /* ---- carrega tudo que o painel precisa (chamado ao entrar em #painel) ---- */
@@ -5972,6 +6062,86 @@ window.savePainelProfile = async () => {
   await refreshCurrentProfile();
   renderAuthUI();
   renderPainelPerfil();
+};
+
+/* ================================================================
+   PROGRAMA DE AFILIADOS (painel do cliente) — mostra o código do
+   cliente e as estatísticas de indicações/comissões que vieram dele
+   ================================================================ */
+async function renderPainelAfiliado() {
+  const el = document.getElementById("painel-afiliado-content");
+  if (!el) return;
+
+  if (!CURRENT_PROFILE?.is_afiliado || !CURRENT_PROFILE?.codigo_afiliado) {
+    el.innerHTML = `
+      <div class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-white/[0.02] px-6 py-16 text-center">
+        <span class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-3xl">🤝</span>
+        <h2 class="font-display text-lg font-bold text-white">Sua conta ainda não é afiliada</h2>
+        <p class="mt-2 max-w-sm text-sm text-muted">Quando sua conta for ativada no programa de afiliados, suas estatísticas de indicações, comissões e links aparecerão aqui.</p>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = `<p class="py-10 text-center text-sm text-muted">Carregando suas estatísticas...</p>`;
+
+  const codigo = CURRENT_PROFILE.codigo_afiliado;
+  const { data: indicacoes, error } = await supabase
+    .from("afiliados_indicacoes")
+    .select("*")
+    .eq("afiliado_id", CURRENT_USER.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    el.innerHTML = `<p class="py-10 text-center text-sm text-red-400">Erro ao carregar estatísticas: ${escapeHTML(error.message)}</p>`;
+    return;
+  }
+
+  const lista = indicacoes || [];
+  const pagas = lista.filter((i) => i.status === "pago");
+  const clientesUnicos = new Set(pagas.map((i) => i.cliente_id).filter(Boolean));
+  const totalComissao = pagas.reduce((s, i) => s + Number(i.comissao || 0), 0);
+  const totalPendente = lista.filter((i) => i.status !== "pago").reduce((s, i) => s + Number(i.comissao || 0), 0);
+
+  el.innerHTML = `
+    <div class="mb-6 flex flex-col items-start justify-between gap-4 rounded-2xl border border-accent/30 bg-accent/[0.06] p-5 sm:flex-row sm:items-center">
+      <div>
+        <p class="text-xs font-bold uppercase tracking-wide text-accent">Seu código de afiliado</p>
+        <p class="font-display text-3xl font-bold text-white">${escapeHTML(codigo)}</p>
+        <p class="mt-1 text-xs text-muted">Compartilhe esse código — quem usar ele numa compra vira sua indicação.</p>
+      </div>
+      <button onclick="copyAfiliadoCode(this, '${codigo}')" class="btn-press shrink-0 rounded-xl border border-accent/50 px-5 py-3 text-sm font-bold text-accent hover:bg-accent/10">📋 Copiar código</button>
+    </div>
+
+    <div class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div class="painel-stat-card"><p class="font-display text-2xl font-bold text-white">${clientesUnicos.size}</p><p class="text-[11px] font-bold uppercase text-muted">Clientes que compraram com seu código</p></div>
+      <div class="painel-stat-card"><p class="font-display text-2xl font-bold text-accent">${fmt(totalComissao)}</p><p class="text-[11px] font-bold uppercase text-muted">Comissão já confirmada</p></div>
+      <div class="painel-stat-card"><p class="font-display text-2xl font-bold text-white">${fmt(totalPendente)}</p><p class="text-[11px] font-bold uppercase text-muted">Comissão pendente</p></div>
+    </div>
+
+    <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Indicações recentes</h3>
+    ${lista.length ? `
+    <div class="overflow-x-auto rounded-xl border border-border">
+      <table class="w-full text-left text-sm">
+        <thead class="border-b border-border bg-surface2 text-muted"><tr><th class="px-3 py-2">Data</th><th class="px-3 py-2">Valor da venda</th><th class="px-3 py-2">Sua comissão</th><th class="px-3 py-2">Status</th></tr></thead>
+        <tbody>
+          ${lista.slice(0, 20).map((i) => `
+            <tr class="border-b border-border/60 last:border-0">
+              <td class="px-3 py-2 text-muted">${fmtDate(i.created_at)}</td>
+              <td class="px-3 py-2">${fmt(i.valor_venda)}</td>
+              <td class="px-3 py-2 font-semibold text-white">${fmt(i.comissao)}</td>
+              <td class="px-3 py-2">${i.status === "pago" ? `<span class="painel-status-badge bg-accent/15 text-accent">Confirmada</span>` : `<span class="painel-status-badge bg-yellow-500/15 text-yellow-400">Pendente</span>`}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>` : `<p class="text-sm text-muted">Você ainda não tem nenhuma indicação. Compartilhe seu código para começar a ganhar comissões!</p>`}
+  `;
+}
+
+window.copyAfiliadoCode = (btn, codigo) => {
+  navigator.clipboard.writeText(codigo);
+  const original = btn.textContent;
+  btn.textContent = "✓ Copiado!";
+  setTimeout(() => (btn.textContent = original), 2000);
 };
 
 route();
