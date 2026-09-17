@@ -1,0 +1,1238 @@
+-- =====================================================================================
+--  NOVASTORE — SCRIPT SQL COMPLETO PARA O SUPABASE
+-- =====================================================================================
+--  Gerado a partir da análise completa do arquivo index.html do site (7.575 linhas),
+--  cobrindo TODAS as tabelas, colunas, funções RPC, políticas de segurança (RLS),
+--  buckets de storage e realtime que o front-end realmente usa.
+--
+--  COMO USAR:
+--    1. Abra o SQL Editor do seu projeto Supabase.
+--    2. Cole o conteúdo INTEIRO deste arquivo e rode de uma vez (é idempotente —
+--       pode rodar de novo sem quebrar nada que já exista).
+--    3. Crie sua conta normalmente pelo site (botão "Criar conta").
+--    4. Rode o comando lá no final ("PARTE 11") pra virar administrador.
+--    5. Configure o gateway de Pix na tabela app_config (veja PARTE 7 e os
+--       comentários da função criar_pix) — SEM ISSO o botão "Gerar Pix" do
+--       checkout vai responder com um erro amigável em vez de travar.
+--
+--  TABELAS CRIADAS (17 + 1 de configuração interna):
+--    profiles, products, orders, messages, chat_privado, chat_global,
+--    mensagens_privadas, amigos, tickets, ticket_mensagens, avaliacoes,
+--    site_settings, product_views, anunciantes, afiliados_indicacoes,
+--    historico_vendas_anunciantes, sorteios, app_config
+-- =====================================================================================
+
+
+-- =====================================================================================
+-- PARTE 0 — EXTENSÕES
+-- =====================================================================================
+-- gen_random_uuid() já é nativo do Postgres 13+ (usado pelo Supabase), não precisa
+-- de pgcrypto. A extensão "http" é usada pela função criar_pix() para chamar o
+-- gateway de pagamento Pix diretamente do banco.
+create extension if not exists http;
+
+
+-- =====================================================================================
+-- PARTE 1 — FUNÇÕES AUXILIARES GENÉRICAS
+-- =====================================================================================
+
+-- Verifica se o usuário autenticado atual é admin (usada em quase toda política RLS)
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid() and p.role = 'admin'
+  );
+$$;
+
+-- Trigger genérica que mantém a coluna updated_at sempre atualizada
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+-- Gera um código no formato oficial da loja: "#" + 4 dígitos (ex: #4827)
+create or replace function public.gerar_codigo_4_digitos()
+returns text
+language sql
+as $$
+  select '#' || lpad((floor(random() * 9000) + 1000)::int::text, 4, '0');
+$$;
+
+-- Gera um código de CLIENTE (usado no sorteio) garantindo que seja único
+-- dentro da própria tabela profiles.
+create or replace function public.gerar_codigo_cliente_unico()
+returns text
+language plpgsql
+as $$
+declare
+  v_codigo text;
+  v_tentativas int := 0;
+begin
+  loop
+    v_codigo := public.gerar_codigo_4_digitos();
+    v_tentativas := v_tentativas + 1;
+    exit when not exists (select 1 from public.profiles where codigo_cliente = v_codigo);
+    exit when v_tentativas >= 30;
+  end loop;
+  return v_codigo;
+end;
+$$;
+
+
+-- =====================================================================================
+-- PARTE 2 — TABELAS
+-- =====================================================================================
+
+-- ---------- 2.1 profiles ----------
+-- Um perfil por usuário do Supabase Auth. Criado automaticamente no cadastro
+-- (ver trigger handle_new_user na PARTE 4).
+create table if not exists public.profiles (
+  id                uuid primary key references auth.users(id) on delete cascade,
+  full_name         text,
+  email             text,
+  phone             text,
+  avatar_url        text,
+  role              text not null default 'client' check (role in ('client','admin')),
+  is_afiliado       boolean not null default false,
+  codigo_afiliado   text unique,
+  codigo_cliente    text unique,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+
+-- ---------- 2.2 products ----------
+create table if not exists public.products (
+  id            uuid primary key default gen_random_uuid(),
+  name          text not null,
+  slug          text unique,
+  description   text,
+  category      text,
+  tags          text[] not null default '{}',
+  features      text[] not null default '{}',
+  type          text not null default 'UNICO' check (type in ('UNICO','ASSINATURA')),
+  price         numeric(10,2),
+  stock         integer,
+  image_url     text,
+  plans         jsonb not null default '[]'::jsonb,
+  featured      boolean not null default false,
+  active        boolean not null default true,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+-- ---------- 2.3 orders ----------
+create table if not exists public.orders (
+  id                      uuid primary key default gen_random_uuid(),
+  customer_id             uuid references public.profiles(id) on delete set null,
+  customer_name           text,
+  customer_email          text,
+  items                   jsonb not null default '[]'::jsonb,
+  total                   numeric(10,2) not null default 0,
+  status                  text not null default 'PENDENTE' check (status in ('PENDENTE','PAGO','CANCELADO','EXPIRADO')),
+  paid_at                 timestamptz,
+  anunciante_codigo       text,
+  codigo_afiliado_usado   text,
+  afiliado_id             uuid references public.profiles(id) on delete set null,
+  cupom_usado             boolean not null default false,
+  desconto_aplicado       numeric(10,2) not null default 0,
+  pix_txid                text,
+  pix_qrcode_base64       text,
+  pix_copia_cola          text,
+  pix_expires_at          timestamptz,
+  created_at              timestamptz not null default now()
+);
+
+-- ---------- 2.4 messages (chat do pedido: entrega/suporte pós-compra) ----------
+create table if not exists public.messages (
+  id            uuid primary key default gen_random_uuid(),
+  order_id      uuid not null references public.orders(id) on delete cascade,
+  sender_id     uuid not null references public.profiles(id) on delete cascade,
+  receiver_id   uuid references public.profiles(id) on delete set null,
+  message_text  text not null,
+  created_at    timestamptz not null default now()
+);
+
+-- ---------- 2.5 chat_privado (mensagens loja <-> cliente, fora de um pedido) ----------
+create table if not exists public.chat_privado (
+  id            uuid primary key default gen_random_uuid(),
+  customer_id   uuid not null references public.profiles(id) on delete cascade,
+  sender_id     uuid not null references public.profiles(id) on delete cascade,
+  sender_role   text not null check (sender_role in ('client','admin')),
+  message_text  text,
+  read_at       timestamptz,
+  created_at    timestamptz not null default now()
+);
+
+-- ---------- 2.6 chat_global (sala pública em tempo real) ----------
+create table if not exists public.chat_global (
+  id                  uuid primary key default gen_random_uuid(),
+  sender_id           uuid not null references public.profiles(id) on delete cascade,
+  sender_name         text not null,
+  sender_role         text not null default 'client' check (sender_role in ('client','admin')),
+  sender_avatar_url   text,
+  message_text        text,
+  image_url           text,
+  client_id           text,
+  created_at          timestamptz not null default now()
+);
+
+-- ---------- 2.7 mensagens_privadas (chat 1-para-1 entre amigos/clientes) ----------
+create table if not exists public.mensagens_privadas (
+  id            uuid primary key default gen_random_uuid(),
+  sender_id     uuid not null references public.profiles(id) on delete cascade,
+  receiver_id   uuid not null references public.profiles(id) on delete cascade,
+  message_text  text,
+  image_url     text,
+  read_at       timestamptz,
+  created_at    timestamptz not null default now()
+);
+
+-- ---------- 2.8 amigos (pedidos e vínculos de amizade) ----------
+create table if not exists public.amigos (
+  id                      uuid primary key default gen_random_uuid(),
+  requester_id            uuid not null references public.profiles(id) on delete cascade,
+  addressee_id            uuid not null references public.profiles(id) on delete cascade,
+  requester_name          text,
+  requester_avatar_url    text,
+  addressee_name          text,
+  addressee_avatar_url    text,
+  status                  text not null default 'pending' check (status in ('pending','accepted')),
+  created_at              timestamptz not null default now(),
+  updated_at              timestamptz not null default now(),
+  constraint amigos_sem_autoamizade check (requester_id <> addressee_id),
+  constraint amigos_par_unico unique (requester_id, addressee_id)
+);
+
+-- ---------- 2.9 tickets (suporte) ----------
+create table if not exists public.tickets (
+  id            uuid primary key default gen_random_uuid(),
+  customer_id   uuid not null references public.profiles(id) on delete cascade,
+  categoria     text,
+  assunto       text not null,
+  status        text not null default 'aberto' check (status in ('aberto','aguardando_cliente','respondido','fechado')),
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+-- ---------- 2.10 ticket_mensagens ----------
+create table if not exists public.ticket_mensagens (
+  id            uuid primary key default gen_random_uuid(),
+  ticket_id     uuid not null references public.tickets(id) on delete cascade,
+  sender_role   text not null check (sender_role in ('client','admin')),
+  message_text  text not null,
+  read_at       timestamptz,
+  created_at    timestamptz not null default now()
+);
+
+-- ---------- 2.11 avaliacoes (reviews de produtos) ----------
+create table if not exists public.avaliacoes (
+  id            uuid primary key default gen_random_uuid(),
+  customer_id   uuid not null references public.profiles(id) on delete cascade,
+  product_id    uuid not null references public.products(id) on delete cascade,
+  customer_name text,
+  rating        smallint not null check (rating between 1 and 5),
+  comment       text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  constraint avaliacoes_unica_por_cliente_produto unique (customer_id, product_id)
+);
+
+-- ---------- 2.12 site_settings (aparência do site — linha única, id = 1) ----------
+create table if not exists public.site_settings (
+  id                          integer primary key default 1 check (id = 1),
+  hero_image_url              text,
+  hero_overlay                numeric(3,2) not null default 0.35,
+  background_image_url        text,
+  background_overlay          numeric(3,2) not null default 0.85,
+  theme_primary               text not null default '#7c5cff',
+  theme_accent                text not null default '#00e6a8',
+  effect_lightning            boolean not null default false,
+  effect_card_lightning       boolean not null default false,
+  card_lightning_frequency    text default 'normal',
+  category_glow_enabled       boolean not null default false,
+  category_glow_color         text default '#7c5cff',
+  updated_at                  timestamptz not null default now()
+);
+
+-- ---------- 2.13 product_views (histórico de produtos vistos por cliente) ----------
+create table if not exists public.product_views (
+  id            uuid primary key default gen_random_uuid(),
+  cliente_id    uuid not null references public.profiles(id) on delete cascade,
+  product_id    uuid references public.products(id) on delete set null,
+  product_nome  text,
+  created_at    timestamptz not null default now()
+);
+
+-- ---------- 2.14 anunciantes (códigos de indicação cadastrados manualmente) ----------
+create table if not exists public.anunciantes (
+  id            uuid primary key default gen_random_uuid(),
+  nome          text not null,
+  codigo        text not null unique,
+  total_vendas  integer not null default 0,
+  created_at    timestamptz not null default now()
+);
+
+-- ---------- 2.15 afiliados_indicacoes (comissões de clientes afiliados) ----------
+create table if not exists public.afiliados_indicacoes (
+  id            uuid primary key default gen_random_uuid(),
+  afiliado_id   uuid not null references public.profiles(id) on delete cascade,
+  cliente_id    uuid references public.profiles(id) on delete set null,
+  order_id      uuid references public.orders(id) on delete set null,
+  valor_venda   numeric(10,2) not null default 0,
+  comissao      numeric(10,2) not null default 0,
+  status        text not null default 'pendente' check (status in ('pendente','pago')),
+  created_at    timestamptz not null default now()
+);
+
+-- ---------- 2.16 historico_vendas_anunciantes ----------
+create table if not exists public.historico_vendas_anunciantes (
+  id              uuid primary key default gen_random_uuid(),
+  anunciante_id   uuid not null references public.anunciantes(id) on delete cascade,
+  order_id        uuid references public.orders(id) on delete set null,
+  produto_nome    text,
+  valor_compra    numeric(10,2) not null default 0,
+  cliente_nome    text,
+  created_at      timestamptz not null default now()
+);
+
+-- ---------- 2.17 sorteios ----------
+create table if not exists public.sorteios (
+  id              uuid primary key default gen_random_uuid(),
+  titulo          text not null,
+  premio          text not null,
+  dias            integer,
+  data_sorteio    date not null,
+  status          text not null default 'aberto' check (status in ('aberto','finalizado')),
+  ganhador_nome   text,
+  ganhador_codigo text,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+-- ---------- 2.18 app_config (config interna — NUNCA exposta ao front-end) ----------
+-- Guarda credenciais/parâmetros usados pelas funções do banco (ex.: gateway Pix).
+create table if not exists public.app_config (
+  chave       text primary key,
+  valor       text,
+  updated_at  timestamptz not null default now()
+);
+
+insert into public.app_config (chave, valor) values
+  ('pix_gateway_url', ''),                    -- URL da API do seu gateway Pix
+  ('pix_gateway_token', ''),                  -- token/API key do gateway Pix
+  ('afiliado_comissao_percentual', '10')      -- % de comissão do afiliado por venda
+on conflict (chave) do nothing;
+
+
+-- =====================================================================================
+-- PARTE 3 — PERMISSÕES BASE (garante que os papéis padrão do Supabase existam
+--           mesmo em projetos criados manualmente / fora do template padrão)
+-- =====================================================================================
+grant usage on schema public to anon, authenticated, service_role;
+grant select, insert, update, delete on all tables in schema public to anon, authenticated;
+grant execute on all functions in schema public to anon, authenticated;
+alter default privileges in schema public grant select, insert, update, delete on tables to anon, authenticated;
+alter default privileges in schema public grant execute on functions to anon, authenticated;
+
+
+-- =====================================================================================
+-- PARTE 4 — ÍNDICES
+-- =====================================================================================
+create index if not exists idx_orders_customer_id            on public.orders(customer_id);
+create index if not exists idx_orders_status                 on public.orders(status);
+create index if not exists idx_orders_created_at              on public.orders(created_at desc);
+create index if not exists idx_orders_afiliado_id             on public.orders(afiliado_id);
+create index if not exists idx_messages_order_id              on public.messages(order_id);
+create index if not exists idx_chat_privado_customer_id       on public.chat_privado(customer_id);
+create index if not exists idx_chat_global_created_at         on public.chat_global(created_at desc);
+create index if not exists idx_mensagens_privadas_sender      on public.mensagens_privadas(sender_id);
+create index if not exists idx_mensagens_privadas_receiver    on public.mensagens_privadas(receiver_id);
+create index if not exists idx_amigos_requester               on public.amigos(requester_id);
+create index if not exists idx_amigos_addressee               on public.amigos(addressee_id);
+create index if not exists idx_tickets_customer_id            on public.tickets(customer_id);
+create index if not exists idx_ticket_mensagens_ticket_id     on public.ticket_mensagens(ticket_id);
+create index if not exists idx_avaliacoes_product_id          on public.avaliacoes(product_id);
+create index if not exists idx_product_views_cliente_id       on public.product_views(cliente_id);
+create index if not exists idx_product_views_product_id       on public.product_views(product_id);
+create index if not exists idx_afiliados_indicacoes_afiliado  on public.afiliados_indicacoes(afiliado_id);
+create index if not exists idx_historico_vendas_anunciante    on public.historico_vendas_anunciantes(anunciante_id);
+create index if not exists idx_products_active                on public.products(active);
+create index if not exists idx_products_slug                  on public.products(slug);
+create index if not exists idx_profiles_codigo_afiliado       on public.profiles(codigo_afiliado);
+create index if not exists idx_profiles_codigo_cliente        on public.profiles(codigo_cliente);
+
+
+-- =====================================================================================
+-- PARTE 5 — TRIGGERS
+-- =====================================================================================
+
+-- 5.1 Cria automaticamente o perfil do cliente assim que ele se cadastra
+-- (supabase.auth.signUp) — inclui o código de sorteio (codigo_cliente).
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, email, full_name, role, codigo_cliente)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
+    'client',
+    public.gerar_codigo_cliente_unico()
+  )
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- 5.2 Triggers de updated_at
+drop trigger if exists trg_profiles_updated_at on public.profiles;
+create trigger trg_profiles_updated_at before update on public.profiles
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_products_updated_at on public.products;
+create trigger trg_products_updated_at before update on public.products
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_tickets_updated_at on public.tickets;
+create trigger trg_tickets_updated_at before update on public.tickets
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_amigos_updated_at on public.amigos;
+create trigger trg_amigos_updated_at before update on public.amigos
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_avaliacoes_updated_at on public.avaliacoes;
+create trigger trg_avaliacoes_updated_at before update on public.avaliacoes
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_sorteios_updated_at on public.sorteios;
+create trigger trg_sorteios_updated_at before update on public.sorteios
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_site_settings_updated_at on public.site_settings;
+create trigger trg_site_settings_updated_at before update on public.site_settings
+  for each row execute function public.set_updated_at();
+
+-- 5.3 Impede que um cliente comum promova a si mesmo a admin/afiliado
+-- editando o próprio perfil (defesa extra além da política RLS de UPDATE)
+create or replace function public.protect_profile_privileged_fields()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    new.role            := old.role;
+    new.is_afiliado      := old.is_afiliado;
+    new.codigo_afiliado   := old.codigo_afiliado;
+    new.codigo_cliente    := old.codigo_cliente;
+    new.email            := old.email;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_protect_profile_privileged_fields on public.profiles;
+create trigger trg_protect_profile_privileged_fields
+  before update on public.profiles
+  for each row execute function public.protect_profile_privileged_fields();
+
+-- 5.4 Só deixa avaliar produto que o cliente realmente comprou e pagou
+-- (o front-end já esconde o formulário, isso aqui garante no banco)
+create or replace function public.enforce_avaliacao_requer_compra()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1 from public.orders o
+    where o.customer_id = new.customer_id
+      and o.status = 'PAGO'
+      and exists (
+        select 1 from jsonb_array_elements(o.items) it
+        where (it->>'productId')::uuid = new.product_id
+      )
+  ) then
+    raise exception 'Você só pode avaliar produtos que já comprou.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_avaliacao_requer_compra on public.avaliacoes;
+create trigger trg_avaliacao_requer_compra
+  before insert or update on public.avaliacoes
+  for each row execute function public.enforce_avaliacao_requer_compra();
+
+
+-- =====================================================================================
+-- PARTE 6 — ROW LEVEL SECURITY (RLS)
+-- =====================================================================================
+
+-- ---------- profiles ----------
+alter table public.profiles enable row level security;
+
+drop policy if exists "profiles_select_authenticated" on public.profiles;
+create policy "profiles_select_authenticated"
+  on public.profiles for select
+  to authenticated
+  using (true); -- nomes/avatares são visíveis entre usuários logados (chat, amigos, busca)
+
+drop policy if exists "profiles_update_self_or_admin" on public.profiles;
+create policy "profiles_update_self_or_admin"
+  on public.profiles for update
+  to authenticated
+  using (auth.uid() = id or public.is_admin())
+  with check (auth.uid() = id or public.is_admin());
+
+-- ---------- products ----------
+alter table public.products enable row level security;
+
+drop policy if exists "products_select_public_active_or_admin" on public.products;
+create policy "products_select_public_active_or_admin"
+  on public.products for select
+  to anon, authenticated
+  using (active = true or public.is_admin());
+
+drop policy if exists "products_admin_all" on public.products;
+create policy "products_admin_all"
+  on public.products for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- ---------- orders ----------
+alter table public.orders enable row level security;
+
+drop policy if exists "orders_select_own_or_admin" on public.orders;
+create policy "orders_select_own_or_admin"
+  on public.orders for select
+  to authenticated
+  using (customer_id = auth.uid() or public.is_admin());
+
+drop policy if exists "orders_admin_update" on public.orders;
+create policy "orders_admin_update"
+  on public.orders for update
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "orders_admin_delete" on public.orders;
+create policy "orders_admin_delete"
+  on public.orders for delete
+  to authenticated
+  using (public.is_admin());
+-- Não existe política de INSERT: pedidos só são criados pela função criar_pix()
+-- (SECURITY DEFINER), nunca diretamente pelo cliente.
+
+-- ---------- messages ----------
+alter table public.messages enable row level security;
+
+drop policy if exists "messages_select_participant_or_admin" on public.messages;
+create policy "messages_select_participant_or_admin"
+  on public.messages for select
+  to authenticated
+  using (sender_id = auth.uid() or receiver_id = auth.uid() or public.is_admin());
+
+drop policy if exists "messages_insert_as_self" on public.messages;
+create policy "messages_insert_as_self"
+  on public.messages for insert
+  to authenticated
+  with check (
+    sender_id = auth.uid()
+    and exists (
+      select 1 from public.orders o
+      where o.id = order_id and (o.customer_id = auth.uid() or public.is_admin())
+    )
+  );
+
+-- ---------- chat_privado ----------
+alter table public.chat_privado enable row level security;
+
+drop policy if exists "chat_privado_select_own_or_admin" on public.chat_privado;
+create policy "chat_privado_select_own_or_admin"
+  on public.chat_privado for select
+  to authenticated
+  using (customer_id = auth.uid() or public.is_admin());
+
+drop policy if exists "chat_privado_insert" on public.chat_privado;
+create policy "chat_privado_insert"
+  on public.chat_privado for insert
+  to authenticated
+  with check (sender_id = auth.uid() and (customer_id = auth.uid() or public.is_admin()));
+
+drop policy if exists "chat_privado_update_read" on public.chat_privado;
+create policy "chat_privado_update_read"
+  on public.chat_privado for update
+  to authenticated
+  using (customer_id = auth.uid() or public.is_admin())
+  with check (customer_id = auth.uid() or public.is_admin());
+
+-- ---------- chat_global ----------
+alter table public.chat_global enable row level security;
+
+drop policy if exists "chat_global_select_authenticated" on public.chat_global;
+create policy "chat_global_select_authenticated"
+  on public.chat_global for select
+  to authenticated
+  using (true);
+
+drop policy if exists "chat_global_insert_as_self" on public.chat_global;
+create policy "chat_global_insert_as_self"
+  on public.chat_global for insert
+  to authenticated
+  with check (sender_id = auth.uid());
+
+drop policy if exists "chat_global_delete_admin" on public.chat_global;
+create policy "chat_global_delete_admin"
+  on public.chat_global for delete
+  to authenticated
+  using (public.is_admin());
+
+-- ---------- mensagens_privadas ----------
+alter table public.mensagens_privadas enable row level security;
+
+drop policy if exists "mensagens_privadas_select_participant" on public.mensagens_privadas;
+create policy "mensagens_privadas_select_participant"
+  on public.mensagens_privadas for select
+  to authenticated
+  using (sender_id = auth.uid() or receiver_id = auth.uid());
+
+drop policy if exists "mensagens_privadas_insert_as_self" on public.mensagens_privadas;
+create policy "mensagens_privadas_insert_as_self"
+  on public.mensagens_privadas for insert
+  to authenticated
+  with check (sender_id = auth.uid());
+
+drop policy if exists "mensagens_privadas_update_participant" on public.mensagens_privadas;
+create policy "mensagens_privadas_update_participant"
+  on public.mensagens_privadas for update
+  to authenticated
+  using (sender_id = auth.uid() or receiver_id = auth.uid())
+  with check (sender_id = auth.uid() or receiver_id = auth.uid());
+
+-- ---------- amigos ----------
+alter table public.amigos enable row level security;
+
+drop policy if exists "amigos_select_participant_or_admin" on public.amigos;
+create policy "amigos_select_participant_or_admin"
+  on public.amigos for select
+  to authenticated
+  using (requester_id = auth.uid() or addressee_id = auth.uid() or public.is_admin());
+
+drop policy if exists "amigos_insert" on public.amigos;
+create policy "amigos_insert"
+  on public.amigos for insert
+  to authenticated
+  with check (requester_id = auth.uid() or public.is_admin());
+
+drop policy if exists "amigos_update_participant_or_admin" on public.amigos;
+create policy "amigos_update_participant_or_admin"
+  on public.amigos for update
+  to authenticated
+  using (requester_id = auth.uid() or addressee_id = auth.uid() or public.is_admin())
+  with check (requester_id = auth.uid() or addressee_id = auth.uid() or public.is_admin());
+
+drop policy if exists "amigos_delete_participant_or_admin" on public.amigos;
+create policy "amigos_delete_participant_or_admin"
+  on public.amigos for delete
+  to authenticated
+  using (requester_id = auth.uid() or addressee_id = auth.uid() or public.is_admin());
+
+-- ---------- tickets ----------
+alter table public.tickets enable row level security;
+
+drop policy if exists "tickets_select_own_or_admin" on public.tickets;
+create policy "tickets_select_own_or_admin"
+  on public.tickets for select
+  to authenticated
+  using (customer_id = auth.uid() or public.is_admin());
+
+drop policy if exists "tickets_insert_own" on public.tickets;
+create policy "tickets_insert_own"
+  on public.tickets for insert
+  to authenticated
+  with check (customer_id = auth.uid());
+
+drop policy if exists "tickets_update_own_or_admin" on public.tickets;
+create policy "tickets_update_own_or_admin"
+  on public.tickets for update
+  to authenticated
+  using (customer_id = auth.uid() or public.is_admin())
+  with check (customer_id = auth.uid() or public.is_admin());
+
+-- ---------- ticket_mensagens ----------
+alter table public.ticket_mensagens enable row level security;
+
+drop policy if exists "ticket_mensagens_select" on public.ticket_mensagens;
+create policy "ticket_mensagens_select"
+  on public.ticket_mensagens for select
+  to authenticated
+  using (
+    public.is_admin()
+    or exists (select 1 from public.tickets t where t.id = ticket_id and t.customer_id = auth.uid())
+  );
+
+drop policy if exists "ticket_mensagens_insert" on public.ticket_mensagens;
+create policy "ticket_mensagens_insert"
+  on public.ticket_mensagens for insert
+  to authenticated
+  with check (
+    (sender_role = 'admin' and public.is_admin())
+    or (sender_role = 'client' and exists (
+      select 1 from public.tickets t where t.id = ticket_id and t.customer_id = auth.uid()
+    ))
+  );
+
+drop policy if exists "ticket_mensagens_update_read" on public.ticket_mensagens;
+create policy "ticket_mensagens_update_read"
+  on public.ticket_mensagens for update
+  to authenticated
+  using (
+    public.is_admin()
+    or exists (select 1 from public.tickets t where t.id = ticket_id and t.customer_id = auth.uid())
+  );
+
+-- ---------- avaliacoes ----------
+alter table public.avaliacoes enable row level security;
+
+drop policy if exists "avaliacoes_select_public" on public.avaliacoes;
+create policy "avaliacoes_select_public"
+  on public.avaliacoes for select
+  to authenticated
+  using (true);
+
+drop policy if exists "avaliacoes_insert_own" on public.avaliacoes;
+create policy "avaliacoes_insert_own"
+  on public.avaliacoes for insert
+  to authenticated
+  with check (customer_id = auth.uid());
+
+drop policy if exists "avaliacoes_update_own" on public.avaliacoes;
+create policy "avaliacoes_update_own"
+  on public.avaliacoes for update
+  to authenticated
+  using (customer_id = auth.uid())
+  with check (customer_id = auth.uid());
+
+-- ---------- site_settings ----------
+alter table public.site_settings enable row level security;
+
+drop policy if exists "site_settings_select_public" on public.site_settings;
+create policy "site_settings_select_public"
+  on public.site_settings for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "site_settings_admin_write" on public.site_settings;
+create policy "site_settings_admin_write"
+  on public.site_settings for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- ---------- product_views ----------
+alter table public.product_views enable row level security;
+
+drop policy if exists "product_views_select_own_or_admin" on public.product_views;
+create policy "product_views_select_own_or_admin"
+  on public.product_views for select
+  to authenticated
+  using (cliente_id = auth.uid() or public.is_admin());
+
+drop policy if exists "product_views_insert_own" on public.product_views;
+create policy "product_views_insert_own"
+  on public.product_views for insert
+  to authenticated
+  with check (cliente_id = auth.uid());
+
+-- ---------- anunciantes ----------
+alter table public.anunciantes enable row level security;
+
+drop policy if exists "anunciantes_select_authenticated" on public.anunciantes;
+create policy "anunciantes_select_authenticated"
+  on public.anunciantes for select
+  to authenticated
+  using (true); -- necessário pra validar o código #0000 no checkout
+
+drop policy if exists "anunciantes_admin_write" on public.anunciantes;
+create policy "anunciantes_admin_write"
+  on public.anunciantes for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- ---------- afiliados_indicacoes ----------
+alter table public.afiliados_indicacoes enable row level security;
+
+drop policy if exists "afiliados_indicacoes_select_own_or_admin" on public.afiliados_indicacoes;
+create policy "afiliados_indicacoes_select_own_or_admin"
+  on public.afiliados_indicacoes for select
+  to authenticated
+  using (afiliado_id = auth.uid() or public.is_admin());
+
+drop policy if exists "afiliados_indicacoes_admin_write" on public.afiliados_indicacoes;
+create policy "afiliados_indicacoes_admin_write"
+  on public.afiliados_indicacoes for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+-- (a inserção normal acontece via confirmar_pagamento_pix, SECURITY DEFINER)
+
+-- ---------- historico_vendas_anunciantes ----------
+alter table public.historico_vendas_anunciantes enable row level security;
+
+drop policy if exists "historico_vendas_anunciantes_admin_only" on public.historico_vendas_anunciantes;
+create policy "historico_vendas_anunciantes_admin_only"
+  on public.historico_vendas_anunciantes for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- ---------- sorteios ----------
+alter table public.sorteios enable row level security;
+
+drop policy if exists "sorteios_select_public" on public.sorteios;
+create policy "sorteios_select_public"
+  on public.sorteios for select
+  to anon, authenticated
+  using (true);
+
+drop policy if exists "sorteios_admin_write" on public.sorteios;
+create policy "sorteios_admin_write"
+  on public.sorteios for all
+  to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+-- ---------- app_config ----------
+-- RLS ligado e SEM nenhuma política = ninguém (anon/authenticated) consegue
+-- ler ou escrever direto. Só as funções SECURITY DEFINER (rodando como
+-- "postgres") conseguem acessar esta tabela.
+alter table public.app_config enable row level security;
+
+
+-- =====================================================================================
+-- PARTE 7 — FUNÇÕES RPC (chamadas pelo front-end via supabase.rpc(...))
+-- =====================================================================================
+
+-- ---------------------------------------------------------------------------
+-- 7.1 criar_pix — cria o pedido (status PENDENTE) e gera a cobrança Pix.
+--
+-- ⚠️  IMPORTANTE: ajuste a URL/token na tabela app_config e o corpo/parsing
+--     da chamada HTTP abaixo para o formato exato do SEU gateway de pagamento
+--     (Mercado Pago, EFI/Gerencianet, Asaas, AbacatePay, etc). O que está
+--     aqui é um template funcional genérico — sem configurar o gateway, a
+--     função devolve um erro amigável em vez de travar o checkout.
+-- ---------------------------------------------------------------------------
+create or replace function public.criar_pix(
+  p_name              text,
+  p_email             text,
+  p_items             jsonb,
+  p_customer_id       uuid default null,
+  p_anunciante_codigo text default null,
+  p_afiliado_id       uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_subtotal            numeric(10,2) := 0;
+  v_desconto            numeric(10,2) := 0;
+  v_total               numeric(10,2) := 0;
+  v_tem_codigo          boolean := false;
+  v_codigo_afiliado_usado text := null;
+  v_anunciante_codigo   text := null;
+  v_order_id            uuid;
+  v_item                jsonb;
+  v_gateway_url         text;
+  v_gateway_token       text;
+  v_http_response       http_response;
+  v_gateway_body        jsonb;
+  v_pix_qrcode_base64   text;
+  v_pix_copia_cola      text;
+  v_pix_txid            text;
+  v_pix_expira          timestamptz;
+  v_desconto_minimo     numeric := 80;
+begin
+  if p_items is null or jsonb_array_length(p_items) = 0 then
+    return jsonb_build_object('error', 'Carrinho vazio.');
+  end if;
+
+  for v_item in select * from jsonb_array_elements(p_items) loop
+    v_subtotal := v_subtotal + (coalesce((v_item->>'price')::numeric, 0) * coalesce((v_item->>'quantity')::numeric, 1));
+  end loop;
+
+  -- valida código de anunciante OU de afiliado (mesma regra de negócio do checkout)
+  if p_anunciante_codigo is not null then
+    select codigo into v_anunciante_codigo from public.anunciantes where codigo = p_anunciante_codigo;
+    if v_anunciante_codigo is not null then v_tem_codigo := true; end if;
+  end if;
+
+  if not v_tem_codigo and p_afiliado_id is not null then
+    select codigo_afiliado into v_codigo_afiliado_usado
+    from public.profiles
+    where id = p_afiliado_id and is_afiliado = true;
+    if v_codigo_afiliado_usado is not null then v_tem_codigo := true; end if;
+  end if;
+
+  if v_tem_codigo and v_subtotal >= v_desconto_minimo then
+    v_desconto := round(v_subtotal * 0.10, 2);
+  end if;
+
+  v_total := greatest(v_subtotal - v_desconto, 0.01);
+
+  insert into public.orders (
+    customer_id, customer_name, customer_email, items, total, status,
+    anunciante_codigo, codigo_afiliado_usado, afiliado_id, cupom_usado, desconto_aplicado
+  ) values (
+    p_customer_id, p_name, p_email, p_items, v_total, 'PENDENTE',
+    v_anunciante_codigo, v_codigo_afiliado_usado, p_afiliado_id, v_tem_codigo, v_desconto
+  ) returning id into v_order_id;
+
+  select valor into v_gateway_url   from public.app_config where chave = 'pix_gateway_url';
+  select valor into v_gateway_token from public.app_config where chave = 'pix_gateway_token';
+
+  if v_gateway_url is null or v_gateway_url = '' then
+    return jsonb_build_object(
+      'error', 'Pagamento Pix ainda não configurado (tabela app_config). O pedido #' || v_order_id || ' foi salvo como pendente.'
+    );
+  end if;
+
+  begin
+    select * into v_http_response from http((
+      'POST',
+      v_gateway_url,
+      array[http_header('Authorization', 'Bearer ' || coalesce(v_gateway_token, ''))],
+      'application/json',
+      jsonb_build_object(
+        'valor', v_total,
+        'descricao', 'Pedido NovaStore #' || v_order_id,
+        'referencia_externa', v_order_id,
+        'pagador', jsonb_build_object('nome', p_name, 'email', p_email)
+      )::text
+    )::http_request);
+  exception when others then
+    update public.orders set status = 'CANCELADO' where id = v_order_id;
+    return jsonb_build_object('error', 'Não foi possível conectar ao gateway de pagamento.');
+  end;
+
+  if v_http_response.status not between 200 and 299 then
+    update public.orders set status = 'CANCELADO' where id = v_order_id;
+    return jsonb_build_object('error', 'O gateway de pagamento recusou a cobrança (HTTP ' || v_http_response.status || ').');
+  end if;
+
+  v_gateway_body := v_http_response.content::jsonb;
+
+  -- ajuste estes nomes de campo conforme a resposta real do seu gateway:
+  v_pix_qrcode_base64 := v_gateway_body->>'qr_code_base64';
+  v_pix_copia_cola    := v_gateway_body->>'qr_code';
+  v_pix_txid          := v_gateway_body->>'txid';
+  v_pix_expira        := nullif(v_gateway_body->>'expires_at', '')::timestamptz;
+
+  update public.orders set
+    pix_qrcode_base64 = v_pix_qrcode_base64,
+    pix_copia_cola     = v_pix_copia_cola,
+    pix_txid           = v_pix_txid,
+    pix_expires_at     = coalesce(v_pix_expira, now() + interval '30 minutes')
+  where id = v_order_id;
+
+  return jsonb_build_object(
+    'orderId',      v_order_id,
+    'qrCodeBase64', v_pix_qrcode_base64,
+    'qrCode',       v_pix_copia_cola,
+    'expiresAt',    coalesce(v_pix_expira, now() + interval '30 minutes')
+  );
+end;
+$$;
+
+grant execute on function public.criar_pix(text, text, jsonb, uuid, text, uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 7.2 get_order_status — usada pelo polling do checkout até o Pix cair.
+-- ---------------------------------------------------------------------------
+create or replace function public.get_order_status(order_id uuid)
+returns text
+language sql
+security definer
+set search_path = public
+as $$
+  select status from public.orders
+  where id = order_id and (customer_id = auth.uid() or public.is_admin());
+$$;
+
+grant execute on function public.get_order_status(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 7.3 confirmar_pagamento_pix — chame esta função a partir do WEBHOOK do seu
+-- gateway de pagamento (numa Supabase Edge Function, usando a service_role
+-- key) assim que o Pix cair. Ela marca o pedido como PAGO, baixa o estoque
+-- de produtos UNICO e credita comissão de anunciante/afiliado.
+-- ---------------------------------------------------------------------------
+create or replace function public.confirmar_pagamento_pix(p_order_id uuid, p_txid text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_order         public.orders;
+  v_item          jsonb;
+  v_comissao_pct  numeric;
+  v_anunciante_id uuid;
+begin
+  select * into v_order from public.orders where id = p_order_id for update;
+  if not found then
+    return jsonb_build_object('error', 'Pedido não encontrado.');
+  end if;
+  if v_order.status = 'PAGO' then
+    return jsonb_build_object('ok', true, 'already', true);
+  end if;
+
+  update public.orders
+  set status = 'PAGO', paid_at = now(), pix_txid = coalesce(p_txid, pix_txid)
+  where id = p_order_id;
+
+  -- baixa de estoque para produtos do tipo UNICO com estoque controlado
+  for v_item in select * from jsonb_array_elements(v_order.items) loop
+    update public.products
+    set stock = greatest(stock - coalesce((v_item->>'quantity')::int, 1), 0)
+    where id = (v_item->>'productId')::uuid
+      and type = 'UNICO'
+      and stock is not null;
+  end loop;
+
+  -- registra a venda pro anunciante (código #0000 cadastrado manualmente)
+  if v_order.anunciante_codigo is not null then
+    select id into v_anunciante_id from public.anunciantes where codigo = v_order.anunciante_codigo;
+    if v_anunciante_id is not null then
+      update public.anunciantes set total_vendas = total_vendas + 1 where id = v_anunciante_id;
+      insert into public.historico_vendas_anunciantes (anunciante_id, order_id, produto_nome, valor_compra, cliente_nome)
+      values (
+        v_anunciante_id, v_order.id,
+        (select string_agg(it->>'name', ', ') from jsonb_array_elements(v_order.items) it),
+        v_order.total, v_order.customer_name
+      );
+    end if;
+  end if;
+
+  -- credita comissão pro cliente afiliado
+  if v_order.afiliado_id is not null then
+    select coalesce(valor::numeric, 10) into v_comissao_pct
+    from public.app_config where chave = 'afiliado_comissao_percentual';
+
+    insert into public.afiliados_indicacoes (afiliado_id, cliente_id, order_id, valor_venda, comissao, status)
+    values (
+      v_order.afiliado_id, v_order.customer_id, v_order.id, v_order.total,
+      round(v_order.total * (coalesce(v_comissao_pct, 10) / 100.0), 2), 'pendente'
+    );
+  end if;
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- Só o backend (service_role, via Edge Function do webhook) pode chamar isso —
+-- de propósito NÃO liberamos para "authenticated", pra ninguém conseguir se
+-- auto-confirmar um pedido como pago.
+revoke all on function public.confirmar_pagamento_pix(uuid, text) from public, anon, authenticated;
+grant execute on function public.confirmar_pagamento_pix(uuid, text) to service_role;
+
+-- ---------------------------------------------------------------------------
+-- 7.4 sorteio_listar_participantes — clientes elegíveis (compraram e têm
+-- código de sorteio) pra roleta do admin.
+-- ---------------------------------------------------------------------------
+create or replace function public.sorteio_listar_participantes()
+returns table(nome text, codigo_cliente text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Apenas administradores podem listar participantes.';
+  end if;
+
+  return query
+    select distinct p.full_name, p.codigo_cliente
+    from public.profiles p
+    join public.orders o on o.customer_id = p.id and o.status = 'PAGO'
+    where p.codigo_cliente is not null
+    order by 1;
+end;
+$$;
+
+grant execute on function public.sorteio_listar_participantes() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 7.5 sorteio_definir_ganhador — grava o vencedor sorteado.
+-- ---------------------------------------------------------------------------
+create or replace function public.sorteio_definir_ganhador(p_sorteio_id uuid, p_codigo text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_nome text;
+begin
+  if not public.is_admin() then
+    raise exception 'Apenas administradores podem definir o ganhador.';
+  end if;
+
+  select full_name into v_nome from public.profiles where codigo_cliente = p_codigo;
+  if v_nome is null then
+    return jsonb_build_object('error', 'Cliente com esse código não encontrado.');
+  end if;
+
+  update public.sorteios
+  set ganhador_nome = v_nome, ganhador_codigo = p_codigo, status = 'finalizado'
+  where id = p_sorteio_id;
+
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+grant execute on function public.sorteio_definir_ganhador(uuid, text) to authenticated;
+
+
+-- =====================================================================================
+-- PARTE 8 — STORAGE (buckets usados pelo site)
+-- =====================================================================================
+insert into storage.buckets (id, name, public)
+values
+  ('product-images', 'product-images', true),
+  ('site-assets',     'site-assets',   true),
+  ('chat-uploads',    'chat-uploads',  true)
+on conflict (id) do nothing;
+
+-- ---------- product-images: leitura pública, escrita só do admin ----------
+drop policy if exists "product_images_public_read" on storage.objects;
+create policy "product_images_public_read"
+  on storage.objects for select
+  to public
+  using (bucket_id = 'product-images');
+
+drop policy if exists "product_images_admin_insert" on storage.objects;
+create policy "product_images_admin_insert"
+  on storage.objects for insert
+  to authenticated
+  with check (bucket_id = 'product-images' and public.is_admin());
+
+drop policy if exists "product_images_admin_update" on storage.objects;
+create policy "product_images_admin_update"
+  on storage.objects for update
+  to authenticated
+  using (bucket_id = 'product-images' and public.is_admin())
+  with check (bucket_id = 'product-images' and public.is_admin());
+
+drop policy if exists "product_images_admin_delete" on storage.objects;
+create policy "product_images_admin_delete"
+  on storage.objects for delete
+  to authenticated
+  using (bucket_id = 'product-images' and public.is_admin());
+
+-- ---------- site-assets (hero/background): leitura pública, escrita só do admin ----------
+drop policy if exists "site_assets_public_read" on storage.objects;
+create policy "site_assets_public_read"
+  on storage.objects for select
+  to public
+  using (bucket_id = 'site-assets');
+
+drop policy if exists "site_assets_admin_insert" on storage.objects;
+create policy "site_assets_admin_insert"
+  on storage.objects for insert
+  to authenticated
+  with check (bucket_id = 'site-assets' and public.is_admin());
+
+drop policy if exists "site_assets_admin_update" on storage.objects;
+create policy "site_assets_admin_update"
+  on storage.objects for update
+  to authenticated
+  using (bucket_id = 'site-assets' and public.is_admin())
+  with check (bucket_id = 'site-assets' and public.is_admin());
+
+drop policy if exists "site_assets_admin_delete" on storage.objects;
+create policy "site_assets_admin_delete"
+  on storage.objects for delete
+  to authenticated
+  using (bucket_id = 'site-assets' and public.is_admin());
+
+-- ---------- chat-uploads: leitura pública, cada usuário só escreve na própria pasta ----------
+-- (o front-end salva em "global/<uid>/..." e "private/<uid>/...")
+drop policy if exists "chat_uploads_public_read" on storage.objects;
+create policy "chat_uploads_public_read"
+  on storage.objects for select
+  to public
+  using (bucket_id = 'chat-uploads');
+
+drop policy if exists "chat_uploads_insert_own_folder" on storage.objects;
+create policy "chat_uploads_insert_own_folder"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'chat-uploads'
+    and (
+      name like 'global/' || auth.uid()::text || '/%'
+      or name like 'private/' || auth.uid()::text || '/%'
+    )
+  );
+
+
+-- =====================================================================================
+-- PARTE 9 — REALTIME (necessário pros chats e tickets atualizarem sozinhos)
+-- =====================================================================================
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['chat_privado','chat_global','mensagens_privadas','tickets','ticket_mensagens','messages'] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;
+
+
+-- =====================================================================================
+-- PARTE 10 — DADOS INICIAIS
+-- =====================================================================================
+insert into public.site_settings (id) values (1) on conflict (id) do nothing;
+
+
+-- =====================================================================================
+-- PARTE 11 — TORNAR SEU USUÁRIO ADMIN (rode manualmente depois de criar sua conta)
+-- =====================================================================================
+-- update public.profiles set role = 'admin' where email = 'seuemail@exemplo.com';
+
+-- =====================================================================================
+-- FIM DO SCRIPT
+-- =====================================================================================
