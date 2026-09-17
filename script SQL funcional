@@ -29,7 +29,7 @@
 -- gen_random_uuid() já é nativo do Postgres 13+ (usado pelo Supabase), não precisa
 -- de pgcrypto. A extensão "http" é usada pela função criar_pix() para chamar o
 -- gateway de pagamento Pix diretamente do banco.
-create extension if not exists http;
+create extension if not exists http with schema extensions;
 
 
 -- =====================================================================================
@@ -336,14 +336,24 @@ on conflict (chave) do nothing;
 
 
 -- =====================================================================================
--- PARTE 3 — PERMISSÕES BASE (garante que os papéis padrão do Supabase existam
---           mesmo em projetos criados manualmente / fora do template padrão)
+-- PARTE 3 — PERMISSÕES BASE
 -- =====================================================================================
-grant usage on schema public to anon, authenticated, service_role;
-grant select, insert, update, delete on all tables in schema public to anon, authenticated;
-grant execute on all functions in schema public to anon, authenticated;
-alter default privileges in schema public grant select, insert, update, delete on tables to anon, authenticated;
-alter default privileges in schema public grant execute on functions to anon, authenticated;
+-- REMOVIDO DE PROPÓSITO. A versão anterior tentava rodar:
+--   grant usage on schema public to anon, authenticated, service_role;
+-- Isso exige ser DONO do schema "public", e no Postgres/Supabase atual quem é
+-- dono do schema public é o role "pg_database_owner" — nem o "postgres" do
+-- SQL Editor tem permissão pra regravar essa concessão. Era exatamente essa
+-- linha que disparava o erro "42501: permission denied for schema public" e,
+-- como o SQL Editor roda o script inteiro como uma única transação implícita,
+-- o erro fazia TODO o resto do script (tabelas, funções, RLS, storage...) ser
+-- desfeito, mesmo tendo rodado sem problema até ali.
+--
+-- Não é preciso recriar essas permissões: todo projeto Supabase já vem, desde
+-- a criação, com USAGE no schema public e privilégios padrão de
+-- select/insert/update/delete em tabelas e execute em funções concedidos aos
+-- roles anon e authenticated. Quem realmente controla o acesso, tabela por
+-- tabela, é o RLS habilitado na PARTE 6 abaixo — é ali que mora a segurança
+-- de verdade, não nesses GRANTs de schema.
 
 
 -- =====================================================================================
@@ -848,6 +858,7 @@ alter table public.app_config enable row level security;
 --     aqui é um template funcional genérico — sem configurar o gateway, a
 --     função devolve um erro amigável em vez de travar o checkout.
 -- ---------------------------------------------------------------------------
+drop function if exists public.criar_pix(text, text, jsonb, uuid, text, uuid);
 create or replace function public.criar_pix(
   p_name              text,
   p_email             text,
@@ -859,7 +870,7 @@ create or replace function public.criar_pix(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = public, extensions
 as $$
 declare
   v_subtotal            numeric(10,2) := 0;
@@ -976,6 +987,7 @@ grant execute on function public.criar_pix(text, text, jsonb, uuid, text, uuid) 
 -- ---------------------------------------------------------------------------
 -- 7.2 get_order_status — usada pelo polling do checkout até o Pix cair.
 -- ---------------------------------------------------------------------------
+drop function if exists public.get_order_status(uuid);
 create or replace function public.get_order_status(order_id uuid)
 returns text
 language sql
@@ -994,6 +1006,7 @@ grant execute on function public.get_order_status(uuid) to authenticated;
 -- key) assim que o Pix cair. Ela marca o pedido como PAGO, baixa o estoque
 -- de produtos UNICO e credita comissão de anunciante/afiliado.
 -- ---------------------------------------------------------------------------
+drop function if exists public.confirmar_pagamento_pix(uuid, text);
 create or replace function public.confirmar_pagamento_pix(p_order_id uuid, p_txid text default null)
 returns jsonb
 language plpgsql
@@ -1067,6 +1080,7 @@ grant execute on function public.confirmar_pagamento_pix(uuid, text) to service_
 -- 7.4 sorteio_listar_participantes — clientes elegíveis (compraram e têm
 -- código de sorteio) pra roleta do admin.
 -- ---------------------------------------------------------------------------
+drop function if exists public.sorteio_listar_participantes();
 create or replace function public.sorteio_listar_participantes()
 returns table(nome text, codigo_cliente text)
 language plpgsql
@@ -1092,6 +1106,7 @@ grant execute on function public.sorteio_listar_participantes() to authenticated
 -- ---------------------------------------------------------------------------
 -- 7.5 sorteio_definir_ganhador — grava o vencedor sorteado.
 -- ---------------------------------------------------------------------------
+drop function if exists public.sorteio_definir_ganhador(uuid, text);
 create or replace function public.sorteio_definir_ganhador(p_sorteio_id uuid, p_codigo text)
 returns jsonb
 language plpgsql
