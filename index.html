@@ -535,9 +535,20 @@
   input[type=color].theme-swatch::-webkit-color-swatch-wrapper{padding:3px}
   input[type=color].theme-swatch::-webkit-color-swatch{border-radius:7px;border:none}
 
+  /* =====================================================================
+     PORTÃO DE ACESSO (auth-gate) — bloqueia a loja inteira até o
+     visitante fazer login ou criar conta. Ver #auth-gate no body.
+     ===================================================================== */
+  #auth-gate{display:none;position:fixed;inset:0;z-index:99999;background:radial-gradient(circle at 20% 15%,rgba(124,92,255,.16),transparent 55%),radial-gradient(circle at 85% 85%,rgba(56,189,169,.12),transparent 50%),var(--bg,#0b0c10);overflow-y:auto;}
+  body.site-locked:not(.on-admin-route) #auth-gate{display:flex;}
+  body.site-locked:not(.on-admin-route) #view-store,
+  body.site-locked:not(.on-admin-route) #view-sorteio,
+  body.site-locked:not(.on-admin-route) #view-painel{display:none!important;}
+  #auth-gate .auth-gate-box{margin:auto;width:100%;max-width:400px;padding:2rem;}
+  @media(min-width:640px){#auth-gate .auth-gate-box{padding:2.5rem;}}
 </style>
 </head>
-<body class="min-h-screen bg-noise">
+<body class="min-h-screen bg-noise site-locked">
 
 <script>
   window.SUPABASE_URL = "https://tisicavugzcsixvhuvvm.supabase.co";
@@ -545,6 +556,58 @@
   /* Não usamos mais Edge Function: o Pix é criado direto por uma função
      do banco (public.criar_pix), chamada via supabase.rpc(). */
 </script>
+
+<div id="auth-gate">
+  <div class="auth-gate-box">
+    <div class="mb-8 flex flex-col items-center text-center">
+      <span class="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-[#4b2fd6] text-xl font-black text-white">N</span>
+      <h1 class="font-display text-2xl font-extrabold tracking-tight"><span class="gradient-text">Nova</span><span class="text-white">Store</span></h1>
+      <p class="mt-2 text-sm text-muted">Faça login ou crie sua conta para explorar a loja.</p>
+    </div>
+
+    <div class="rounded-2xl border border-border bg-surface p-6 sm:p-7">
+      <div class="mb-5 flex border-b border-border">
+        <button type="button" id="gate-tab-btn-login" onclick="switchGateTab('login')" class="admin-tab-btn border-b-2 border-primary px-4 py-2.5 text-sm font-bold text-white">Entrar</button>
+        <button type="button" id="gate-tab-btn-register" onclick="switchGateTab('register')" class="admin-tab-btn border-b-2 border-transparent px-4 py-2.5 text-sm font-bold text-muted hover:text-white">Criar conta</button>
+      </div>
+      <div id="gate-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
+      <div id="gate-success" class="hidden mb-4 rounded-lg bg-accent/10 px-3 py-2 text-sm text-accent"></div>
+
+      <div id="gate-form-login-wrap">
+        <form id="gate-form-login" class="flex flex-col gap-3">
+          <div>
+            <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
+            <input required type="email" id="gate-login-email" autocomplete="email" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-semibold text-muted">Senha</label>
+            <input required type="password" id="gate-login-password" autocomplete="current-password" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+          </div>
+          <button id="gate-login-submit" class="mt-1 rounded-lg bg-primary py-2.5 font-bold text-white hover:bg-primaryhover">Entrar</button>
+        </form>
+      </div>
+
+      <div id="gate-form-register-wrap" class="hidden">
+        <form id="gate-form-register" class="flex flex-col gap-3">
+          <div>
+            <label class="mb-1 block text-xs font-semibold text-muted">Nome completo</label>
+            <input required id="gate-register-name" autocomplete="name" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
+            <input required type="email" id="gate-register-email" autocomplete="email" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label class="mb-1 block text-xs font-semibold text-muted">Senha</label>
+            <input required type="password" minlength="6" id="gate-register-password" autocomplete="new-password" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+          </div>
+          <button id="gate-register-submit" class="mt-1 rounded-lg bg-primary py-2.5 font-bold text-white hover:bg-primaryhover">Criar conta</button>
+        </form>
+      </div>
+    </div>
+    <p class="mt-6 text-center text-xs text-muted">Acesso restrito — é necessário entrar ou se cadastrar para navegar pela NovaStore.</p>
+  </div>
+</div>
 
 <div id="view-store">
 
@@ -1923,11 +1986,22 @@ async function handleAuthChange(session) {
     CURRENT_PROFILE = null;
   }
   renderAuthUI();
+  updateSiteGate();
   updatePrivateUnreadBadge();
   if (location.hash === "#painel") {
     if (!CURRENT_USER) { location.hash = ""; }
     else loadPainelCliente();
   }
+}
+
+/* =========================================================================
+   PORTÃO DE ACESSO — a loja inteira fica bloqueada por trás do #auth-gate
+   até existir uma sessão válida (login ou cadastro). A rota "#admin" é a
+   única exceção: ela tem sua própria tela de login (para o dono da loja)
+   e não deve ficar escondida atrás do portão do cliente.
+   ========================================================================= */
+function updateSiteGate() {
+  document.body.classList.toggle("site-locked", !CURRENT_USER);
 }
 
 async function refreshCurrentProfile() {
@@ -2095,6 +2169,78 @@ document.getElementById("auth-form-register").onsubmit = async (e) => {
   if (error) { errEl.textContent = error.message || "Não foi possível criar a conta."; errEl.classList.remove("hidden"); return; }
   document.getElementById("auth-form-register").reset();
   closeAuthModal();
+};
+
+/* ---------------- Portão de acesso (mesma lógica do modal acima, sem botão de fechar) ---------------- */
+
+window.switchGateTab = (tab) => {
+  const isLogin = tab === "login";
+  document.getElementById("gate-form-login-wrap").classList.toggle("hidden", !isLogin);
+  document.getElementById("gate-form-register-wrap").classList.toggle("hidden", isLogin);
+  const btnLogin = document.getElementById("gate-tab-btn-login");
+  const btnRegister = document.getElementById("gate-tab-btn-register");
+  btnLogin.classList.toggle("border-primary", isLogin);
+  btnLogin.classList.toggle("text-white", isLogin);
+  btnLogin.classList.toggle("border-transparent", !isLogin);
+  btnLogin.classList.toggle("text-muted", !isLogin);
+  btnRegister.classList.toggle("border-primary", !isLogin);
+  btnRegister.classList.toggle("text-white", !isLogin);
+  btnRegister.classList.toggle("border-transparent", isLogin);
+  btnRegister.classList.toggle("text-muted", isLogin);
+  document.getElementById("gate-error").classList.add("hidden");
+  document.getElementById("gate-success").classList.add("hidden");
+};
+
+document.getElementById("gate-form-login").onsubmit = async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("gate-error");
+  const okEl = document.getElementById("gate-success");
+  errEl.classList.add("hidden");
+  okEl.classList.add("hidden");
+  const submitBtn = document.getElementById("gate-login-submit");
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Entrando...";
+
+  const email = document.getElementById("gate-login-email").value;
+  const password = document.getElementById("gate-login-password").value;
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = "Entrar";
+
+  if (error) { errEl.textContent = "E-mail ou senha inválidos."; errEl.classList.remove("hidden"); return; }
+  document.getElementById("gate-form-login").reset();
+  // onAuthStateChange cuida de esconder o portão automaticamente.
+};
+
+document.getElementById("gate-form-register").onsubmit = async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById("gate-error");
+  const okEl = document.getElementById("gate-success");
+  errEl.classList.add("hidden");
+  okEl.classList.add("hidden");
+  const submitBtn = document.getElementById("gate-register-submit");
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Criando conta...";
+
+  const full_name = document.getElementById("gate-register-name").value;
+  const email = document.getElementById("gate-register-email").value;
+  const password = document.getElementById("gate-register-password").value;
+  const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { full_name } } });
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = "Criar conta";
+
+  if (error) { errEl.textContent = error.message || "Não foi possível criar a conta."; errEl.classList.remove("hidden"); return; }
+  document.getElementById("gate-form-register").reset();
+  if (!data.session) {
+    // Confirmação de e-mail ativada no Supabase: ainda não há sessão.
+    okEl.textContent = "Conta criada! Verifique seu e-mail para confirmar o cadastro e depois faça login.";
+    okEl.classList.remove("hidden");
+    switchGateTab("login");
+  }
+  // Se já veio sessão (confirmação de e-mail desativada), onAuthStateChange
+  // dispara sozinho e o portão fecha automaticamente.
 };
 
 /* =========================================================================
@@ -3556,6 +3702,7 @@ let currentHeroUrl = "";
 let currentBgUrl = "";
 
 function route() {
+  document.body.classList.toggle("on-admin-route", location.hash === "#admin");
   document.getElementById("view-store").classList.add("hidden");
   document.getElementById("view-admin").classList.add("hidden");
   document.getElementById("view-sorteio").classList.add("hidden");
