@@ -92,6 +92,30 @@
   @media(min-width:1024px){.modal-scroll{max-height:88vh}}
   .admin-tabs-scroll{-ms-overflow-style:none;scrollbar-width:none}
   .admin-tabs-scroll::-webkit-scrollbar{display:none}
+
+  /* ===== Admin panel v2 ===== */
+  .admin-tab-btn{border-radius:.6rem}
+  @media(min-width:1024px){
+    .admin-tab-btn{width:100%;justify-content:flex-start}
+  }
+  .admin-sidebar-card{border-radius:1.1rem;border:1px solid #23262f;background:#111318}
+  .painel-stat-card{position:relative;overflow:hidden;border-radius:1.1rem;border:1px solid rgba(255,255,255,.08);
+    background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.012));padding:1.35rem 1.5rem;transition:.2s ease}
+  .painel-stat-card::before{content:"";position:absolute;left:0;top:0;width:100%;height:2px;
+    background:linear-gradient(90deg,#7c5cff,#00e6a8);opacity:.5}
+  .painel-stat-card:hover{border-color:rgba(124,92,255,.38);transform:translateY(-2px)}
+  .admin-shortcut-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.6rem;
+    border-radius:1rem;border:1px solid #23262f;background:linear-gradient(180deg,#181b22,#14161c);padding:1.4rem 1rem;
+    text-align:center;font-size:.8rem;font-weight:700;color:#fff;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
+  .admin-shortcut-icon{display:flex;align-items:center;justify-content:center;width:2.75rem;height:2.75rem;
+    border-radius:.85rem;background:rgba(124,92,255,.14);transition:background .2s ease}
+  .admin-shortcut-card:hover{border-color:rgba(124,92,255,.55);transform:translateY(-3px);box-shadow:0 14px 30px -14px rgba(124,92,255,.55)}
+  .admin-shortcut-card:hover .admin-shortcut-icon{background:rgba(124,92,255,.26)}
+  section[id^="admin-tab-"] thead{background:rgba(255,255,255,.03)}
+  section[id^="admin-tab-"] thead th{font-size:.68rem;letter-spacing:.05em;text-transform:uppercase;font-weight:700}
+  .avatar-circle{display:inline-flex;align-items:center;justify-content:center;width:2.15rem;height:2.15rem;
+    border-radius:9999px;background:linear-gradient(135deg,#7c5cff,#00e6a8);color:#08090c;font-weight:800;
+    font-size:.72rem;flex-shrink:0}
   #mobile-nav-menu.flex{animation:cardIn .2s ease forwards}
   @media(max-width:380px){
     #btn-login{padding-left:.75rem;padding-right:.75rem}
@@ -883,35 +907,43 @@
   </div>
 
   <div id="admin-panel-screen" class="hidden">
-    <header class="flex items-center justify-between border-b border-border bg-surface px-6 py-4">
+    <header class="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-surface/90 px-4 py-3.5 backdrop-blur sm:px-6">
       <button onclick="goToStore()" class="font-display text-lg font-bold uppercase"><span class="gradient-text">Nova</span>Store
         <span class="ml-2 rounded bg-primary/20 px-2 py-0.5 text-[10px] font-bold lilac">ADMIN</span>
       </button>
-      <button onclick="logoutAdmin()" class="text-sm font-medium text-muted hover:text-white">Sair</button>
+      <div class="flex items-center gap-4">
+        <button onclick="goToStore()" class="hidden text-sm font-medium text-muted hover:text-white sm:block">Ver loja ↗</button>
+        <button onclick="logoutAdmin()" class="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted hover:border-red-400/40 hover:text-red-400">Sair</button>
+      </div>
     </header>
 
-    <main class="mx-auto max-w-5xl px-3 py-6 sm:px-4 sm:py-10">
-      <div class="admin-tabs-scroll mb-8 flex flex-nowrap gap-1 overflow-x-auto border-b border-border sm:gap-2">
-        <button id="admin-tab-btn-dashboard" onclick="switchAdminTab('dashboard')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-primary px-3 py-3 text-sm font-bold text-white sm:px-4">🏠 Visão Geral</button>
-        <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Produtos</button>
-        <button id="admin-tab-btn-conversas" onclick="switchAdminTab('conversas')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Entregas</button>
-        <button id="admin-tab-btn-suporte" onclick="switchAdminTab('suporte')" class="admin-tab-btn relative shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Suporte
-          <span id="admin-suporte-unread-badge" class="hidden absolute -right-2 -top-1 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
-        </button>
-        <button id="admin-tab-btn-convencer" onclick="switchAdminTab('convencer')" class="admin-tab-btn relative shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">🎯 Convencer Cliente
-          <span id="admin-convencer-unread-badge" class="hidden absolute -right-2 -top-1 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
-        </button>
-        <button id="admin-tab-btn-vendas" onclick="switchAdminTab('vendas')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">📊 Vendas</button>
-        <button id="admin-tab-btn-anunciantes" onclick="switchAdminTab('anunciantes')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Anunciantes</button>
-        <button id="admin-tab-btn-sorteios" onclick="switchAdminTab('sorteios')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Sorteios</button>
-        <button id="admin-tab-btn-contas" onclick="switchAdminTab('contas')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Contas</button>
-        <button id="admin-tab-btn-appearance" onclick="switchAdminTab('appearance')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Aparência do site</button>
-      </div>
+    <main class="mx-auto max-w-[1400px] px-3 py-6 sm:px-4 sm:py-8 lg:px-8">
+      <div class="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+        <nav class="admin-tabs-scroll flex flex-nowrap gap-1 overflow-x-auto border-b border-border pb-0 lg:sticky lg:top-[88px] lg:w-60 lg:shrink-0 lg:flex-col lg:gap-1 lg:overflow-visible lg:border-b-0 lg:pb-0">
+          <button id="admin-tab-btn-dashboard" onclick="switchAdminTab('dashboard')" class="admin-tab-btn flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-primary bg-primary/10 px-3 py-3 text-sm font-bold text-white transition-colors sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5">🏠 <span>Visão Geral</span></button>
+          <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="admin-tab-btn flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5 lg:hover:bg-white/5">📦 <span>Produtos</span></button>
+          <button id="admin-tab-btn-conversas" onclick="switchAdminTab('conversas')" class="admin-tab-btn flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5 lg:hover:bg-white/5">🚚 <span>Entregas</span></button>
+          <button id="admin-tab-btn-suporte" onclick="switchAdminTab('suporte')" class="admin-tab-btn relative flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5 lg:hover:bg-white/5">💬 <span>Suporte</span>
+            <span id="admin-suporte-unread-badge" class="hidden absolute right-2 top-2 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white lg:right-3"></span>
+          </button>
+          <button id="admin-tab-btn-convencer" onclick="switchAdminTab('convencer')" class="admin-tab-btn relative flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5 lg:hover:bg-white/5">🎯 <span>Convencer Cliente</span>
+            <span id="admin-convencer-unread-badge" class="hidden absolute right-2 top-2 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white lg:right-3"></span>
+          </button>
+          <button id="admin-tab-btn-vendas" onclick="switchAdminTab('vendas')" class="admin-tab-btn flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5 lg:hover:bg-white/5">📊 <span>Vendas</span></button>
+          <button id="admin-tab-btn-anunciantes" onclick="switchAdminTab('anunciantes')" class="admin-tab-btn flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5 lg:hover:bg-white/5">🤝 <span>Anunciantes</span></button>
+          <button id="admin-tab-btn-sorteios" onclick="switchAdminTab('sorteios')" class="admin-tab-btn flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5 lg:hover:bg-white/5">🎁 <span>Sorteios</span></button>
+          <button id="admin-tab-btn-contas" onclick="switchAdminTab('contas')" class="admin-tab-btn flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5 lg:hover:bg-white/5">👥 <span>Contas</span></button>
+          <button id="admin-tab-btn-appearance" onclick="switchAdminTab('appearance')" class="admin-tab-btn flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5 lg:hover:bg-white/5">🎨 <span>Aparência do site</span></button>
+        </nav>
 
+        <div class="min-w-0 flex-1">
       <section id="admin-tab-dashboard">
-        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Visão Geral</h1>
+        <div class="mb-6">
+          <h1 class="font-display text-2xl font-bold uppercase">Visão Geral</h1>
+          <p class="mt-1 text-sm text-muted">Um resumo rápido da loja hoje.</p>
+        </div>
 
-        <div class="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div class="mb-10 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <div class="painel-stat-card"><p id="dash-stat-vendas-hoje" class="font-display text-2xl font-bold text-white">0</p><p class="text-[11px] font-bold uppercase text-muted">Vendas hoje</p></div>
           <div class="painel-stat-card"><p id="dash-stat-faturamento-hoje" class="font-display text-2xl font-bold text-accent">R$ 0</p><p class="text-[11px] font-bold uppercase text-muted">Faturado hoje</p></div>
           <div class="painel-stat-card"><p id="dash-stat-pendentes" class="font-display text-2xl font-bold text-white">0</p><p class="text-[11px] font-bold uppercase text-muted">Pix aguardando</p></div>
@@ -922,15 +954,15 @@
 
         <h2 class="mb-4 text-xs font-bold uppercase tracking-wide text-muted">Atalhos rápidos</h2>
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <button onclick="switchAdminTab('products')" class="admin-shortcut-card"><span class="text-2xl">📦</span><span>Produtos</span></button>
-          <button onclick="switchAdminTab('vendas')" class="admin-shortcut-card"><span class="text-2xl">📊</span><span>Vendas</span></button>
-          <button onclick="switchAdminTab('conversas')" class="admin-shortcut-card"><span class="text-2xl">🚚</span><span>Entregas</span></button>
-          <button onclick="switchAdminTab('suporte')" class="admin-shortcut-card"><span class="text-2xl">💬</span><span>Suporte</span></button>
-          <button onclick="switchAdminTab('convencer')" class="admin-shortcut-card"><span class="text-2xl">🎯</span><span>Convencer Cliente</span></button>
-          <button onclick="switchAdminTab('anunciantes')" class="admin-shortcut-card"><span class="text-2xl">🤝</span><span>Anunciantes</span></button>
-          <button onclick="switchAdminTab('sorteios')" class="admin-shortcut-card"><span class="text-2xl">🎁</span><span>Sorteios</span></button>
-          <button onclick="switchAdminTab('contas')" class="admin-shortcut-card"><span class="text-2xl">👥</span><span>Contas</span></button>
-          <button onclick="switchAdminTab('appearance')" class="admin-shortcut-card sm:col-span-4"><span class="text-2xl">🎨</span><span>Aparência do site — banner, cores, decorações</span></button>
+          <button onclick="switchAdminTab('products')" class="admin-shortcut-card"><span class="admin-shortcut-icon text-2xl">📦</span><span>Produtos</span></button>
+          <button onclick="switchAdminTab('vendas')" class="admin-shortcut-card"><span class="admin-shortcut-icon text-2xl">📊</span><span>Vendas</span></button>
+          <button onclick="switchAdminTab('conversas')" class="admin-shortcut-card"><span class="admin-shortcut-icon text-2xl">🚚</span><span>Entregas</span></button>
+          <button onclick="switchAdminTab('suporte')" class="admin-shortcut-card"><span class="admin-shortcut-icon text-2xl">💬</span><span>Suporte</span></button>
+          <button onclick="switchAdminTab('convencer')" class="admin-shortcut-card"><span class="admin-shortcut-icon text-2xl">🎯</span><span>Convencer Cliente</span></button>
+          <button onclick="switchAdminTab('anunciantes')" class="admin-shortcut-card"><span class="admin-shortcut-icon text-2xl">🤝</span><span>Anunciantes</span></button>
+          <button onclick="switchAdminTab('sorteios')" class="admin-shortcut-card"><span class="admin-shortcut-icon text-2xl">🎁</span><span>Sorteios</span></button>
+          <button onclick="switchAdminTab('contas')" class="admin-shortcut-card"><span class="admin-shortcut-icon text-2xl">👥</span><span>Contas</span></button>
+          <button onclick="switchAdminTab('appearance')" class="admin-shortcut-card flex-row justify-start gap-4 text-left sm:col-span-4"><span class="admin-shortcut-icon shrink-0 text-2xl">🎨</span><span>Aparência do site — banner, cores, decorações</span></button>
         </div>
       </section>
 
@@ -1209,14 +1241,15 @@
       </section>
 
       <section id="admin-tab-contas" class="hidden">
-        <div class="mb-6 flex items-center justify-between">
+        <div class="mb-2 flex items-center justify-between">
           <h1 class="font-display text-2xl font-bold uppercase">Contas</h1>
           <span id="contas-total-count" class="rounded-full bg-primary/15 px-3 py-1.5 text-xs font-bold lilac">0 contas</span>
         </div>
         <p class="mb-6 text-sm text-muted">Todas as contas registradas na loja. Clique em uma pra ver o painel dela, os produtos que já visualizou e mandar uma mensagem direta.</p>
 
-        <div class="mb-4">
-          <input id="contas-search" oninput="renderContasTable()" placeholder="Buscar por nome ou e-mail..." class="w-full max-w-sm rounded-lg border border-border bg-surface2 px-4 py-2.5 text-sm outline-none focus:border-primary" />
+        <div class="relative mb-4 max-w-sm">
+          <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted">🔎</span>
+          <input id="contas-search" oninput="renderContasTable()" placeholder="Buscar por nome ou e-mail..." class="w-full rounded-lg border border-border bg-surface2 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-primary" />
         </div>
 
         <div class="overflow-x-auto rounded-2xl border border-border bg-surface">
@@ -1228,6 +1261,8 @@
           </table>
         </div>
       </section>
+        </div>
+      </div>
     </main>
   </div>
 </div>
@@ -6688,7 +6723,12 @@ window.renderContasTable = () => {
 
   tbody.innerHTML = rows.map((c) => `
     <tr class="cursor-pointer border-b border-border/60 last:border-0 hover:bg-white/5" onclick="openContaDetalhe('${c.id}')">
-      <td class="px-4 py-3 font-semibold text-white">${escapeHTML(c.full_name || "Cliente")}</td>
+      <td class="px-4 py-3 font-semibold text-white">
+        <div class="flex items-center gap-3">
+          <span class="avatar-circle">${escapeHTML((c.full_name || "C").trim().charAt(0).toUpperCase())}</span>
+          <span>${escapeHTML(c.full_name || "Cliente")}</span>
+        </div>
+      </td>
       <td class="px-4 py-3 text-muted">${escapeHTML(c.email || "—")}</td>
       <td class="px-4 py-3 text-muted">${new Date(c.created_at).toLocaleDateString("pt-BR")}</td>
       <td class="px-4 py-3 text-muted">${c.pedidos}</td>
