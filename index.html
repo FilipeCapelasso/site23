@@ -4057,6 +4057,7 @@ window.switchAdminTab = (tab) => {
     btn.classList.toggle("text-muted", !isActive);
   });
   if (tab === "appearance") populateAppearanceForm();
+  if (tab === "products") loadAdminProducts();
   if (tab === "conversas") loadAdminConversas();
   if (tab === "suporte") switchSuporteSubTab(currentSuporteSubTab);
   if (tab === "convencer") loadAdminConvencer();
