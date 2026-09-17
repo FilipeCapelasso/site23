@@ -143,6 +143,8 @@
     background:rgba(255,255,255,.03);padding:1.5rem;text-align:left;transition:.2s ease}
   .painel-quick-card:hover{border-color:rgba(124,92,255,.5);background:rgba(124,92,255,.07);transform:translateY(-2px)}
   .painel-stat-card{border-radius:1.1rem;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);padding:1.35rem 1.5rem}
+  .admin-shortcut-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;border-radius:1rem;border:1px solid #23262f;background:#181b22;padding:1.25rem 1rem;text-align:center;font-size:.8rem;font-weight:700;color:#fff;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
+  .admin-shortcut-card:hover{border-color:rgba(124,92,255,.55);transform:translateY(-2px);box-shadow:0 10px 26px -12px rgba(124,92,255,.5)}
   .painel-status-badge{display:inline-block;border-radius:999px;padding:.3rem .65rem;font-size:10.5px;font-weight:800;letter-spacing:.02em}
   .painel-filter-btn{flex-shrink:0;border-radius:999px;border:1px solid #23262f;background:#111318;padding:.5rem 1rem;
     font-size:12px;font-weight:700;color:#8b8fa3;white-space:nowrap;transition:.15s ease}
@@ -634,6 +636,15 @@
     </div>
   </main>
 
+  <div class="border-y border-border bg-surface/60">
+    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-10 gap-y-4 px-4 py-6 text-center text-xs font-semibold uppercase tracking-wide text-muted sm:justify-between sm:text-left">
+      <span class="flex items-center gap-2"><span class="text-base">🛡️</span> Pagamento seguro via Pix</span>
+      <span class="flex items-center gap-2"><span class="text-base">⚡</span> Entrega automática e imediata</span>
+      <span class="flex items-center gap-2"><span class="text-base">🎧</span> Suporte real 24/7</span>
+      <span class="flex items-center gap-2"><span class="text-base">🔒</span> Dados protegidos</span>
+    </div>
+  </div>
+
   <section id="depoimentos" class="border-y border-border bg-surface py-16">
     <div class="mx-auto max-w-6xl px-4">
       <div class="mb-10 text-center">
@@ -698,11 +709,40 @@
 
   <div id="product-page-view" class="hidden"></div>
 
-  <footer class="border-t border-border bg-surface py-10">
-    <div class="mx-auto flex max-w-6xl flex-col items-center justify-center gap-4 px-4 text-sm text-muted sm:flex-row">
-      <div class="text-center sm:text-left">
-        <p class="mb-1 font-display text-lg font-bold text-white">NovaStore</p>
-        <p>© <span id="year"></span> Todos os direitos reservados.</p>
+  <footer class="border-t border-border bg-surface pb-8 pt-14">
+    <div class="mx-auto max-w-6xl px-4">
+      <div class="grid grid-cols-2 gap-10 sm:grid-cols-4">
+        <div class="col-span-2 sm:col-span-1">
+          <p class="mb-3 font-display text-xl font-bold text-white">Nova<span class="lilac">Store</span></p>
+          <p class="text-sm leading-relaxed text-muted">Sua loja digital de contas, assinaturas e produtos gamer, com entrega automática e suporte de verdade.</p>
+        </div>
+        <div>
+          <p class="mb-3 text-xs font-bold uppercase tracking-wide text-white">Loja</p>
+          <ul class="flex flex-col gap-2 text-sm text-muted">
+            <li><a href="#catalogo" onclick="goBackToStore()" class="hover:text-white">Produtos</a></li>
+            <li><a href="#depoimentos" onclick="goBackToStore()" class="hover:text-white">Avaliações</a></li>
+            <li><a href="#sorteio" class="hover:text-white">Sorteio</a></li>
+          </ul>
+        </div>
+        <div>
+          <p class="mb-3 text-xs font-bold uppercase tracking-wide text-white">Suporte</p>
+          <ul class="flex flex-col gap-2 text-sm text-muted">
+            <li><a href="#" onclick="event.preventDefault(); openChatModal();" class="hover:text-white">Central de suporte</a></li>
+            <li><a href="#" onclick="event.preventDefault(); openAuthModal('login');" class="hover:text-white">Minha conta</a></li>
+          </ul>
+        </div>
+        <div>
+          <p class="mb-3 text-xs font-bold uppercase tracking-wide text-white">Confiança</p>
+          <ul class="flex flex-col gap-2 text-sm text-muted">
+            <li class="flex items-center gap-2">🛡️ Pagamento via Pix</li>
+            <li class="flex items-center gap-2">⚡ Entrega automática</li>
+            <li class="flex items-center gap-2">🎧 Suporte 24/7</li>
+          </ul>
+        </div>
+      </div>
+      <div class="mt-10 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-muted sm:flex-row">
+        <p>© <span id="year"></span> NovaStore. Todos os direitos reservados.</p>
+        <p>Feito para gamers, por gamers.</p>
       </div>
     </div>
   </footer>
@@ -789,7 +829,8 @@
 
     <main class="mx-auto max-w-5xl px-3 py-6 sm:px-4 sm:py-10">
       <div class="admin-tabs-scroll mb-8 flex flex-nowrap gap-1 overflow-x-auto border-b border-border sm:gap-2">
-        <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-primary px-3 py-3 text-sm font-bold text-white sm:px-4">Produtos</button>
+        <button id="admin-tab-btn-dashboard" onclick="switchAdminTab('dashboard')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-primary px-3 py-3 text-sm font-bold text-white sm:px-4">🏠 Visão Geral</button>
+        <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Produtos</button>
         <button id="admin-tab-btn-conversas" onclick="switchAdminTab('conversas')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Entregas</button>
         <button id="admin-tab-btn-suporte" onclick="switchAdminTab('suporte')" class="admin-tab-btn relative shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Suporte
           <span id="admin-suporte-unread-badge" class="hidden absolute -right-2 -top-1 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
@@ -804,7 +845,33 @@
         <button id="admin-tab-btn-appearance" onclick="switchAdminTab('appearance')" class="admin-tab-btn shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted hover:text-white sm:px-4">Aparência do site</button>
       </div>
 
-      <section id="admin-tab-products">
+      <section id="admin-tab-dashboard">
+        <h1 class="mb-6 font-display text-2xl font-bold uppercase">Visão Geral</h1>
+
+        <div class="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div class="painel-stat-card"><p id="dash-stat-vendas-hoje" class="font-display text-2xl font-bold text-white">0</p><p class="text-[11px] font-bold uppercase text-muted">Vendas hoje</p></div>
+          <div class="painel-stat-card"><p id="dash-stat-faturamento-hoje" class="font-display text-2xl font-bold text-accent">R$ 0</p><p class="text-[11px] font-bold uppercase text-muted">Faturado hoje</p></div>
+          <div class="painel-stat-card"><p id="dash-stat-pendentes" class="font-display text-2xl font-bold text-white">0</p><p class="text-[11px] font-bold uppercase text-muted">Pix aguardando</p></div>
+          <div class="painel-stat-card"><p id="dash-stat-produtos" class="font-display text-2xl font-bold text-white">0</p><p class="text-[11px] font-bold uppercase text-muted">Produtos ativos</p></div>
+          <div class="painel-stat-card"><p id="dash-stat-clientes" class="font-display text-2xl font-bold text-white">0</p><p class="text-[11px] font-bold uppercase text-muted">Clientes cadastrados</p></div>
+          <div class="painel-stat-card"><p id="dash-stat-abertos" class="font-display text-2xl font-bold text-white">0</p><p class="text-[11px] font-bold uppercase text-muted">Suporte pendente</p></div>
+        </div>
+
+        <h2 class="mb-4 text-xs font-bold uppercase tracking-wide text-muted">Atalhos rápidos</h2>
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <button onclick="switchAdminTab('products')" class="admin-shortcut-card"><span class="text-2xl">📦</span><span>Produtos</span></button>
+          <button onclick="switchAdminTab('vendas')" class="admin-shortcut-card"><span class="text-2xl">📊</span><span>Vendas</span></button>
+          <button onclick="switchAdminTab('conversas')" class="admin-shortcut-card"><span class="text-2xl">🚚</span><span>Entregas</span></button>
+          <button onclick="switchAdminTab('suporte')" class="admin-shortcut-card"><span class="text-2xl">💬</span><span>Suporte</span></button>
+          <button onclick="switchAdminTab('convencer')" class="admin-shortcut-card"><span class="text-2xl">🎯</span><span>Convencer Cliente</span></button>
+          <button onclick="switchAdminTab('anunciantes')" class="admin-shortcut-card"><span class="text-2xl">🤝</span><span>Anunciantes</span></button>
+          <button onclick="switchAdminTab('sorteios')" class="admin-shortcut-card"><span class="text-2xl">🎁</span><span>Sorteios</span></button>
+          <button onclick="switchAdminTab('contas')" class="admin-shortcut-card"><span class="text-2xl">👥</span><span>Contas</span></button>
+          <button onclick="switchAdminTab('appearance')" class="admin-shortcut-card sm:col-span-4"><span class="text-2xl">🎨</span><span>Aparência do site — banner, cores, decorações</span></button>
+        </div>
+      </section>
+
+      <section id="admin-tab-products" class="hidden">
         <div class="mb-6 flex items-center justify-between">
           <h1 class="font-display text-2xl font-bold uppercase">Produtos</h1>
           <button onclick="openForm()" class="rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">+ Novo produto</button>
@@ -3797,7 +3864,7 @@ function stopCardLightningEffect() {
 }
 
 window.switchAdminTab = (tab) => {
-  const tabs = ["products", "conversas", "suporte", "convencer", "vendas", "appearance", "anunciantes", "sorteios", "contas"];
+  const tabs = ["dashboard", "products", "conversas", "suporte", "convencer", "vendas", "appearance", "anunciantes", "sorteios", "contas"];
   tabs.forEach((t) => {
     const isActive = t === tab;
     document.getElementById(`admin-tab-${t}`).classList.toggle("hidden", !isActive);
@@ -3815,6 +3882,7 @@ window.switchAdminTab = (tab) => {
   if (tab === "anunciantes") loadAdminAnunciantes();
   if (tab === "sorteios") loadAdminSorteios();
   if (tab === "contas") loadAdminContas();
+  if (tab === "dashboard") loadAdminDashboard();
 };
 
 /* a aba "Suporte" reúne duas caixas de entrada antigas (Mensagens diretas e Tickets)
@@ -4908,7 +4976,7 @@ function showAdminLogin(errorMsg) {
 function showAdminPanel() {
   document.getElementById("admin-login-screen").classList.add("hidden");
   document.getElementById("admin-panel-screen").classList.remove("hidden");
-  loadAdminProducts();
+  loadAdminDashboard();
 }
 
 document.getElementById("login-form").onsubmit = async (e) => {
@@ -5663,6 +5731,35 @@ window.deleteProduct = async (id, name) => {
 
 let VENDAS_ORDERS = [];
 let vendasStatusFiltro = "todos";
+
+/* estatísticas rápidas + atalhos da aba "Visão Geral", a tela inicial do admin */
+async function loadAdminDashboard() {
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const [
+    { data: vendasHoje },
+    { count: pendentesCount },
+    { count: produtosCount },
+    { count: clientesCount },
+    { count: ticketsAbertos },
+  ] = await Promise.all([
+    supabase.from("orders").select("total").eq("status", "PAGO").gte("paid_at", todayStart.toISOString()),
+    supabase.from("orders").select("id", { count: "exact", head: true }).eq("status", "PENDENTE"),
+    supabase.from("products").select("id", { count: "exact", head: true }).eq("active", true),
+    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "client"),
+    supabase.from("tickets").select("id", { count: "exact", head: true }).eq("status", "aberto"),
+  ]);
+
+  const totalHoje = (vendasHoje || []).reduce((s, o) => s + Number(o.total || 0), 0);
+
+  document.getElementById("dash-stat-vendas-hoje").textContent = (vendasHoje || []).length;
+  document.getElementById("dash-stat-faturamento-hoje").textContent = fmt(totalHoje);
+  document.getElementById("dash-stat-pendentes").textContent = pendentesCount || 0;
+  document.getElementById("dash-stat-produtos").textContent = produtosCount || 0;
+  document.getElementById("dash-stat-clientes").textContent = clientesCount || 0;
+  document.getElementById("dash-stat-abertos").textContent = ticketsAbertos || 0;
+}
 
 async function loadAdminVendas() {
   const tbody = document.getElementById("vendas-table");
