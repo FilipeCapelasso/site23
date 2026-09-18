@@ -258,9 +258,8 @@
   header.sticky nav a{position:relative;transition:color .2s ease}
   header.sticky nav a::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:2px;border-radius:999px;background:#7c5cff;transform:scaleX(0);transform-origin:center;transition:transform .2s ease}
   header.sticky nav a:hover::after,header.sticky nav a.text-white::after{transform:scaleX(1)}
-  #hero-section{box-shadow:inset 0 -90px 90px -80px rgba(0,0,0,.6)}
-  #hero-section::before{content:"";position:absolute;inset:0;pointer-events:none;background:
-    linear-gradient(180deg,rgba(0,0,0,.1),rgba(0,0,0,.4) 72%,rgba(0,0,0,.9))}
+  /* divisória removida a pedido: hero-section agora usa o mesmo fundo
+     contínuo do restante da página, sem sombra nem gradiente de corte */
 
   /* ---------- hero: glow orbs + grid + conteúdo em destaque ---------- */
   .hero-grid-overlay{position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.5;
@@ -2837,10 +2836,32 @@ async function uploadChatImage(file, folder) {
 let globalChatChannel = null;
 const GLOBAL_CHAT_LIMIT = 100;
 
+/* Chat Global temporariamente desativado: em vez de mostrar a sala vazia
+   (o que estranharia clientes vendo muitas compras mas nenhuma conversa),
+   exibe um aviso de indisponibilidade e bloqueia o envio de mensagens.
+   Para reativar o chat normalmente, basta voltar esta flag para false. */
+const GLOBAL_CHAT_TEMP_DISABLED = true;
+
 window.openGlobalChatModal = async () => {
   if (!CURRENT_USER) { openAuthModal("login"); return; }
   document.getElementById("global-chat-modal").classList.remove("hidden");
   document.getElementById("global-chat-modal").classList.add("flex");
+
+  if (GLOBAL_CHAT_TEMP_DISABLED) {
+    const msgsEl = document.getElementById("global-chat-messages");
+    msgsEl.innerHTML = `<div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted"><span class="text-3xl">🌐</span>Chat temporariamente indisponível.<br/>Voltamos em breve!</div>`;
+    const input = document.getElementById("global-chat-input");
+    input.disabled = true;
+    input.placeholder = "Chat temporariamente indisponível";
+    document.getElementById("global-emoji-btn").disabled = true;
+    document.getElementById("global-chat-image-input").disabled = true;
+    const form = document.getElementById("global-chat-form");
+    form.onsubmit = (e) => e.preventDefault();
+    const sendBtn = form.querySelector('button[type="submit"]');
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.classList.add("opacity-40", "cursor-not-allowed"); }
+    return;
+  }
+
   document.getElementById("global-chat-form").onsubmit = (e) => { e.preventDefault(); sendGlobalChatMessage(); };
   document.getElementById("global-chat-image-input").onchange = (e) => {
     const file = e.target.files[0];
