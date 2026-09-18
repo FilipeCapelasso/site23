@@ -246,7 +246,10 @@
   /* ---------- NovaStore visual refresh ---------- */
   :root{color-scheme:dark}
   html{scroll-behavior:smooth}
-  body{overflow-x:hidden;background:#000000}
+  body{overflow-x:hidden;background:#000000;position:relative}
+  body::before{content:"";position:fixed;inset:0;z-index:-2;pointer-events:none;opacity:.5;
+    background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);
+    background-size:42px 42px}
   body::selection{background:rgba(124,92,255,.38);color:#fff}
   .glass{background:rgba(10,11,16,.72);border-color:rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.18)}
   header.sticky{backdrop-filter:blur(18px) saturate(145%);box-shadow:0 10px 35px rgba(0,0,0,.20)}
@@ -408,7 +411,7 @@
   }
 
   /* ---------- partículas do hero (constelação gamer) ---------- */
-  #particles-canvas{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:-1;opacity:.85;pointer-events:none}
+  #particles-canvas{position:absolute;top:0;left:0;width:100%;z-index:-1;opacity:.85;pointer-events:none}
 
   /* ---------- glow magnético que segue o cursor nos botões principais ---------- */
   .magnetic-btn{position:relative;isolation:isolate;overflow:hidden;transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
@@ -6475,7 +6478,8 @@ document.getElementById("product-form").onsubmit = async (e) => {
   let width = 0, height = 0, particles = [], raf = null;
 
   function resize() {
-    width = window.innerWidth; height = window.innerHeight;
+    width = window.innerWidth;
+    height = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight);
     canvas.width = width * dpr; canvas.height = height * dpr;
     canvas.style.width = width + "px"; canvas.style.height = height + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -6484,8 +6488,8 @@ document.getElementById("product-form").onsubmit = async (e) => {
   function seed() {
     // no mobile usamos bem menos partículas (economiza CPU/bateria)
     const count = isMobile
-      ? Math.max(10, Math.min(24, Math.floor((width * height) / 26000)))
-      : Math.max(24, Math.min(70, Math.floor((width * height) / 16000)));
+      ? Math.max(20, Math.min(90, Math.floor((width * height) / 22000)))
+      : Math.max(40, Math.min(260, Math.floor((width * height) / 15000)));
     particles = Array.from({ length: count }, () => ({
       x: Math.random() * width,
       y: Math.random() * height,
@@ -6554,7 +6558,16 @@ document.getElementById("product-form").onsubmit = async (e) => {
 
   window.addEventListener("resize", () => { resize(); seed(); if (prefersReduced) drawStatic(); });
 
-  // só anima enquanto o hero está visível na tela, pra não gastar CPU à toa
+  // reajusta quando a altura da página muda (ex.: produtos carregando, imagens, etc.)
+  if ("ResizeObserver" in window) {
+    let resizeTimer = null;
+    new ResizeObserver(() => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => { resize(); seed(); if (prefersReduced) drawStatic(); }, 150);
+    }).observe(document.body);
+  }
+
+  // só anima enquanto o body está visível na tela, pra não gastar CPU à toa
   if ("IntersectionObserver" in window) {
     new IntersectionObserver((entries) => {
       entries.forEach((entry) => (entry.isIntersecting ? start() : stop()));
