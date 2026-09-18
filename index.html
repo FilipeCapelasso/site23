@@ -2006,6 +2006,33 @@ function escapeHTML(s) {
 }
 
 /* =========================================================================
+   SANITIZAÇÃO DE URLs VINDAS DO BANCO (avatar_url, image_url, etc.)
+   Nunca inserir uma URL vinda do usuário/banco direto em src="" ou url()
+   sem passar por aqui — bloqueia protocolos perigosos (javascript:, data:text/html,
+   vbscript:, etc.) e só libera http(s) e data:image/ conhecidos. Retorna "" pra
+   qualquer coisa suspeita, e sempre escapa o resultado pra uso seguro em HTML. */
+function safeMediaSrc(url) {
+  if (!url || typeof url !== "string") return "";
+  const trimmed = url.trim();
+  const isHttp = /^https?:\/\//i.test(trimmed);
+  const isSafeData = /^data:image\/(png|jpe?g|gif|webp);base64,[a-z0-9+/=]+$/i.test(trimmed);
+  if (!isHttp && !isSafeData) return "";
+  return escapeHTML(trimmed);
+}
+
+/* delega o clique em qualquer imagem `.tg-img-zoom[data-full]` dentro do container
+   pra abrir a imagem em tamanho real numa nova aba — substitui onclick inline
+   (que não é seguro pra URLs vindas do banco) por um listener via dataset. */
+function bindImageZoom(container) {
+  container.querySelectorAll(".tg-img-zoom[data-full]").forEach((node) => {
+    node.onclick = () => {
+      const full = node.dataset.full;
+      if (full) window.open(full, "_blank", "noopener,noreferrer");
+    };
+  });
+}
+
+/* =========================================================================
    AUTENTICAÇÃO DE CLIENTES (login/registro) + PERFIL (nome, avatar, role)
    ========================================================================= */
 
@@ -2056,8 +2083,8 @@ function renderAuthUI() {
     const firstName = name.trim().split(" ")[0];
     document.getElementById("user-first-name").textContent = firstName;
     const avatarEl = document.getElementById("user-avatar");
-    if (CURRENT_PROFILE?.avatar_url) {
-      avatarEl.innerHTML = `<img src="${CURRENT_PROFILE.avatar_url}" class="h-full w-full object-cover" />`;
+    if (CURRENT_PROFILE?.avatar_url && safeMediaSrc(CURRENT_PROFILE.avatar_url)) {
+      avatarEl.innerHTML = `<img src="${safeMediaSrc(CURRENT_PROFILE.avatar_url)}" class="h-full w-full object-cover" />`;
     } else {
       avatarEl.textContent = firstName.charAt(0).toUpperCase();
     }
@@ -2820,12 +2847,14 @@ async function loadGlobalChatMessages() {
 }
 
 function chatBubbleHTML(m, { mine, pendingLocalId } = {}) {
-  const avatarInner = m.sender_avatar_url
-    ? `<img src="${m.sender_avatar_url}" class="h-full w-full object-cover" />`
+  const safeAvatar = safeMediaSrc(m.sender_avatar_url);
+  const avatarInner = safeAvatar
+    ? `<img src="${safeAvatar}" class="h-full w-full object-cover" />`
     : (m.sender_name || "?").trim().charAt(0).toUpperCase();
   const nameAttrs = `data-uid="${m.sender_id}" data-uname="${escapeHTML(m.sender_name || "")}" data-uavatar="${escapeHTML(m.sender_avatar_url || "")}"`;
-  const bodyHTML = m.image_url
-    ? `<img src="${m.image_url}" class="tg-img" onclick="window.open('${m.image_url}','_blank')" />`
+  const safeImg = safeMediaSrc(m.image_url);
+  const bodyHTML = safeImg
+    ? `<img src="${safeImg}" class="tg-img tg-img-zoom" data-full="${safeImg}" />`
     : `<span>${escapeHTML(m.message_text || "")}</span>`;
   const time = m.created_at ? new Date(m.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : chatTimeHTML();
   return `
@@ -2851,7 +2880,8 @@ function renderGlobalChatMessages(msgs) {
   bindProfileTriggers(el);
 }
 
-/* delega o clique em qualquer avatar/nome dentro do container pro popover de perfil */
+/* delega o clique em qualquer avatar/nome dentro do container pro popover de perfil,
+   e também o clique de zoom em imagens de chat (ver bindImageZoom) */
 function bindProfileTriggers(container) {
   container.querySelectorAll(".profile-trigger").forEach((node) => {
     node.onclick = (e) => {
@@ -2859,6 +2889,7 @@ function bindProfileTriggers(container) {
       if (uid && uid !== CURRENT_USER?.id) openProfilePopover(e, uid, uname, uavatar);
     };
   });
+  bindImageZoom(container);
 }
 
 async function sendGlobalChatMessage(imageFile) {
@@ -2962,7 +2993,14 @@ window.openProfilePopover = async (evt, userId, name, avatarUrl) => {
   pop.style.left = `${Math.max(left, 8)}px`;
 
   const status = FRIEND_STATUS.get(userId) || "none";
-  const avatarInner = avatarUrl ? `<img src="${avatarUrl}" class="h-full w-full object-cover" />` : (name || "?").trim().charAt(0).toUpperCase();
+  const safeAvatar = safeMediaSrc(avatarUrl);
+  const avatarInner = safeAvatar ? `<img src="${safeAvatar}" class="h-full w-full object-cover" />` : (name || "?").trim().charAt(0).toUpperCase();
+  /* nome/avatar do usuário-alvo são passados via data-* (não interpolados dentro
+     de um onclick="...('...')"), porque um valor com aspas simples escapado como
+     HTML entity ainda vira aspa de verdade quando o navegador decodifica o atributo
+     antes de rodar o JS do onclick — ou seja, escapeHTML() sozinho não fecha esse
+     buraco. data-* + dataset é lido como string literal, sem esse risco. */
+  const targetAttrs = `data-target-uid="${userId}" data-target-name="${escapeHTML(name || "")}" data-target-avatar="${escapeHTML(avatarUrl || "")}"`;
 
   let actionHTML = "";
   if (status === "friends") {
@@ -2972,7 +3010,7 @@ window.openProfilePopover = async (evt, userId, name, avatarUrl) => {
   } else if (status === "pending_in") {
     actionHTML = `<button onclick="respondFriendRequest('${userId}', true)" class="w-full rounded-lg bg-accent px-3 py-2 text-xs font-bold text-white hover:opacity-90">✅ Aceitar solicitação</button>`;
   } else {
-    actionHTML = `<button onclick="sendFriendRequest('${userId}', '${escapeHTML(name)}', '${escapeHTML(avatarUrl || "")}')" class="w-full rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primaryhover">➕ Adicionar amigo</button>`;
+    actionHTML = `<button class="popover-add-btn w-full rounded-lg bg-primary px-3 py-2 text-xs font-bold text-white hover:bg-primaryhover" ${targetAttrs}>➕ Adicionar amigo</button>`;
   }
 
   pop.innerHTML = `
@@ -2982,8 +3020,17 @@ window.openProfilePopover = async (evt, userId, name, avatarUrl) => {
     </div>
     <div class="flex flex-col gap-2">
       ${actionHTML}
-      <button onclick="closeProfilePopover(); openFriendsModalToThread('${userId}', '${escapeHTML(name)}', '${escapeHTML(avatarUrl || "")}')" class="w-full rounded-lg border border-border px-3 py-2 text-xs font-bold text-white hover:border-primary/60">💬 Enviar mensagem</button>
+      <button class="popover-msg-btn w-full rounded-lg border border-border px-3 py-2 text-xs font-bold text-white hover:border-primary/60" ${targetAttrs}>💬 Enviar mensagem</button>
     </div>`;
+  pop.querySelector(".popover-add-btn")?.addEventListener("click", (e) => {
+    const { targetUid, targetName, targetAvatar } = e.currentTarget.dataset;
+    sendFriendRequest(targetUid, targetName, targetAvatar);
+  });
+  pop.querySelector(".popover-msg-btn")?.addEventListener("click", (e) => {
+    const { targetUid, targetName, targetAvatar } = e.currentTarget.dataset;
+    closeProfilePopover();
+    openFriendsModalToThread(targetUid, targetName, targetAvatar);
+  });
   pop.classList.add("is-open");
 };
 
@@ -3076,7 +3123,8 @@ function renderFriendsListView() {
   });
 
   const rowHTML = (u, extra = "") => {
-    const avatarInner = u.avatar ? `<img src="${u.avatar}" class="h-full w-full object-cover" />` : (u.name || "?").trim().charAt(0).toUpperCase();
+    const safeAvatar = safeMediaSrc(u.avatar);
+    const avatarInner = safeAvatar ? `<img src="${safeAvatar}" class="h-full w-full object-cover" />` : (u.name || "?").trim().charAt(0).toUpperCase();
     const dataAttrs = `data-tid="${u.id}" data-tname="${escapeHTML(u.name || "")}" data-tavatar="${escapeHTML(u.avatar || "")}"`;
     return `<div class="friend-row flex items-center gap-3 rounded-xl p-2.5">
       <div class="tg-avatar thread-trigger" ${dataAttrs}>${avatarInner}</div>
@@ -3116,11 +3164,12 @@ function debounceFriendSearch(e) {
     resultsEl.innerHTML = results.length
       ? results.map((u) => {
           const status = FRIEND_STATUS.get(u.id) || "none";
-          const avatarInner = u.avatar_url ? `<img src="${u.avatar_url}" class="h-full w-full object-cover" />` : (u.full_name || "?").trim().charAt(0).toUpperCase();
+          const safeAvatar = safeMediaSrc(u.avatar_url);
+          const avatarInner = safeAvatar ? `<img src="${safeAvatar}" class="h-full w-full object-cover" />` : (u.full_name || "?").trim().charAt(0).toUpperCase();
           const actionBtn = status === "friends" ? `<span class="text-[11px] font-bold text-accent">✓ Amigo</span>`
             : status === "pending_out" ? `<span class="text-[11px] text-muted">Pendente</span>`
             : status === "pending_in" ? `<button onclick="respondFriendRequest('${u.id}', true)" class="rounded-lg bg-accent px-2.5 py-1 text-[11px] font-bold text-white">Aceitar</button>`
-            : `<button onclick="sendFriendRequest('${u.id}', ${JSON.stringify(u.full_name || "")}, ${JSON.stringify(u.avatar_url || "")})" class="rounded-lg bg-primary px-2.5 py-1 text-[11px] font-bold text-white">Adicionar</button>`;
+            : `<button class="search-add-btn rounded-lg bg-primary px-2.5 py-1 text-[11px] font-bold text-white" data-target-uid="${u.id}" data-target-name="${escapeHTML(u.full_name || "")}" data-target-avatar="${escapeHTML(u.avatar_url || "")}">Adicionar</button>`;
           return `<div class="friend-row flex items-center gap-3 p-2.5">
             <div class="tg-avatar profile-trigger" data-uid="${u.id}" data-uname="${escapeHTML(u.full_name || "")}" data-uavatar="${escapeHTML(u.avatar_url || "")}">${avatarInner}</div>
             <p class="flex-1 truncate text-sm font-semibold text-white">${escapeHTML(u.full_name || "Usuário")}</p>
@@ -3129,6 +3178,12 @@ function debounceFriendSearch(e) {
         }).join("")
       : `<p class="p-3 text-center text-xs text-muted">Ninguém encontrado com esse nome.</p>`;
     bindProfileTriggers(resultsEl);
+    resultsEl.querySelectorAll(".search-add-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const { targetUid, targetName, targetAvatar } = btn.dataset;
+        sendFriendRequest(targetUid, targetName, targetAvatar);
+      });
+    });
   }, 300);
 }
 
@@ -3156,7 +3211,8 @@ window.openFriendThread = async (userId, name, avatarUrl) => {
   document.getElementById("friends-thread-view").classList.remove("hidden");
   document.getElementById("friends-thread-view").classList.add("flex");
   document.getElementById("friends-back-btn").classList.remove("hidden");
-  const avatarInner = avatarUrl ? `<img src="${avatarUrl}" class="h-full w-full object-cover" />` : (name || "?").trim().charAt(0).toUpperCase();
+  const safeAvatar = safeMediaSrc(avatarUrl);
+  const avatarInner = safeAvatar ? `<img src="${safeAvatar}" class="h-full w-full object-cover" />` : (name || "?").trim().charAt(0).toUpperCase();
   document.getElementById("friends-header-avatar").innerHTML = avatarInner;
   document.getElementById("friends-header-title").textContent = name || "Conversa";
   document.getElementById("friends-header-sub").textContent = "Conversa privada";
@@ -3189,6 +3245,7 @@ async function loadFriendMessages() {
   if (!msgs.length) { el.innerHTML = `<div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted"><span class="text-3xl">💬</span>Diga oi para ${escapeHTML(currentFriendThread.name || "seu amigo")}!</div>`; return; }
   el.innerHTML = msgs.map((m) => friendBubbleHTML(m)).join("");
   el.scrollTop = el.scrollHeight;
+  bindImageZoom(el);
 
   const unread = msgs.filter((m) => m.receiver_id === CURRENT_USER.id && !m.read_at).map((m) => m.id);
   if (unread.length) { await supabase.from("mensagens_privadas").update({ read_at: new Date().toISOString() }).in("id", unread); updateFriendsUnreadBadge(); }
@@ -3196,8 +3253,9 @@ async function loadFriendMessages() {
 
 function friendBubbleHTML(m, pendingLocalId) {
   const mine = m.sender_id === CURRENT_USER?.id;
-  const bodyHTML = m.image_url
-    ? `<img src="${m.image_url}" class="tg-img" onclick="window.open('${m.image_url}','_blank')" />`
+  const safeImg = safeMediaSrc(m.image_url);
+  const bodyHTML = safeImg
+    ? `<img src="${safeImg}" class="tg-img tg-img-zoom" data-full="${safeImg}" />`
     : `<span>${escapeHTML(m.message_text || "")}</span>`;
   const time = m.created_at ? new Date(m.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : chatTimeHTML();
   return `<div class="flex" ${pendingLocalId ? `data-local-id="${pendingLocalId}"` : ""}>
@@ -3215,6 +3273,7 @@ function appendFriendMessageBubble(m) {
   if (emptyState) el.innerHTML = "";
   el.insertAdjacentHTML("beforeend", friendBubbleHTML(m));
   el.scrollTop = el.scrollHeight;
+  bindImageZoom(el);
 }
 
 async function sendFriendMessage(imageFile) {
@@ -3235,6 +3294,7 @@ async function sendFriendMessage(imageFile) {
   };
   el.insertAdjacentHTML("beforeend", friendBubbleHTML(optimisticMsg, localId));
   el.scrollTop = el.scrollHeight;
+  bindImageZoom(el);
 
   try {
     let image_url = null;
@@ -3683,10 +3743,11 @@ function buildCategoryBar() {
     const accent = c.color || "#7c5cff";
     const rgb = hexToRgbTriplet(accent);
     const accentDark = shadeHexColor(accent, 30);
-    const hasImage = !!c.image;
+    const safeTileImg = safeMediaSrc(c.image);
+    const hasImage = !!safeTileImg;
     return `
     <button data-cat="${c.key ?? ""}" onclick='filterCategory(${JSON.stringify(c.key)})'
-      style="--accent:${accent};--accent-dark:${accentDark};--accent-soft:rgba(${rgb},.16);--accent-mid:rgba(${rgb},.42);--accent-glow:rgba(${rgb},.5);--accent-rgb:${rgb};${hasImage ? `--tile-bg:url('${c.image}')` : ""}"
+      style="--accent:${accent};--accent-dark:${accentDark};--accent-soft:rgba(${rgb},.16);--accent-mid:rgba(${rgb},.42);--accent-glow:rgba(${rgb},.5);--accent-rgb:${rgb};${hasImage ? `--tile-bg:url('${safeTileImg}')` : ""}"
       class="game-tile ${isActive ? "is-active" : ""} ${hasImage ? "has-image" : ""} group shrink-0 overflow-visible rounded-2xl border border-border bg-surface">
       ${hasImage ? `<span class="game-tile-bg" style="background-image:var(--tile-bg)"></span>` : `<span class="game-tile-pattern"></span>`}
       <span class="game-tile-overlay"></span>
@@ -3779,8 +3840,9 @@ async function loadSiteSettings() {
 
 function applySiteSettings(s) {
   const body = document.body;
-  if (s.background_image_url) {
-    document.documentElement.style.setProperty("--site-bg-image", `url("${s.background_image_url}")`);
+  const safeBg = safeMediaSrc(s.background_image_url);
+  if (safeBg) {
+    document.documentElement.style.setProperty("--site-bg-image", `url("${safeBg}")`);
     document.documentElement.style.setProperty("--site-bg-overlay", String(s.background_overlay ?? 0.85));
     body.classList.add("has-custom-bg");
   } else {
@@ -3789,8 +3851,9 @@ function applySiteSettings(s) {
 
   const heroSection = document.getElementById("hero-section");
   document.documentElement.style.setProperty("--hero-overlay", String(s.hero_overlay ?? 0.35));
-  if (s.hero_image_url) {
-    heroSection.style.backgroundImage = `url("${s.hero_image_url}")`;
+  const safeHero = safeMediaSrc(s.hero_image_url);
+  if (safeHero) {
+    heroSection.style.backgroundImage = `url("${safeHero}")`;
     // ajusta a altura do banner pra proporção REAL da imagem enviada, sem cortar nada —
     // o resto do site sobe ou desce de acordo com o tamanho que a imagem ocupa
     const heroImgProbe = new Image();
@@ -3799,7 +3862,7 @@ function applySiteSettings(s) {
         heroSection.style.aspectRatio = `${heroImgProbe.naturalWidth} / ${heroImgProbe.naturalHeight}`;
       }
     };
-    heroImgProbe.src = s.hero_image_url;
+    heroImgProbe.src = safeHero;
   } else {
     heroSection.style.backgroundImage = "";
     heroSection.style.aspectRatio = "1600 / 700";
@@ -4104,8 +4167,8 @@ function populateAppearanceForm() {
   currentBgUrl = SITE_SETTINGS.background_image_url || "";
   const overlayPct = Math.round((SITE_SETTINGS.background_overlay ?? 0.85) * 100);
   const heroOverlayPct = Math.round((SITE_SETTINGS.hero_overlay ?? 0.35) * 100);
-  document.getElementById("hero-image-preview").innerHTML = currentHeroUrl ? `<img src="${currentHeroUrl}" class="w-full h-auto block" />` : "Sem imagem";
-  document.getElementById("bg-image-preview").innerHTML = currentBgUrl ? `<img src="${currentBgUrl}" class="h-full w-full object-cover" />` : "Sem imagem";
+  document.getElementById("hero-image-preview").innerHTML = safeMediaSrc(currentHeroUrl) ? `<img src="${safeMediaSrc(currentHeroUrl)}" class="w-full h-auto block" />` : "Sem imagem";
+  document.getElementById("bg-image-preview").innerHTML = safeMediaSrc(currentBgUrl) ? `<img src="${safeMediaSrc(currentBgUrl)}" class="h-full w-full object-cover" />` : "Sem imagem";
   document.getElementById("hero-overlay-input").value = heroOverlayPct;
   document.getElementById("hero-overlay-value").textContent = heroOverlayPct + "%";
   document.getElementById("bg-overlay-input").value = overlayPct;
@@ -4180,7 +4243,7 @@ document.getElementById("hero-image-input").onchange = async (e) => {
   statusEl.textContent = "Enviando imagem...";
   try {
     currentHeroUrl = await uploadSiteAsset(file, "hero");
-    document.getElementById("hero-image-preview").innerHTML = `<img src="${currentHeroUrl}" class="w-full h-auto block" />`;
+    document.getElementById("hero-image-preview").innerHTML = `<img src="${safeMediaSrc(currentHeroUrl)}" class="w-full h-auto block" />`;
     statusEl.textContent = "Imagem enviada ✓";
   } catch (err) {
     statusEl.textContent = "Erro no upload: " + err.message;
@@ -4194,7 +4257,7 @@ document.getElementById("bg-image-input").onchange = async (e) => {
   statusEl.textContent = "Enviando imagem...";
   try {
     currentBgUrl = await uploadSiteAsset(file, "background");
-    document.getElementById("bg-image-preview").innerHTML = `<img src="${currentBgUrl}" class="h-full w-full object-cover" />`;
+    document.getElementById("bg-image-preview").innerHTML = `<img src="${safeMediaSrc(currentBgUrl)}" class="h-full w-full object-cover" />`;
     statusEl.textContent = "Imagem enviada ✓";
   } catch (err) {
     statusEl.textContent = "Erro no upload: " + err.message;
@@ -4347,7 +4410,7 @@ function productCardHTML(p, i = 0) {
     <div class="card-shine"></div>
     ${badge ? `<span class="${badge.cls} absolute left-3 top-3 z-10 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide text-black shadow-lg">${badge.label}</span>` : ""}
     <div class="relative aspect-[1/1] w-full overflow-hidden bg-surface2">
-      ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />` : `<div class="flex h-full items-center justify-center text-muted">Sem imagem</div>`}
+      ${safeMediaSrc(p.image_url) ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />` : `<div class="flex h-full items-center justify-center text-muted">Sem imagem</div>`}
       <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
       ${cat ? `<span class="absolute left-3 ${badge ? "top-11" : "top-3"} flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white backdrop-blur">${cat.icon}${cat.label}</span>` : ""}
       ${p.type === "ASSINATURA" ? `<span class="absolute right-3 top-3 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white">Assinatura</span>` : ""}
@@ -4376,8 +4439,8 @@ function relatedProductCardHTML(p, i = 0) {
      class="card-in group block cursor-pointer transition-transform duration-300 ease-out hover:scale-105"
      style="animation-delay:${delay}ms">
     <div class="flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-2xl bg-zinc-900 p-6">
-      ${p.image_url
-        ? `<img src="${p.image_url}" class="h-full w-full object-contain" />`
+      ${safeMediaSrc(p.image_url)
+        ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-contain" />`
         : `<div class="flex h-full w-full items-center justify-center text-muted">Sem imagem</div>`}
     </div>
     <div class="mt-4 text-left">
@@ -4449,8 +4512,8 @@ function renderProductPage(p) {
   const id = p.id;
 
   const planIconHTML = (plan) => {
-    if (plan.icon_url) return `<img src="${plan.icon_url}" class="h-full w-full object-cover" />`;
-    if (p.image_url) return `<img src="${p.image_url}" class="h-full w-full object-cover" />`;
+    if (safeMediaSrc(plan.icon_url)) return `<img src="${safeMediaSrc(plan.icon_url)}" class="h-full w-full object-cover" />`;
+    if (safeMediaSrc(p.image_url)) return `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover" />`;
     return `<div class="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary to-[#4b2fd6] text-xs font-black text-white">${(plan.name || "?").charAt(0)}</div>`;
   };
 
@@ -4530,8 +4593,8 @@ function renderProductPage(p) {
 
         <div>
           <div class="product-page-box modal-image-frame mx-auto max-w-md overflow-hidden rounded-2xl border border-border bg-surface2 p-5 sm:max-w-lg">
-            ${p.image_url
-              ? `<img src="${p.image_url}" class="aspect-[4/5] w-full rounded-xl object-cover" />`
+            ${safeMediaSrc(p.image_url)
+              ? `<img src="${safeMediaSrc(p.image_url)}" class="aspect-[4/5] w-full rounded-xl object-cover" />`
               : `<div class="flex aspect-[4/5] items-center justify-center rounded-xl text-muted">Sem imagem</div>`}
           </div>
           <div class="purchase-badge mx-auto mt-5 flex w-fit items-center justify-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-5 py-2.5 text-sm font-bold text-accent">
@@ -4789,7 +4852,7 @@ async function renderCart() {
     itemsEl.innerHTML = cart.map((i) => `
       <div class="mb-3 flex gap-3 rounded-xl border border-border bg-surface2 p-3">
         <div class="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-bg">
-          ${i.image ? `<img src="${i.image}" class="h-full w-full object-cover" />` : ""}
+          ${safeMediaSrc(i.image) ? `<img src="${safeMediaSrc(i.image)}" class="h-full w-full object-cover" />` : ""}
         </div>
         <div class="flex flex-1 flex-col justify-between">
           <div>
@@ -4835,7 +4898,7 @@ async function renderOffers() {
           return `
           <div class="flex items-center gap-3 rounded-lg border border-border bg-surface2 p-2">
             <div class="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-bg">
-              ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover" />` : ""}
+              ${safeMediaSrc(p.image_url) ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover" />` : ""}
             </div>
             <div class="flex-1">
               <p class="text-xs font-semibold leading-tight">${p.name}</p>
@@ -5566,7 +5629,7 @@ function renderAdminConvencerThread(msgs, adminId) {
     const fromAdmin = m.sender_id === adminId;
     return `<div class="flex ${fromAdmin ? "justify-end" : "justify-start"}">
       <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${fromAdmin ? "bg-primary text-white" : "bg-surface2 text-white"}">
-        ${m.message_text ? escapeHTML(m.message_text) : (m.image_url ? `<img src="${m.image_url}" class="max-w-[200px] rounded-lg" />` : "")}
+        ${m.message_text ? escapeHTML(m.message_text) : (safeMediaSrc(m.image_url) ? `<img src="${safeMediaSrc(m.image_url)}" class="max-w-[200px] rounded-lg" />` : "")}
       </div>
     </div>`;
   }).join("");
@@ -5879,7 +5942,7 @@ async function loadAdminProducts() {
     <tr class="border-b border-border/60 last:border-0">
       <td class="flex items-center gap-3 px-4 py-3">
         <div class="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-surface2">
-          ${p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover" />` : ""}
+          ${safeMediaSrc(p.image_url) ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover" />` : ""}
         </div>
         <span class="font-semibold">${p.name}</span>
       </td>
@@ -6317,7 +6380,7 @@ window.editProduct = (p) => {
   document.getElementById("f-stock").value = p.stock ?? "";
   document.getElementById("f-featured").checked = !!p.featured;
   document.getElementById("f-active").checked = !!p.active;
-  document.getElementById("image-preview").innerHTML = p.image_url ? `<img src="${p.image_url}" class="h-full w-full object-cover" />` : "";
+  document.getElementById("image-preview").innerHTML = safeMediaSrc(p.image_url) ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover" />` : "";
   document.getElementById("f-type").dispatchEvent(new Event("change"));
   document.getElementById("plans-list").innerHTML = "";
   (p.plans || []).forEach((plan) => addPlanRow(plan));
@@ -6338,7 +6401,7 @@ document.getElementById("f-image").onchange = async (e) => {
 
   const { data } = supabase.storage.from("product-images").getPublicUrl(path);
   currentImageUrl = data.publicUrl;
-  document.getElementById("image-preview").innerHTML = `<img src="${currentImageUrl}" class="h-full w-full object-cover" />`;
+  document.getElementById("image-preview").innerHTML = `<img src="${safeMediaSrc(currentImageUrl)}" class="h-full w-full object-cover" />`;
   statusEl.textContent = "Imagem enviada ✓";
 };
 
@@ -6773,7 +6836,7 @@ window.openContaDetalhe = async (clienteId) => {
     <div class="mb-5 flex items-start justify-between gap-3">
       <div class="flex items-center gap-3">
         <span class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-xl font-black text-white">
-          ${conta?.avatar_url ? `<img src="${conta.avatar_url}" class="h-full w-full object-cover" />` : (conta?.full_name || "C").charAt(0).toUpperCase()}
+          ${safeMediaSrc(conta?.avatar_url) ? `<img src="${safeMediaSrc(conta.avatar_url)}" class="h-full w-full object-cover" />` : (conta?.full_name || "C").charAt(0).toUpperCase()}
         </span>
         <div>
           <p class="font-display text-lg font-bold text-white">${escapeHTML(conta?.full_name || "Cliente")}</p>
@@ -7209,8 +7272,8 @@ async function loadPainelCliente() {
 
   document.getElementById("painel-user-name").textContent = name;
   document.getElementById("painel-overview-name").textContent = firstName;
-  const avatarHTML = CURRENT_PROFILE?.avatar_url
-    ? `<img src="${CURRENT_PROFILE.avatar_url}" class="h-full w-full object-cover" />`
+  const avatarHTML = safeMediaSrc(CURRENT_PROFILE?.avatar_url)
+    ? `<img src="${safeMediaSrc(CURRENT_PROFILE.avatar_url)}" class="h-full w-full object-cover" />`
     : firstName.charAt(0).toUpperCase();
   document.getElementById("painel-avatar").innerHTML = avatarHTML;
   document.getElementById("painel-perfil-avatar").innerHTML = avatarHTML;
