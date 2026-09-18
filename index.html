@@ -408,7 +408,7 @@
   }
 
   /* ---------- partículas do hero (constelação gamer) ---------- */
-  #particles-canvas{position:absolute;inset:0;width:100%;height:100%;z-index:0;opacity:.85}
+  #particles-canvas{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:-1;opacity:.85;pointer-events:none}
 
   /* ---------- glow magnético que segue o cursor nos botões principais ---------- */
   .magnetic-btn{position:relative;isolation:isolate;overflow:hidden;transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
@@ -572,6 +572,7 @@
 </style>
 </head>
 <body class="min-h-screen bg-noise site-locked">
+<canvas id="particles-canvas"></canvas>
 
 <script>
   window.SUPABASE_URL = "https://tisicavugzcsixvhuvvm.supabase.co";
@@ -690,7 +691,6 @@
     <div class="hero-glow-orb hero-glow-orb-1"></div>
     <div class="hero-glow-orb hero-glow-orb-2"></div>
     <div class="hero-grid-overlay"></div>
-    <canvas id="particles-canvas"></canvas>
     <canvas id="lightning-canvas"></canvas>
     <div class="hero-content mx-auto grid max-w-[1600px] grid-cols-1 items-center gap-10 px-4 py-14 sm:px-8 lg:grid-cols-2 lg:gap-16 lg:px-14 lg:py-16 xl:px-20">
       <div>
@@ -6463,7 +6463,7 @@ document.getElementById("product-form").onsubmit = async (e) => {
   loadProducts();
 };
 
-/* ---------------- Partículas do hero (efeito constelação) ---------------- */
+/* ---------------- Partículas de fundo (efeito constelação, site inteiro) ---------------- */
 (function initHeroParticles() {
   const canvas = document.getElementById("particles-canvas");
   if (!canvas || !canvas.getContext) return;
@@ -6475,8 +6475,7 @@ document.getElementById("product-form").onsubmit = async (e) => {
   let width = 0, height = 0, particles = [], raf = null;
 
   function resize() {
-    const rect = canvas.parentElement.getBoundingClientRect();
-    width = rect.width; height = rect.height;
+    width = window.innerWidth; height = window.innerHeight;
     canvas.width = width * dpr; canvas.height = height * dpr;
     canvas.style.width = width + "px"; canvas.style.height = height + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
