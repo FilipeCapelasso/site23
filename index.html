@@ -46,7 +46,7 @@
   .card-hover{transition:.25s ease}
   .card-hover:hover{transform:translateY(-4px);border-color:rgba(124,92,255,.55);
     box-shadow:0 16px 44px -14px rgba(124,92,255,.4)}
-  .bg-grid-fade{background:radial-gradient(circle at 50% 0%, rgba(124,92,255,.26), transparent 62%), #000000}
+  .bg-grid-fade{background:#000000}
   body.has-custom-bg::before{content:"";position:fixed;inset:0;z-index:-2;background-image:var(--site-bg-image);
     background-size:cover;background-position:center;background-attachment:fixed}
   body.has-custom-bg::after{content:"";position:fixed;inset:0;z-index:-1;background:rgba(0,0,0,var(--site-bg-overlay,0.9))}
@@ -246,9 +246,7 @@
   /* ---------- NovaStore visual refresh ---------- */
   :root{color-scheme:dark}
   html{scroll-behavior:smooth}
-  body{overflow-x:hidden;background:
-    radial-gradient(circle at 15% -5%,rgba(124,92,255,.08),transparent 28%),
-    radial-gradient(circle at 90% 8%,rgba(0,230,168,.035),transparent 22%),#000000}
+  body{overflow-x:hidden;background:#000000}
   body::selection{background:rgba(124,92,255,.38);color:#fff}
   .glass{background:rgba(10,11,16,.72);border-color:rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.18)}
   header.sticky{backdrop-filter:blur(18px) saturate(145%);box-shadow:0 10px 35px rgba(0,0,0,.20)}
@@ -257,10 +255,9 @@
   header.sticky nav a{position:relative;transition:color .2s ease}
   header.sticky nav a::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:2px;border-radius:999px;background:#7c5cff;transform:scaleX(0);transform-origin:center;transition:transform .2s ease}
   header.sticky nav a:hover::after,header.sticky nav a.text-white::after{transform:scaleX(1)}
-  #hero-section{box-shadow:inset 0 -90px 90px -80px rgba(124,92,255,.22)}
+  #hero-section{box-shadow:inset 0 -90px 90px -80px rgba(0,0,0,.6)}
   #hero-section::before{content:"";position:absolute;inset:0;pointer-events:none;background:
-    radial-gradient(circle at 75% 25%,rgba(124,92,255,.22),transparent 30%),
-    linear-gradient(180deg,rgba(4,5,8,.04),rgba(4,5,8,.28) 72%,rgba(4,5,8,.8))}
+    linear-gradient(180deg,rgba(0,0,0,.1),rgba(0,0,0,.4) 72%,rgba(0,0,0,.9))}
 
   /* ---------- hero: glow orbs + grid + conteúdo em destaque ---------- */
   .hero-grid-overlay{position:absolute;inset:0;z-index:0;pointer-events:none;opacity:.5;
@@ -268,15 +265,15 @@
     background-size:42px 42px;
     -webkit-mask-image:radial-gradient(circle at 30% 35%,#000 0%,transparent 70%);
     mask-image:radial-gradient(circle at 30% 35%,#000 0%,transparent 70%)}
-  .hero-glow-orb{position:absolute;z-index:0;border-radius:9999px;filter:blur(80px);pointer-events:none;opacity:.55;
+  .hero-glow-orb{position:absolute;z-index:0;border-radius:9999px;filter:blur(80px);pointer-events:none;opacity:.18;
     animation:heroOrbFloat 11s ease-in-out infinite}
-  .hero-glow-orb-1{top:-12%;left:-8%;width:420px;height:420px;background:radial-gradient(circle,rgba(124,92,255,.6),transparent 70%)}
-  .hero-glow-orb-2{bottom:-18%;right:-10%;width:480px;height:480px;background:radial-gradient(circle,rgba(0,230,168,.42),transparent 70%);animation-delay:-5.5s}
+  .hero-glow-orb-1{top:-12%;left:-8%;width:420px;height:420px;background:radial-gradient(circle,rgba(124,92,255,.35),transparent 70%)}
+  .hero-glow-orb-2{bottom:-18%;right:-10%;width:480px;height:480px;background:radial-gradient(circle,rgba(0,230,168,.22),transparent 70%);animation-delay:-5.5s}
   @keyframes heroOrbFloat{0%,100%{transform:translate(0,0)}50%{transform:translate(24px,-28px)}}
   .hero-content{position:relative;z-index:10}
   .hero-badge{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(10px)}
   .hero-title{text-shadow:0 4px 30px rgba(0,0,0,.45)}
-  .hero-image-frame{aspect-ratio:3/2;background:radial-gradient(circle at 60% 30%,rgba(124,92,255,.14),transparent 60%),#050506}
+  .hero-image-frame{aspect-ratio:3/2;background:#000000}
   .hero-cta-secondary{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);transition:.2s ease}
   .hero-cta-secondary:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.28);transform:translateY(-1px)}
   @media(max-width:767px){
@@ -316,7 +313,7 @@
      jogo novo cadastrado no admin ganha automaticamente o mesmo visual, sem precisar programar nada. */
   #category-bar{align-items:stretch}
   .game-tile{--glow:var(--category-glow,#7c5cff);position:relative;isolation:isolate;overflow:visible;
-    width:150px;height:172px;text-align:left;background:linear-gradient(155deg,rgba(var(--accent-rgb,124,92,255),.14),rgba(12,13,18,.96) 60%);
+    width:150px;height:172px;text-align:left;background:linear-gradient(155deg,rgba(var(--accent-rgb,124,92,255),.07),rgba(0,0,0,.98) 60%);
     transition:transform .25s cubic-bezier(.16,.9,.3,1),border-color .3s ease,box-shadow .3s ease;}
   .game-tile:hover{transform:translateY(-5px)}
   .game-tile:active{transform:translateY(-2px) scale(.98)}
