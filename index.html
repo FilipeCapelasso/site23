@@ -16,13 +16,13 @@
 
 <!-- Configura o ícone e o comportamento "app" para celulares Android -->
 <link rel="manifest" href="site.webmanifest">
-<meta name="theme-color" content="#08090c">
+<meta name="theme-color" content="#000000">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
   tailwind.config = {
     theme: { extend: {
       colors: {
-        bg:"#08090c", surface:"#111318", surface2:"#181b22", surface3:"#1e2129", border:"#23262f",
+        bg:"#000000", surface:"#111318", surface2:"#181b22", surface3:"#1e2129", border:"#23262f",
         primary:"var(--color-primary, #7c5cff)", primaryhover:"var(--color-primaryhover, #6a47ff)",
         accent:"var(--color-accent, #00e6a8)", muted:"#8b8fa3",
       },
@@ -37,7 +37,7 @@
   :root{
     --color-primary:#7c5cff; --color-primaryhover:#6a47ff; --color-accent:#00e6a8;
   }
-  body{background:#08090c;color:#f1f2f6;font-family:Inter,system-ui,sans-serif}
+  body{background:#000000;color:#f1f2f6;font-family:Inter,system-ui,sans-serif}
   ::-webkit-scrollbar{width:10px;height:10px} ::-webkit-scrollbar-track{background:#0c0d11}
   ::-webkit-scrollbar-thumb{background:#2a2d38;border-radius:8px}
   .glass{background:rgba(17,19,24,.72);backdrop-filter:blur(14px)}
@@ -247,8 +247,8 @@
   :root{color-scheme:dark}
   html{scroll-behavior:smooth}
   body{overflow-x:hidden;background:
-    radial-gradient(circle at 15% -5%,rgba(124,92,255,.13),transparent 28%),
-    radial-gradient(circle at 90% 8%,rgba(0,230,168,.055),transparent 22%),#08090c}
+    radial-gradient(circle at 15% -5%,rgba(124,92,255,.08),transparent 28%),
+    radial-gradient(circle at 90% 8%,rgba(0,230,168,.035),transparent 22%),#000000}
   body::selection{background:rgba(124,92,255,.38);color:#fff}
   .glass{background:rgba(10,11,16,.72);border-color:rgba(255,255,255,.06);box-shadow:0 8px 32px rgba(0,0,0,.18)}
   header.sticky{backdrop-filter:blur(18px) saturate(145%);box-shadow:0 10px 35px rgba(0,0,0,.20)}
@@ -276,8 +276,7 @@
   .hero-content{position:relative;z-index:10}
   .hero-badge{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(10px)}
   .hero-title{text-shadow:0 4px 30px rgba(0,0,0,.45)}
-  .hero-highlight{background:rgba(124,92,255,.35);padding:.05em .18em;border-radius:6px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
-  .hero-image-frame{aspect-ratio:3/2;background:radial-gradient(circle at 60% 30%,rgba(124,92,255,.18),transparent 60%),#12101c}
+  .hero-image-frame{aspect-ratio:3/2;background:radial-gradient(circle at 60% 30%,rgba(124,92,255,.14),transparent 60%),#050506}
   .hero-cta-secondary{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);transition:.2s ease}
   .hero-cta-secondary:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.28);transform:translateY(-1px)}
   @media(max-width:767px){
@@ -699,8 +698,8 @@
     <div class="hero-content mx-auto grid max-w-[1600px] grid-cols-1 items-center gap-10 px-4 py-14 sm:px-8 lg:grid-cols-2 lg:gap-16 lg:px-14 lg:py-16 xl:px-20">
       <div>
         <h1 class="hero-title font-display text-4xl font-black uppercase leading-[1.08] text-white sm:text-5xl lg:text-[3.4rem]">
-          OS <span class="hero-highlight">MELHORES</span><br/>
-          <span class="hero-highlight">PROGRAMAS</span><br/>
+          OS MELHORES<br/>
+          PROGRAMAS<br/>
           PARA VENCER.
         </h1>
         <p class="mt-6 max-w-md text-sm leading-relaxed text-muted sm:text-base">
