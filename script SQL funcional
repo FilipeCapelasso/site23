@@ -11,11 +11,9 @@
 --       pode rodar de novo sem quebrar nada que já exista).
 --    3. Crie sua conta normalmente pelo site (botão "Criar conta").
 --    4. Rode o comando lá no final ("PARTE 11") pra virar administrador.
---    5. O gateway Pix (Mercado Pago) já vem configurado neste script, na
---       PARTE 2.18 (app_config) e na função criar_pix (PARTE 7.1). Se você
---       trocar o access token de produção no futuro, basta rodar de novo
---       o bloco "insert into public.app_config" — como está com
---       "on conflict do update", ele substitui o valor antigo sem erro.
+--    5. Configure o gateway de Pix na tabela app_config (veja PARTE 7 e os
+--       comentários da função criar_pix) — SEM ISSO o botão "Gerar Pix" do
+--       checkout vai responder com um erro amigável em vez de travar.
 --
 --  TABELAS CRIADAS (17 + 1 de configuração interna):
 --    profiles, products, orders, messages, chat_privado, chat_global,
@@ -331,11 +329,10 @@ create table if not exists public.app_config (
 );
 
 insert into public.app_config (chave, valor) values
-  ('pix_gateway_url', 'https://api.mercadopago.com/v1/payments'),  -- endpoint de pagamentos do Mercado Pago
-  ('pix_gateway_token', 'APP_USR-4856290854903668-032123-5fff247030e782e3b58c16e065294408-2514178336'), -- access token de produção
-  ('pix_webhook_secret', '05ac88176eb5ebb6624b23066658e6f810c7651116363a5867bb345479c19a47'), -- secret usado p/ validar assinatura do webhook (x-signature)
+  ('pix_gateway_url', ''),                    -- URL da API do seu gateway Pix
+  ('pix_gateway_token', ''),                  -- token/API key do gateway Pix
   ('afiliado_comissao_percentual', '10')      -- % de comissão do afiliado por venda
-on conflict (chave) do update set valor = excluded.valor;
+on conflict (chave) do nothing;
 
 
 -- =====================================================================================
@@ -855,13 +852,12 @@ alter table public.app_config enable row level security;
 -- ---------------------------------------------------------------------------
 -- 7.1 criar_pix — cria o pedido (status PENDENTE) e gera a cobrança Pix.
 --
--- Já configurado para o Mercado Pago (POST /v1/payments, payment_method_id
--- 'pix', payer.email, header X-Idempotency-Key). Se um dia trocar de gateway,
--- ajuste o corpo da chamada HTTP e o parsing de v_gateway_body abaixo para o
--- formato do novo provedor. Sem 'pix_gateway_url' preenchida na app_config,
--- a função devolve um erro amigável em vez de travar o checkout.
+-- ⚠️  IMPORTANTE: ajuste a URL/token na tabela app_config e o corpo/parsing
+--     da chamada HTTP abaixo para o formato exato do SEU gateway de pagamento
+--     (Mercado Pago, EFI/Gerencianet, Asaas, AbacatePay, etc). O que está
+--     aqui é um template funcional genérico — sem configurar o gateway, a
+--     função devolve um erro amigável em vez de travar o checkout.
 -- ---------------------------------------------------------------------------
-drop function if exists public.criar_pix(text, text, jsonb, uuid, text, uuid);
 create or replace function public.criar_pix(
   p_name              text,
   p_email             text,
@@ -942,17 +938,13 @@ begin
     select * into v_http_response from http((
       'POST',
       v_gateway_url,
-      array[
-        http_header('Authorization', 'Bearer ' || coalesce(v_gateway_token, '')),
-        http_header('X-Idempotency-Key', v_order_id::text)
-      ],
+      array[http_header('Authorization', 'Bearer ' || coalesce(v_gateway_token, ''))],
       'application/json',
       jsonb_build_object(
-        'transaction_amount', v_total,
-        'description', 'Pedido NovaStore #' || v_order_id,
-        'payment_method_id', 'pix',
-        'external_reference', v_order_id::text,
-        'payer', jsonb_build_object('email', p_email)
+        'valor', v_total,
+        'descricao', 'Pedido NovaStore #' || v_order_id,
+        'referencia_externa', v_order_id,
+        'pagador', jsonb_build_object('nome', p_name, 'email', p_email)
       )::text
     )::http_request);
   exception when others then
@@ -962,19 +954,16 @@ begin
 
   if v_http_response.status not between 200 and 299 then
     update public.orders set status = 'CANCELADO' where id = v_order_id;
-    return jsonb_build_object(
-      'error', 'O gateway de pagamento recusou a cobrança (HTTP ' || v_http_response.status || ').',
-      'detalhe', v_http_response.content
-    );
+    return jsonb_build_object('error', 'O gateway de pagamento recusou a cobrança (HTTP ' || v_http_response.status || ').');
   end if;
 
   v_gateway_body := v_http_response.content::jsonb;
 
-  -- Mercado Pago devolve os dados do Pix aninhados em point_of_interaction.transaction_data
-  v_pix_qrcode_base64 := v_gateway_body->'point_of_interaction'->'transaction_data'->>'qr_code_base64';
-  v_pix_copia_cola    := v_gateway_body->'point_of_interaction'->'transaction_data'->>'qr_code';
-  v_pix_txid          := v_gateway_body->>'id';
-  v_pix_expira        := nullif(v_gateway_body->>'date_of_expiration', '')::timestamptz;
+  -- ajuste estes nomes de campo conforme a resposta real do seu gateway:
+  v_pix_qrcode_base64 := v_gateway_body->>'qr_code_base64';
+  v_pix_copia_cola    := v_gateway_body->>'qr_code';
+  v_pix_txid          := v_gateway_body->>'txid';
+  v_pix_expira        := nullif(v_gateway_body->>'expires_at', '')::timestamptz;
 
   update public.orders set
     pix_qrcode_base64 = v_pix_qrcode_base64,
@@ -997,7 +986,6 @@ grant execute on function public.criar_pix(text, text, jsonb, uuid, text, uuid) 
 -- ---------------------------------------------------------------------------
 -- 7.2 get_order_status — usada pelo polling do checkout até o Pix cair.
 -- ---------------------------------------------------------------------------
-drop function if exists public.get_order_status(uuid);
 create or replace function public.get_order_status(order_id uuid)
 returns text
 language sql
@@ -1016,7 +1004,6 @@ grant execute on function public.get_order_status(uuid) to authenticated;
 -- key) assim que o Pix cair. Ela marca o pedido como PAGO, baixa o estoque
 -- de produtos UNICO e credita comissão de anunciante/afiliado.
 -- ---------------------------------------------------------------------------
-drop function if exists public.confirmar_pagamento_pix(uuid, text);
 create or replace function public.confirmar_pagamento_pix(p_order_id uuid, p_txid text default null)
 returns jsonb
 language plpgsql
@@ -1116,7 +1103,6 @@ grant execute on function public.sorteio_listar_participantes() to authenticated
 -- ---------------------------------------------------------------------------
 -- 7.5 sorteio_definir_ganhador — grava o vencedor sorteado.
 -- ---------------------------------------------------------------------------
-drop function if exists public.sorteio_definir_ganhador(uuid, text);
 create or replace function public.sorteio_definir_ganhador(p_sorteio_id uuid, p_codigo text)
 returns jsonb
 language plpgsql
