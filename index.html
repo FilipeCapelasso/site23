@@ -276,10 +276,13 @@
   .hero-content{position:relative;z-index:10}
   .hero-badge{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(10px)}
   .hero-title{text-shadow:0 4px 30px rgba(0,0,0,.45)}
+  .hero-highlight{background:rgba(124,92,255,.35);padding:.05em .18em;border-radius:6px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+  .hero-image-frame{aspect-ratio:3/2;background:radial-gradient(circle at 60% 30%,rgba(124,92,255,.18),transparent 60%),#12101c}
   .hero-cta-secondary{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(10px);transition:.2s ease}
   .hero-cta-secondary:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.28);transform:translateY(-1px)}
   @media(max-width:767px){
     .hero-glow-orb-1,.hero-glow-orb-2{width:260px;height:260px}
+    .hero-image-frame{aspect-ratio:4/3}
   }
   #depoimentos{overflow:hidden}
   .depoimentos-fade{-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
@@ -687,13 +690,34 @@
   </header>
 
   <div id="store-home">
-  <section id="hero-section" class="relative overflow-hidden bg-grid-fade border-b border-border bg-cover bg-center" style="aspect-ratio: 1600 / 700;">
+  <section id="hero-section" class="relative overflow-hidden bg-grid-fade border-b border-border">
     <div class="hero-glow-orb hero-glow-orb-1"></div>
     <div class="hero-glow-orb hero-glow-orb-2"></div>
     <div class="hero-grid-overlay"></div>
     <canvas id="particles-canvas"></canvas>
     <canvas id="lightning-canvas"></canvas>
-    <div id="hero-overlay" class="pointer-events-none absolute inset-0"></div>
+    <div class="hero-content mx-auto grid max-w-[1600px] grid-cols-1 items-center gap-10 px-4 py-14 sm:px-8 lg:grid-cols-2 lg:gap-16 lg:px-14 lg:py-16 xl:px-20">
+      <div>
+        <h1 class="hero-title font-display text-4xl font-black uppercase leading-[1.08] text-white sm:text-5xl lg:text-[3.4rem]">
+          OS <span class="hero-highlight">MELHORES</span><br/>
+          <span class="hero-highlight">PROGRAMAS</span><br/>
+          PARA VENCER.
+        </h1>
+        <p class="mt-6 max-w-md text-sm leading-relaxed text-muted sm:text-base">
+          Software de alta performance para jogadores que buscam o máximo de vantagem. Seguro, estável e sempre à frente.
+        </p>
+        <a href="#catalogo" onclick="goBackToStore()" class="magnetic-btn mt-8 inline-flex items-center justify-center rounded-xl bg-primary px-7 py-3.5 text-sm font-bold text-white shadow-glow hover:bg-primaryhover">
+          <span>Ver catálogo</span>
+        </a>
+      </div>
+      <div id="hero-image-box" class="hero-image-frame relative w-full overflow-hidden rounded-2xl border border-border">
+        <img id="hero-image-el" class="hidden h-full w-full object-cover" />
+        <div id="hero-image-placeholder" class="flex h-full w-full items-center justify-center px-6 text-center text-xs text-muted">
+          Configure a imagem do banner na área administrativa (Aparência).
+        </div>
+        <div id="hero-overlay" class="pointer-events-none absolute inset-0"></div>
+      </div>
+    </div>
   </section>
 
 
@@ -1066,7 +1090,7 @@
 
           <div class="rounded-2xl border border-border bg-surface p-6">
             <h2 class="mb-1 font-display text-lg font-bold uppercase">Banner do topo (Hero)</h2>
-            <p class="mb-4 text-sm text-muted">Imagem larga que aparece no topo do site, atrás do texto de destaque. Recomendado: imagem larga e grande, mínimo 1600×700px.</p>
+            <p class="mb-4 text-sm text-muted">Imagem exibida do lado direito do banner, ao lado do texto de destaque. Recomendado: proporção 3:2 (ex: 1200×800px).</p>
             <div id="hero-image-preview" class="mb-4 flex w-full items-center justify-center overflow-hidden rounded-lg border border-border bg-surface2 p-6 text-xs text-muted">Sem imagem</div>
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div class="flex flex-col gap-2">
@@ -3849,23 +3873,18 @@ function applySiteSettings(s) {
     body.classList.remove("has-custom-bg");
   }
 
-  const heroSection = document.getElementById("hero-section");
+  const heroImageEl = document.getElementById("hero-image-el");
+  const heroImagePlaceholder = document.getElementById("hero-image-placeholder");
   document.documentElement.style.setProperty("--hero-overlay", String(s.hero_overlay ?? 0.35));
   const safeHero = safeMediaSrc(s.hero_image_url);
-  if (safeHero) {
-    heroSection.style.backgroundImage = `url("${safeHero}")`;
-    // ajusta a altura do banner pra proporção REAL da imagem enviada, sem cortar nada —
-    // o resto do site sobe ou desce de acordo com o tamanho que a imagem ocupa
-    const heroImgProbe = new Image();
-    heroImgProbe.onload = () => {
-      if (heroImgProbe.naturalWidth && heroImgProbe.naturalHeight) {
-        heroSection.style.aspectRatio = `${heroImgProbe.naturalWidth} / ${heroImgProbe.naturalHeight}`;
-      }
-    };
-    heroImgProbe.src = safeHero;
-  } else {
-    heroSection.style.backgroundImage = "";
-    heroSection.style.aspectRatio = "1600 / 700";
+  if (safeHero && heroImageEl) {
+    heroImageEl.src = safeHero;
+    heroImageEl.classList.remove("hidden");
+    heroImagePlaceholder?.classList.add("hidden");
+  } else if (heroImageEl) {
+    heroImageEl.removeAttribute("src");
+    heroImageEl.classList.add("hidden");
+    heroImagePlaceholder?.classList.remove("hidden");
   }
 
   const primary = s.theme_primary || "#7c5cff";
