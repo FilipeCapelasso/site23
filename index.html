@@ -22,7 +22,7 @@
   tailwind.config = {
     theme: { extend: {
       colors: {
-        bg:"#000000", surface:"#111318", surface2:"#181b22", surface3:"#1e2129", border:"#23262f",
+        bg:"#000000", surface:"#000000", surface2:"#050505", surface3:"#0a0a0a", border:"#1c1c1c",
         primary:"var(--color-primary, #7c5cff)", primaryhover:"var(--color-primaryhover, #6a47ff)",
         accent:"var(--color-accent, #00e6a8)", muted:"#8b8fa3",
       },
@@ -38,19 +38,19 @@
     --color-primary:#7c5cff; --color-primaryhover:#6a47ff; --color-accent:#00e6a8;
   }
   body{background:#000000;color:#f1f2f6;font-family:Inter,system-ui,sans-serif}
-  ::-webkit-scrollbar{width:10px;height:10px} ::-webkit-scrollbar-track{background:#0c0d11}
+  ::-webkit-scrollbar{width:10px;height:10px} ::-webkit-scrollbar-track{background:#000000}
   ::-webkit-scrollbar-thumb{background:#2a2d38;border-radius:8px}
-  .glass{background:rgba(17,19,24,.72);backdrop-filter:blur(14px)}
+  .glass{background:rgba(0,0,0,.82);backdrop-filter:blur(14px)}
   .gradient-text{background:linear-gradient(90deg,#a78bfa,#7c5cff 45%,#c9b6ff 100%);
     -webkit-background-clip:text;background-clip:text;color:transparent}
   .card-hover{transition:.25s ease}
   .card-hover:hover{transform:translateY(-4px);border-color:rgba(124,92,255,.55);
     box-shadow:0 16px 44px -14px rgba(124,92,255,.4)}
-  .bg-grid-fade{background:radial-gradient(circle at 50% 0%, rgba(124,92,255,.20), transparent 62%)}
+  .bg-grid-fade{background:radial-gradient(circle at 50% 0%, rgba(124,92,255,.26), transparent 62%), #000000}
   body.has-custom-bg::before{content:"";position:fixed;inset:0;z-index:-2;background-image:var(--site-bg-image);
     background-size:cover;background-position:center;background-attachment:fixed}
-  body.has-custom-bg::after{content:"";position:fixed;inset:0;z-index:-1;background:rgba(8,9,12,var(--site-bg-overlay,0.85))}
-  #hero-overlay{background:linear-gradient(90deg, rgba(8,9,12,var(--hero-overlay,.35)) 15%, rgba(8,9,12,calc(var(--hero-overlay,.35) * 0.55)) 55%, rgba(8,9,12,0) 100%)}
+  body.has-custom-bg::after{content:"";position:fixed;inset:0;z-index:-1;background:rgba(0,0,0,var(--site-bg-overlay,0.9))}
+  #hero-overlay{background:linear-gradient(90deg, rgba(0,0,0,var(--hero-overlay,.5)) 15%, rgba(0,0,0,calc(var(--hero-overlay,.5) * 0.6)) 55%, rgba(0,0,0,0) 100%)}
   .bg-noise{background-image:radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px);background-size:3px 3px}
   @keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(124,92,255,.45)}50%{box-shadow:0 0 0 8px rgba(124,92,255,0)}}
   .pulse-glow{animation:pulseGlow 2.4s infinite}
@@ -70,7 +70,7 @@
   .faq-item summary::-webkit-details-marker{display:none}
   .line-clamp-1{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
   .line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .modal-overlay{background:rgba(4,4,7,.75);backdrop-filter:blur(6px);animation:overlayFadeIn .2s ease}
+  .modal-overlay{background:rgba(0,0,0,.85);backdrop-filter:blur(6px);animation:overlayFadeIn .2s ease}
   .modal-overlay > div{animation:modalPop .3s cubic-bezier(.16,.9,.3,1)}
   @keyframes modalPop{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
   @media(prefers-reduced-motion:reduce){
@@ -98,14 +98,14 @@
   @media(min-width:1024px){
     .admin-tab-btn{width:100%;justify-content:flex-start}
   }
-  .admin-sidebar-card{border-radius:1.1rem;border:1px solid #23262f;background:#111318}
+  .admin-sidebar-card{border-radius:1.1rem;border:1px solid #1c1c1c;background:#000000}
   .painel-stat-card{position:relative;overflow:hidden;border-radius:1.1rem;border:1px solid rgba(255,255,255,.08);
     background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.012));padding:1.35rem 1.5rem;transition:.2s ease}
   .painel-stat-card::before{content:"";position:absolute;left:0;top:0;width:100%;height:2px;
     background:linear-gradient(90deg,#7c5cff,#00e6a8);opacity:.5}
   .painel-stat-card:hover{border-color:rgba(124,92,255,.38);transform:translateY(-2px)}
   .admin-shortcut-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.6rem;
-    border-radius:1rem;border:1px solid #23262f;background:linear-gradient(180deg,#181b22,#14161c);padding:1.4rem 1rem;
+    border-radius:1rem;border:1px solid #1c1c1c;background:linear-gradient(180deg,#070707,#000000);padding:1.4rem 1rem;
     text-align:center;font-size:.8rem;font-weight:700;color:#fff;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
   .admin-shortcut-icon{display:flex;align-items:center;justify-content:center;width:2.75rem;height:2.75rem;
     border-radius:.85rem;background:rgba(124,92,255,.14);transition:background .2s ease}
@@ -167,10 +167,10 @@
     background:rgba(255,255,255,.03);padding:1.5rem;text-align:left;transition:.2s ease}
   .painel-quick-card:hover{border-color:rgba(124,92,255,.5);background:rgba(124,92,255,.07);transform:translateY(-2px)}
   .painel-stat-card{border-radius:1.1rem;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);padding:1.35rem 1.5rem}
-  .admin-shortcut-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;border-radius:1rem;border:1px solid #23262f;background:#181b22;padding:1.25rem 1rem;text-align:center;font-size:.8rem;font-weight:700;color:#fff;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
+  .admin-shortcut-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;border-radius:1rem;border:1px solid #1c1c1c;background:#050505;padding:1.25rem 1rem;text-align:center;font-size:.8rem;font-weight:700;color:#fff;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
   .admin-shortcut-card:hover{border-color:rgba(124,92,255,.55);transform:translateY(-2px);box-shadow:0 10px 26px -12px rgba(124,92,255,.5)}
   .painel-status-badge{display:inline-block;border-radius:999px;padding:.3rem .65rem;font-size:10.5px;font-weight:800;letter-spacing:.02em}
-  .painel-filter-btn{flex-shrink:0;border-radius:999px;border:1px solid #23262f;background:#111318;padding:.5rem 1rem;
+  .painel-filter-btn{flex-shrink:0;border-radius:999px;border:1px solid #1c1c1c;background:#000000;padding:.5rem 1rem;
     font-size:12px;font-weight:700;color:#8b8fa3;white-space:nowrap;transition:.15s ease}
   .painel-filter-btn.is-active{background:#7c5cff;border-color:#7c5cff;color:#fff}
   .painel-star{font-size:22px;color:#3a3d47;transition:transform .1s ease}
@@ -330,9 +330,9 @@
     background-image:linear-gradient(135deg,rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(45deg,rgba(255,255,255,.05) 1px,transparent 1px);
     background-size:14px 14px}
   .game-tile-overlay{position:absolute;inset:0;border-radius:inherit;
-    background:linear-gradient(180deg,rgba(8,9,12,.1) 0%,rgba(8,9,12,.55) 58%,rgba(8,9,12,.94) 100%);
+    background:linear-gradient(180deg,rgba(0,0,0,.1) 0%,rgba(0,0,0,.55) 58%,rgba(0,0,0,.94) 100%);
     transition:background .3s ease}
-  .game-tile.is-active .game-tile-overlay{background:linear-gradient(180deg,rgba(var(--accent-rgb,124,92,255),.3) 0%,rgba(8,9,12,.6) 55%,rgba(8,9,12,.94) 100%)}
+  .game-tile.is-active .game-tile-overlay{background:linear-gradient(180deg,rgba(var(--accent-rgb,124,92,255),.3) 0%,rgba(0,0,0,.6) 55%,rgba(0,0,0,.94) 100%)}
   .game-tile-content{position:relative;z-index:10;display:flex;height:100%;flex-direction:column;justify-content:space-between;padding:.85rem}
   .game-tile-icon{width:2.35rem;height:2.35rem;border-radius:.75rem;display:flex;align-items:center;justify-content:center;
     background:linear-gradient(145deg,var(--accent-soft),transparent);border:1px solid var(--accent-mid);color:var(--accent);
@@ -368,18 +368,18 @@
   .category-eyebrow{display:flex;align-items:center;gap:.5rem;margin-bottom:.65rem;font-size:10.5px;font-weight:800;
     text-transform:uppercase;letter-spacing:.14em;color:#8b8fa3}
   .category-eyebrow::before{content:"";width:18px;height:1.5px;border-radius:99px;background:linear-gradient(90deg,#7c5cff,#00e6a8)}
-  #search-input{height:46px;background:rgba(17,19,24,.82);border-color:rgba(255,255,255,.08);box-shadow:0 10px 28px rgba(0,0,0,.16);transition:border-color .2s ease,box-shadow .2s ease,background .2s ease}
+  #search-input{height:46px;background:rgba(0,0,0,.82);border-color:rgba(255,255,255,.08);box-shadow:0 10px 28px rgba(0,0,0,.16);transition:border-color .2s ease,box-shadow .2s ease,background .2s ease}
   #search-input:hover{background:rgba(22,24,31,.9);border-color:rgba(124,92,255,.32)}
   #search-input:focus{background:rgba(19,20,27,.96);box-shadow:0 0 0 3px rgba(124,92,255,.12),0 12px 30px rgba(0,0,0,.2)}
   #products-grid{align-items:stretch}
   .product-card{border-color:rgba(255,255,255,.07)!important;background:linear-gradient(180deg,rgba(20,22,29,.97),rgba(12,13,18,.98));box-shadow:0 12px 28px rgba(0,0,0,.16)}
   .product-card:hover{box-shadow:0 26px 60px rgba(0,0,0,.34),0 0 0 1px rgba(124,92,255,.10)}
-  .product-card .aspect-\[1\/1\]{background:linear-gradient(135deg,#171923,#0d0e13);}
+  .product-card .aspect-\[1\/1\]{background:linear-gradient(135deg,#050505,#000000);}
   .product-card h3{letter-spacing:.025em;text-wrap:balance}
   .product-card button{box-shadow:0 9px 22px rgba(124,92,255,.16);transition:transform .16s ease,box-shadow .2s ease,background .2s ease}
   .product-card button:hover{box-shadow:0 12px 28px rgba(124,92,255,.28);transform:translateY(-1px)}
   #empty-state{backdrop-filter:blur(10px);box-shadow:0 14px 40px rgba(0,0,0,.14)}
-  footer{background:linear-gradient(180deg,rgba(17,19,24,.94),rgba(8,9,12,1));box-shadow:0 -20px 50px rgba(0,0,0,.16)}
+  footer{background:linear-gradient(180deg,rgba(0,0,0,.94),rgba(0,0,0,1));box-shadow:0 -20px 50px rgba(0,0,0,.16)}
 
   #form-modal,#checkout-modal{z-index:60}
   #form-modal>div,#checkout-content{box-shadow:0 30px 90px rgba(0,0,0,.58),0 0 0 1px rgba(255,255,255,.035)}
@@ -474,7 +474,7 @@
      CHAT ESTILO TELEGRAM (chat global + mensagens privadas de amigos)
      ===================================================================== */
   .tg-modal{width:min(96vw,920px);height:min(88vh,780px)}
-  .tg-header{background:linear-gradient(180deg,#1f2937,#182230);border-bottom:1px solid #23262f}
+  .tg-header{background:linear-gradient(180deg,#0a0a0a,#000000);border-bottom:1px solid #1c1c1c}
   .tg-body{
     background-color:#0e1621;
     background-image:
@@ -498,7 +498,7 @@
   .tg-avatar:hover{transform:scale(1.08)}
   .tg-sender-name{cursor:pointer;transition:color .15s ease}
   .tg-sender-name:hover{text-decoration:underline}
-  .tg-inputbar{background:#131c26;border-top:1px solid #23262f}
+  .tg-inputbar{background:#000000;border-top:1px solid #1c1c1c}
   .tg-inputbar input[type=text]{background:#1c2733;border:1px solid #263341;color:#fff}
   .tg-inputbar input[type=text]:focus{border-color:var(--color-primary)}
   .tg-icon-btn{height:38px;width:38px;border-radius:999px;display:flex;align-items:center;justify-content:center;
@@ -557,7 +557,7 @@
   }
 
   /* input de cor customizado do painel admin */
-  input[type=color].theme-swatch{width:46px;height:46px;padding:0;border:1px solid #23262f;border-radius:10px;background:none;cursor:pointer}
+  input[type=color].theme-swatch{width:46px;height:46px;padding:0;border:1px solid #1c1c1c;border-radius:10px;background:none;cursor:pointer}
   input[type=color].theme-swatch::-webkit-color-swatch-wrapper{padding:3px}
   input[type=color].theme-swatch::-webkit-color-swatch{border-radius:7px;border:none}
 
@@ -1317,7 +1317,7 @@
 
   <div class="mx-auto max-w-[1800px] px-5 py-8 sm:px-8 lg:flex lg:items-start lg:gap-8 xl:px-12">
     <!-- SIDEBAR -->
-    <aside id="painel-sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[280px] -translate-x-full flex-col overflow-y-auto border-r border-white/10 bg-[#0d0e13]/98 p-4 backdrop-blur-2xl transition-transform duration-300 ease-out lg:sticky lg:top-24 lg:h-[calc(100vh-7rem)] lg:w-72 lg:shrink-0 lg:translate-x-0 lg:rounded-2xl lg:border lg:border-white/10 lg:bg-white/[0.03] lg:p-4">
+    <aside id="painel-sidebar" class="fixed inset-y-0 left-0 z-50 flex w-[280px] -translate-x-full flex-col overflow-y-auto border-r border-white/10 bg-[#000000]/98 p-4 backdrop-blur-2xl transition-transform duration-300 ease-out lg:sticky lg:top-24 lg:h-[calc(100vh-7rem)] lg:w-72 lg:shrink-0 lg:translate-x-0 lg:rounded-2xl lg:border lg:border-white/10 lg:bg-white/[0.03] lg:p-4">
       <div class="mb-4 flex items-center justify-between lg:hidden">
         <span class="font-display text-sm font-bold uppercase text-white">Menu</span>
         <button onclick="togglePainelSidebar(true)" class="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:text-white">✕</button>
