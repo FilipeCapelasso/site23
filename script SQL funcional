@@ -1244,6 +1244,263 @@ insert into public.site_settings (id) values (1) on conflict (id) do nothing;
 -- =====================================================================================
 -- update public.profiles set role = 'admin' where email = 'seuemail@exemplo.com';
 
+
+-- =====================================================================================
+-- PATCH DE SEGURANÇA — NovaStore — Etapa A / Fase 1, item 1
+-- Corrige: criar_pix() usava o "price" enviado pelo navegador pra calcular o
+-- total do pedido. Qualquer pessoa podia abrir o DevTools e alterar o preço
+-- antes de finalizar a compra.
+--
+-- O QUE MUDOU:
+--   - O front agora pode mandar o que quiser em "price" dentro de p_items —
+--     a função IGNORA esse campo completamente.
+--   - Preço e nome real vêm sempre de products.price (ou de products.plans,
+--     pelo índice do plano, pra produtos tipo ASSINATURA).
+--   - Produto precisa existir e estar active = true.
+--   - Estoque é conferido (stock >= quantity) pra produtos tipo UNICO com
+--     estoque controlado (products.stock is not null).
+--   - Quantidade precisa ser um inteiro > 0 e <= 20 por item (evita
+--     quantidade absurda / negativa / fracionária).
+--   - O que é gravado em orders.items agora é reconstruído 100% a partir do
+--     banco (productId, planId, name, planName, price, quantity) — não é
+--     mais um "repasse" do que o navegador mandou.
+--
+-- O QUE NÃO MUDA:
+--   - Assinatura da função (parâmetros e tipo de retorno) — o front não
+--     precisa de nenhuma alteração pra continuar chamando supabase.rpc("criar_pix", {...}).
+--   - O fluxo de geração do Pix via gateway HTTP, os campos retornados
+--     (orderId, qrCodeBase64, qrCode, expiresAt) e o formato de erro
+--     ({ error: "..." }) continuam iguais.
+--   - Nenhuma outra função (confirmar_pagamento_pix, get_order_status etc.)
+--     é tocada por este patch.
+--
+-- COMO APLICAR: cole este arquivo inteiro no SQL Editor do Supabase e rode.
+-- "create or replace function" substitui a função existente sem precisar
+-- dropar nada antes.
+-- =====================================================================================
+
+-- ---------------------------------------------------------------------------
+-- 7.1 criar_pix — cria o pedido (status PENDENTE) e gera a cobrança Pix.
+--
+-- ⚠️  IMPORTANTE: ajuste a URL/token na tabela app_config e o corpo/parsing
+--     da chamada HTTP abaixo para o formato exato do SEU gateway de pagamento
+--     (Mercado Pago, EFI/Gerencianet, Asaas, AbacatePay, etc). O que está
+--     aqui é um template funcional genérico — sem configurar o gateway, a
+--     função devolve um erro amigável em vez de travar o checkout.
+-- ---------------------------------------------------------------------------
+create or replace function public.criar_pix(
+  p_name              text,
+  p_email             text,
+  p_items             jsonb,
+  p_customer_id       uuid default null,
+  p_anunciante_codigo text default null,
+  p_afiliado_id       uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_subtotal            numeric(10,2) := 0;
+  v_desconto            numeric(10,2) := 0;
+  v_total               numeric(10,2) := 0;
+  v_tem_codigo          boolean := false;
+  v_codigo_afiliado_usado text := null;
+  v_anunciante_codigo   text := null;
+  v_order_id            uuid;
+  v_item                jsonb;
+  v_items_reais         jsonb := '[]'::jsonb;
+  v_product             public.products;
+  v_product_id          uuid;
+  v_quantity            integer;
+  v_plan_id             integer;
+  v_plan                jsonb;
+  v_item_price          numeric(10,2);
+  v_item_plan_name      text;
+  v_gateway_url         text;
+  v_gateway_token       text;
+  v_http_response       http_response;
+  v_gateway_body        jsonb;
+  v_pix_qrcode_base64   text;
+  v_pix_copia_cola      text;
+  v_pix_txid            text;
+  v_pix_expira          timestamptz;
+  v_desconto_minimo     numeric := 80;
+  v_max_qtd_item        constant integer := 20; -- trava de quantidade absurda por item
+begin
+  if p_items is null or jsonb_array_length(p_items) = 0 then
+    return jsonb_build_object('error', 'Carrinho vazio.');
+  end if;
+
+  -- =====================================================================
+  -- O BANCO É A FONTE DE VERDADE DO PREÇO.
+  -- O front pode mandar productId/planId/quantity — qualquer "price" que
+  -- venha no p_items é IGNORADO. Cada item é revalidado aqui contra
+  -- products.price / products.stock / products.active / products.type,
+  -- e o subtotal só é somado com o valor real vindo do banco.
+  -- =====================================================================
+  for v_item in select * from jsonb_array_elements(p_items) loop
+    begin
+      v_product_id := (v_item->>'productId')::uuid;
+    exception when others then
+      return jsonb_build_object('error', 'Item do carrinho inválido.');
+    end;
+
+    -- quantidade: precisa ser um inteiro positivo e dentro de um limite razoável
+    begin
+      v_quantity := floor(coalesce((v_item->>'quantity')::numeric, 0))::integer;
+    exception when others then
+      return jsonb_build_object('error', 'Quantidade inválida para um dos itens.');
+    end;
+    if v_quantity is null or v_quantity <= 0 then
+      return jsonb_build_object('error', 'Quantidade inválida para um dos itens.');
+    end if;
+    if v_quantity > v_max_qtd_item then
+      return jsonb_build_object('error', 'Quantidade muito alta para um único item (máximo ' || v_max_qtd_item || ' por item).');
+    end if;
+
+    select * into v_product from public.products where id = v_product_id;
+    if not found then
+      return jsonb_build_object('error', 'Um dos produtos do carrinho não existe mais.');
+    end if;
+    if not v_product.active then
+      return jsonb_build_object('error', 'O produto "' || v_product.name || '" não está mais disponível.');
+    end if;
+
+    v_plan_id := null;
+    v_item_plan_name := null;
+
+    if v_product.type = 'ASSINATURA' then
+      -- plano é identificado pelo índice dele dentro de products.plans (jsonb array),
+      -- exatamente como o front já monta o carrinho (planId = índice do plano escolhido)
+      if v_item->>'planId' is null then
+        return jsonb_build_object('error', 'Selecione um plano para "' || v_product.name || '".');
+      end if;
+      begin
+        v_plan_id := (v_item->>'planId')::integer;
+      exception when others then
+        return jsonb_build_object('error', 'Plano inválido para "' || v_product.name || '".');
+      end;
+      if v_plan_id < 0 or v_plan_id >= jsonb_array_length(coalesce(v_product.plans, '[]'::jsonb)) then
+        return jsonb_build_object('error', 'Plano inválido para "' || v_product.name || '".');
+      end if;
+      v_plan := v_product.plans -> v_plan_id;
+      if v_plan is null or v_plan->>'price' is null then
+        return jsonb_build_object('error', 'Plano sem preço configurado para "' || v_product.name || '".');
+      end if;
+      v_item_price := (v_plan->>'price')::numeric(10,2);
+      v_item_plan_name := v_plan->>'name';
+    else
+      -- produto tipo UNICO: preço e estoque vêm direto da tabela products
+      if v_product.price is null then
+        return jsonb_build_object('error', 'Produto "' || v_product.name || '" está sem preço configurado.');
+      end if;
+      v_item_price := v_product.price;
+      if v_product.stock is not null and v_product.stock < v_quantity then
+        return jsonb_build_object('error', 'Estoque insuficiente para "' || v_product.name || '".');
+      end if;
+    end if;
+
+    v_subtotal := v_subtotal + (v_item_price * v_quantity);
+
+    -- guarda no pedido só o item "reconstruído" a partir do banco — nome, plano
+    -- e preço nunca vêm do que o navegador mandou
+    v_items_reais := v_items_reais || jsonb_build_array(jsonb_build_object(
+      'productId', v_product_id,
+      'planId',    v_plan_id,
+      'name',      v_product.name,
+      'planName',  v_item_plan_name,
+      'price',     v_item_price,
+      'quantity',  v_quantity
+    ));
+  end loop;
+
+  -- valida código de anunciante OU de afiliado (mesma regra de negócio do checkout)
+  if p_anunciante_codigo is not null then
+    select codigo into v_anunciante_codigo from public.anunciantes where codigo = p_anunciante_codigo;
+    if v_anunciante_codigo is not null then v_tem_codigo := true; end if;
+  end if;
+
+  if not v_tem_codigo and p_afiliado_id is not null then
+    select codigo_afiliado into v_codigo_afiliado_usado
+    from public.profiles
+    where id = p_afiliado_id and is_afiliado = true;
+    if v_codigo_afiliado_usado is not null then v_tem_codigo := true; end if;
+  end if;
+
+  if v_tem_codigo and v_subtotal >= v_desconto_minimo then
+    v_desconto := round(v_subtotal * 0.10, 2);
+  end if;
+
+  v_total := greatest(round(v_subtotal - v_desconto, 2), 0.01);
+
+  insert into public.orders (
+    customer_id, customer_name, customer_email, items, total, status,
+    anunciante_codigo, codigo_afiliado_usado, afiliado_id, cupom_usado, desconto_aplicado
+  ) values (
+    p_customer_id, p_name, p_email, v_items_reais, v_total, 'PENDENTE',
+    v_anunciante_codigo, v_codigo_afiliado_usado, p_afiliado_id, v_tem_codigo, v_desconto
+  ) returning id into v_order_id;
+
+  select valor into v_gateway_url   from public.app_config where chave = 'pix_gateway_url';
+  select valor into v_gateway_token from public.app_config where chave = 'pix_gateway_token';
+
+  if v_gateway_url is null or v_gateway_url = '' then
+    return jsonb_build_object(
+      'error', 'Pagamento Pix ainda não configurado (tabela app_config). O pedido #' || v_order_id || ' foi salvo como pendente.'
+    );
+  end if;
+
+  begin
+    select * into v_http_response from http((
+      'POST',
+      v_gateway_url,
+      array[http_header('Authorization', 'Bearer ' || coalesce(v_gateway_token, ''))],
+      'application/json',
+      jsonb_build_object(
+        'valor', v_total,
+        'descricao', 'Pedido NovaStore #' || v_order_id,
+        'referencia_externa', v_order_id,
+        'pagador', jsonb_build_object('nome', p_name, 'email', p_email)
+      )::text
+    )::http_request);
+  exception when others then
+    update public.orders set status = 'CANCELADO' where id = v_order_id;
+    return jsonb_build_object('error', 'Não foi possível conectar ao gateway de pagamento.');
+  end;
+
+  if v_http_response.status not between 200 and 299 then
+    update public.orders set status = 'CANCELADO' where id = v_order_id;
+    return jsonb_build_object('error', 'O gateway de pagamento recusou a cobrança (HTTP ' || v_http_response.status || ').');
+  end if;
+
+  v_gateway_body := v_http_response.content::jsonb;
+
+  -- ajuste estes nomes de campo conforme a resposta real do seu gateway:
+  v_pix_qrcode_base64 := v_gateway_body->>'qr_code_base64';
+  v_pix_copia_cola    := v_gateway_body->>'qr_code';
+  v_pix_txid          := v_gateway_body->>'txid';
+  v_pix_expira        := nullif(v_gateway_body->>'expires_at', '')::timestamptz;
+
+  update public.orders set
+    pix_qrcode_base64 = v_pix_qrcode_base64,
+    pix_copia_cola     = v_pix_copia_cola,
+    pix_txid           = v_pix_txid,
+    pix_expires_at     = coalesce(v_pix_expira, now() + interval '30 minutes')
+  where id = v_order_id;
+
+  return jsonb_build_object(
+    'orderId',      v_order_id,
+    'qrCodeBase64', v_pix_qrcode_base64,
+    'qrCode',       v_pix_copia_cola,
+    'expiresAt',    coalesce(v_pix_expira, now() + interval '30 minutes')
+  );
+end;
+$$;
+
+grant execute on function public.criar_pix(text, text, jsonb, uuid, text, uuid) to authenticated;
+
 -- =====================================================================================
 -- FIM DO SCRIPT
 -- =====================================================================================
