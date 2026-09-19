@@ -2071,6 +2071,12 @@
         </div>
       </div>
 
+      <div>
+        <label class="mb-1 block text-xs font-semibold text-muted">Link após a compra (opcional)</label>
+        <input type="url" id="f-redirect-url" placeholder="https://mega.nz/folder/... (deixe vazio para usar a entrega padrão pelo chat)" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        <p class="mt-1 text-[11px] text-muted">Se preenchido, assim que o pagamento for confirmado (inclusive em produtos grátis, R$ 0), o cliente é redirecionado automaticamente pra esse link em vez de só ver a tela padrão de "pagamento confirmado".</p>
+      </div>
+
       <div id="plans-section" class="hidden">
         <div class="mb-2 flex items-center justify-between">
           <label class="text-xs font-semibold text-muted">Planos (dias e preço de cada um)</label>
@@ -5048,9 +5054,9 @@ function cartItemFromProduct(p) {
   if (p.type === "ASSINATURA") {
     const plan = p.plans[window._selectedPlan ?? 0];
     return { key: `${p.id}-${window._selectedPlan}`, productId: p.id, planId: String(window._selectedPlan),
-      name: p.name, planName: plan.name, price: plan.price, image: p.image_url };
+      name: p.name, planName: plan.name, price: plan.price, image: p.image_url, redirectUrl: p.redirect_url || null };
   }
-  return { key: p.id, productId: p.id, name: p.name, price: p.price, image: p.image_url };
+  return { key: p.id, productId: p.id, name: p.name, price: p.price, image: p.image_url, redirectUrl: p.redirect_url || null };
 }
 
 window.addToCartFromProductPage = (id) => {
@@ -5171,9 +5177,9 @@ window.quickAdd = (id) => {
   const p = ALL_PRODUCTS.find((x) => x.id === id);
   if (!p) return;
   if (p.type === "ASSINATURA" && p.plans?.length) {
-    addToCart({ key: `${p.id}-0`, productId: p.id, planId: "0", name: p.name, planName: p.plans[0].name, price: p.plans[0].price, image: p.image_url });
+    addToCart({ key: `${p.id}-0`, productId: p.id, planId: "0", name: p.name, planName: p.plans[0].name, price: p.plans[0].price, image: p.image_url, redirectUrl: p.redirect_url || null });
   } else if (p.price != null) {
-    addToCart({ key: p.id, productId: p.id, name: p.name, price: p.price, image: p.image_url });
+    addToCart({ key: p.id, productId: p.id, name: p.name, price: p.price, image: p.image_url, redirectUrl: p.redirect_url || null });
   }
 };
 
@@ -5386,6 +5392,11 @@ async function submitCheckout(e) {
       return;
     }
 
+    // guarda o link de redirecionamento pós-compra (se algum item do carrinho tiver um
+    // configurado) associado a este pedido, pra usar assim que o pagamento for confirmado
+    const redirectUrl = cart.find((i) => i.redirectUrl)?.redirectUrl || null;
+    if (redirectUrl) saveRedirectForOrder(data.orderId, redirectUrl);
+
     cart = [];
     saveCart();
     const ticket = generateTicketNumber();
@@ -5460,14 +5471,32 @@ function startPaymentPolling(orderId) {
         paymentPollTimer = null;
         refreshCurrentProfile();
         const ticket = getTicketForOrder(orderId);
-        document.getElementById("checkout-content").innerHTML = `
-          <div class="text-center">
-            <div class="mb-4 text-5xl flash-pop">✅</div>
-            <h2 class="mb-2 font-display text-2xl font-bold uppercase text-accent">Pagamento confirmado!</h2>
-            <p class="mb-6 text-sm text-muted">Seu pedido foi liberado automaticamente. Obrigado pela compra!</p>
-            ${ticketBadgeHTML(ticket)}
-            <button onclick="closeCheckout()" class="w-full rounded-xl bg-primary py-3 font-bold text-white hover:bg-primaryhover">Fechar</button>
-          </div>`;
+        const redirectUrl = getRedirectForOrder(orderId);
+
+        if (redirectUrl) {
+          // tenta abrir automaticamente numa nova aba; se o navegador bloquear o
+          // popup (comum quando o clique original já ficou "velho"), mostra um
+          // botão manual como reforço, além do fechar/entregar normal.
+          const opened = window.open(redirectUrl, "_blank");
+          document.getElementById("checkout-content").innerHTML = `
+            <div class="text-center">
+              <div class="mb-4 text-5xl flash-pop">✅</div>
+              <h2 class="mb-2 font-display text-2xl font-bold uppercase text-accent">Pagamento confirmado!</h2>
+              <p class="mb-6 text-sm text-muted">${opened ? "Abrimos o link de download em uma nova aba." : "Clique no botão abaixo pra acessar o link de download."}</p>
+              ${ticketBadgeHTML(ticket)}
+              <a href="${escapeHTML(redirectUrl)}" target="_blank" rel="noopener" class="mb-3 block w-full rounded-xl bg-accent py-3 text-center font-bold text-black hover:opacity-90">🔗 Abrir link do produto</a>
+              <button onclick="closeCheckout()" class="w-full rounded-xl border border-border py-3 font-bold text-muted hover:text-white">Fechar</button>
+            </div>`;
+        } else {
+          document.getElementById("checkout-content").innerHTML = `
+            <div class="text-center">
+              <div class="mb-4 text-5xl flash-pop">✅</div>
+              <h2 class="mb-2 font-display text-2xl font-bold uppercase text-accent">Pagamento confirmado!</h2>
+              <p class="mb-6 text-sm text-muted">Seu pedido foi liberado automaticamente. Obrigado pela compra!</p>
+              ${ticketBadgeHTML(ticket)}
+              <button onclick="closeCheckout()" class="w-full rounded-xl bg-primary py-3 font-bold text-white hover:bg-primaryhover">Fechar</button>
+            </div>`;
+        }
         if (ticket) {
           const badge = document.querySelector("#checkout-content .ticket-reveal");
           setTimeout(() => fireConfetti(badge, 42), 200);
@@ -6792,6 +6821,7 @@ window.editProduct = (p) => {
   document.getElementById("f-type").value = p.type;
   document.getElementById("f-price").value = p.price ?? "";
   document.getElementById("f-stock").value = p.stock ?? "";
+  document.getElementById("f-redirect-url").value = p.redirect_url || "";
   document.getElementById("f-featured").checked = !!p.featured;
   document.getElementById("f-active").checked = !!p.active;
   document.getElementById("image-preview").innerHTML = safeMediaSrc(p.image_url) ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover" />` : "";
@@ -6842,6 +6872,7 @@ document.getElementById("product-form").onsubmit = async (e) => {
     price: type === "UNICO" ? Number(document.getElementById("f-price").value) || 0 : null,
     stock: type === "UNICO" && document.getElementById("f-stock").value !== "" ? Number(document.getElementById("f-stock").value) : null,
     image_url: currentImageUrl || null,
+    redirect_url: document.getElementById("f-redirect-url").value.trim() || null,
     plans: type === "ASSINATURA" ? collectPlans() : [],
     featured: document.getElementById("f-featured").checked,
     active: document.getElementById("f-active").checked,
@@ -6999,6 +7030,23 @@ function saveTicketForOrder(orderId, ticket) {
 function getTicketForOrder(orderId) {
   try {
     const all = JSON.parse(localStorage.getItem("novastore_tickets") || "{}");
+    return all[orderId] || null;
+  } catch (e) { return null; }
+}
+
+/* Link de redirecionamento pós-compra configurado no produto (ex: pasta do Mega.nz
+   pra um cheat grátis). Guardado por pedido pra ser usado assim que o Pix confirmar. */
+function saveRedirectForOrder(orderId, url) {
+  try {
+    const all = JSON.parse(localStorage.getItem("novastore_redirects") || "{}");
+    all[orderId] = url;
+    localStorage.setItem("novastore_redirects", JSON.stringify(all));
+  } catch (e) { /* localStorage indisponível, o pedido ainda é entregue pelo chat normalmente */ }
+}
+
+function getRedirectForOrder(orderId) {
+  try {
+    const all = JSON.parse(localStorage.getItem("novastore_redirects") || "{}");
     return all[orderId] || null;
   } catch (e) { return null; }
 }
