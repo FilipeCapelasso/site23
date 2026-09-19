@@ -5401,12 +5401,55 @@ async function submitCheckout(e) {
     saveCart();
     const ticket = generateTicketNumber();
     saveTicketForOrder(data.orderId, ticket);
-    renderPixScreen(data, ticket);
+
+    if (data.free) {
+      // pedido gratuito: o banco já liberou como PAGO na hora, sem precisar de Pix
+      refreshCurrentProfile();
+      renderPaymentSuccess(data.orderId, ticket);
+    } else {
+      renderPixScreen(data, ticket);
+    }
   } catch (err) {
     errEl.textContent = "Erro de conexão ao gerar o Pix.";
     errEl.classList.remove("hidden");
     btn.disabled = false;
     btn.textContent = "Gerar Pix e pagar";
+  }
+}
+
+/* Tela final de "pagamento confirmado" — usada tanto pra pedidos pagos via Pix
+   (assim que o polling detecta status PAGO) quanto pra pedidos gratuitos
+   (liberados na hora pela criar_pix_v2, sem gerar Pix nenhum). Se o produto
+   tiver um link de redirecionamento configurado, abre ele automaticamente. */
+function renderPaymentSuccess(orderId, ticket) {
+  const redirectUrl = getRedirectForOrder(orderId);
+
+  if (redirectUrl) {
+    // tenta abrir automaticamente numa nova aba; se o navegador bloquear o
+    // popup, mostra um botão manual como reforço.
+    const opened = window.open(redirectUrl, "_blank");
+    document.getElementById("checkout-content").innerHTML = `
+      <div class="text-center">
+        <div class="mb-4 text-5xl flash-pop">✅</div>
+        <h2 class="mb-2 font-display text-2xl font-bold uppercase text-accent">Pagamento confirmado!</h2>
+        <p class="mb-6 text-sm text-muted">${opened ? "Abrimos o link de download em uma nova aba." : "Clique no botão abaixo pra acessar o link de download."}</p>
+        ${ticketBadgeHTML(ticket)}
+        <a href="${escapeHTML(redirectUrl)}" target="_blank" rel="noopener" class="mb-3 block w-full rounded-xl bg-accent py-3 text-center font-bold text-black hover:opacity-90">🔗 Abrir link do produto</a>
+        <button onclick="closeCheckout()" class="w-full rounded-xl border border-border py-3 font-bold text-muted hover:text-white">Fechar</button>
+      </div>`;
+  } else {
+    document.getElementById("checkout-content").innerHTML = `
+      <div class="text-center">
+        <div class="mb-4 text-5xl flash-pop">✅</div>
+        <h2 class="mb-2 font-display text-2xl font-bold uppercase text-accent">Pagamento confirmado!</h2>
+        <p class="mb-6 text-sm text-muted">Seu pedido foi liberado automaticamente. Obrigado pela compra!</p>
+        ${ticketBadgeHTML(ticket)}
+        <button onclick="closeCheckout()" class="w-full rounded-xl bg-primary py-3 font-bold text-white hover:bg-primaryhover">Fechar</button>
+      </div>`;
+  }
+  if (ticket) {
+    const badge = document.querySelector("#checkout-content .ticket-reveal");
+    setTimeout(() => fireConfetti(badge, 42), 200);
   }
 }
 
@@ -5471,36 +5514,7 @@ function startPaymentPolling(orderId) {
         paymentPollTimer = null;
         refreshCurrentProfile();
         const ticket = getTicketForOrder(orderId);
-        const redirectUrl = getRedirectForOrder(orderId);
-
-        if (redirectUrl) {
-          // tenta abrir automaticamente numa nova aba; se o navegador bloquear o
-          // popup (comum quando o clique original já ficou "velho"), mostra um
-          // botão manual como reforço, além do fechar/entregar normal.
-          const opened = window.open(redirectUrl, "_blank");
-          document.getElementById("checkout-content").innerHTML = `
-            <div class="text-center">
-              <div class="mb-4 text-5xl flash-pop">✅</div>
-              <h2 class="mb-2 font-display text-2xl font-bold uppercase text-accent">Pagamento confirmado!</h2>
-              <p class="mb-6 text-sm text-muted">${opened ? "Abrimos o link de download em uma nova aba." : "Clique no botão abaixo pra acessar o link de download."}</p>
-              ${ticketBadgeHTML(ticket)}
-              <a href="${escapeHTML(redirectUrl)}" target="_blank" rel="noopener" class="mb-3 block w-full rounded-xl bg-accent py-3 text-center font-bold text-black hover:opacity-90">🔗 Abrir link do produto</a>
-              <button onclick="closeCheckout()" class="w-full rounded-xl border border-border py-3 font-bold text-muted hover:text-white">Fechar</button>
-            </div>`;
-        } else {
-          document.getElementById("checkout-content").innerHTML = `
-            <div class="text-center">
-              <div class="mb-4 text-5xl flash-pop">✅</div>
-              <h2 class="mb-2 font-display text-2xl font-bold uppercase text-accent">Pagamento confirmado!</h2>
-              <p class="mb-6 text-sm text-muted">Seu pedido foi liberado automaticamente. Obrigado pela compra!</p>
-              ${ticketBadgeHTML(ticket)}
-              <button onclick="closeCheckout()" class="w-full rounded-xl bg-primary py-3 font-bold text-white hover:bg-primaryhover">Fechar</button>
-            </div>`;
-        }
-        if (ticket) {
-          const badge = document.querySelector("#checkout-content .ticket-reveal");
-          setTimeout(() => fireConfetti(badge, 42), 200);
-        }
+        renderPaymentSuccess(orderId, ticket);
       } else if (status === "CANCELADO" || status === "EXPIRADO") {
         clearInterval(paymentPollTimer);
         paymentPollTimer = null;
