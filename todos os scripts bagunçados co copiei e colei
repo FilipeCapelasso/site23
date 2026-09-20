@@ -3182,3 +3182,331 @@ from (
 -- =============================================================================
 -- FIM — NOVASTORE SUPREMO UNIFICADO
 -- =============================================================================
+
+-- =============================================================================
+-- PATCH — CONFIRMAÇÃO AUTOMÁTICA DO PIX (Mercado Pago)
+-- Cole tudo no SQL Editor do Supabase e rode UMA vez.
+--
+-- Problema: nada consultava o Mercado Pago depois que o Pix era criado, então o
+-- pedido ficava PENDENTE pra sempre. Este patch adiciona:
+--   1) verificar_pagamento_pix(order_id): pergunta ao Mercado Pago se o Pix foi
+--      pago e, se sim, chama confirmar_pagamento_pix (estoque, comissões, sorteio).
+--   2) reconciliar_pix_pendentes(): varre pedidos pendentes (usada pelo cron).
+--   3) Cron a cada minuto, pra confirmar mesmo se o cliente fechar a aba.
+--
+-- Segurança: a função só confirma se o Mercado Pago responder "approved" E o
+-- external_reference for o próprio pedido E o valor pago bater com o total.
+-- Chamar de fora não permite forjar pagamento.
+-- =============================================================================
+
+create extension if not exists http with schema extensions;
+
+drop function if exists public.verificar_pagamento_pix(uuid);
+drop function if exists public.reconciliar_pix_pendentes();
+
+create or replace function public.verificar_pagamento_pix(p_order_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_order        public.orders;
+  v_url          text;
+  v_token        text;
+  v_hdr          text;
+  v_prefix       text;
+  v_resp         extensions.http_response;
+  v_body         jsonb;
+  v_mp_status    text;
+  v_mp_detail    text;
+  v_mp_amount    numeric;
+  v_mp_ref       text;
+  v_confirm      jsonb;
+begin
+  select * into v_order from public.orders where id = p_order_id;
+
+  if not found then
+    return jsonb_build_object('status', null);
+  end if;
+
+  -- Já resolvido: só devolve o status.
+  if v_order.status <> 'PENDENTE' then
+    return jsonb_build_object('status', v_order.status);
+  end if;
+
+  if v_order.pix_txid is null then
+    return jsonb_build_object('status', 'PENDENTE');
+  end if;
+
+  select valor into v_url    from public.app_config where chave = 'pix_gateway_url';
+  select valor into v_token  from public.app_config where chave = 'pix_gateway_token';
+  select valor into v_hdr    from public.app_config where chave = 'pix_gateway_auth_header';
+  select valor into v_prefix from public.app_config where chave = 'pix_gateway_auth_prefix';
+
+  if coalesce(trim(v_url), '') = '' or coalesce(trim(v_token), '') = '' then
+    return jsonb_build_object('status', 'PENDENTE');
+  end if;
+
+  -- GET https://api.mercadopago.com/v1/payments/{id}
+  begin
+    select * into v_resp
+    from extensions.http((
+      'GET',
+      rtrim(v_url, '/') || '/' || v_order.pix_txid,
+      ARRAY[
+        extensions.http_header(
+          coalesce(nullif(trim(v_hdr), ''), 'Authorization'),
+          coalesce(v_prefix, 'Bearer ') || v_token
+        ),
+        extensions.http_header('Accept', 'application/json')
+      ],
+      null,
+      null
+    )::extensions.http_request);
+  exception when others then
+    perform public.registrar_pix_gateway_log(
+      p_order_id,
+      jsonb_build_object('acao', 'verificar', 'orderId', p_order_id),
+      null,
+      'Exceção ao consultar pagamento: ' || sqlerrm
+    );
+    return jsonb_build_object('status', 'PENDENTE');
+  end;
+
+  if v_resp.status is distinct from 200 then
+    perform public.registrar_pix_gateway_log(
+      p_order_id,
+      jsonb_build_object('acao', 'verificar', 'orderId', p_order_id),
+      v_resp.status,
+      left(coalesce(v_resp.content, ''), 800)
+    );
+    return jsonb_build_object('status', 'PENDENTE');
+  end if;
+
+  begin
+    v_body := v_resp.content::jsonb;
+  exception when others then
+    return jsonb_build_object('status', 'PENDENTE');
+  end;
+
+  v_mp_status := v_body->>'status';
+  v_mp_detail := v_body->>'status_detail';
+  v_mp_ref    := v_body->>'external_reference';
+  v_mp_amount := nullif(v_body->>'transaction_amount', '')::numeric;
+
+  -- Pago de verdade: aprovado, do pedido certo e no valor certo.
+  if v_mp_status = 'approved'
+     and v_mp_ref = v_order.id::text
+     and v_mp_amount is not null
+     and abs(v_mp_amount - v_order.total) < 0.01 then
+
+    v_confirm := public.confirmar_pagamento_pix(v_order.id, v_order.pix_txid);
+
+    if (v_confirm->>'ok') = 'true' then
+      return jsonb_build_object('status', 'PAGO');
+    end if;
+    return jsonb_build_object('status', 'PENDENTE');
+  end if;
+
+  -- Pix vencido / recusado: encerra o pedido e devolve o uso do cupom.
+  if v_mp_status in ('cancelled', 'rejected', 'expired') then
+
+    update public.orders
+    set status = case
+      when v_mp_status = 'expired' or v_mp_detail ilike '%expired%'
+        then 'EXPIRADO' else 'CANCELADO' end
+    where id = v_order.id
+      and status = 'PENDENTE';
+
+    if v_order.cupom_codigo_usado is not null then
+      update public.cupons
+      set
+        usos_atual = greatest(coalesce(usos_atual, 0) - 1, 0),
+        usos       = greatest(coalesce(usos, 0) - 1, 0),
+        updated_at = now()
+      where codigo = v_order.cupom_codigo_usado;
+    end if;
+
+    return jsonb_build_object(
+      'status',
+      (select status from public.orders where id = v_order.id)
+    );
+  end if;
+
+  return jsonb_build_object('status', 'PENDENTE');
+end;
+$$;
+
+revoke all on function public.verificar_pagamento_pix(uuid) from public;
+grant execute on function public.verificar_pagamento_pix(uuid) to anon, authenticated, service_role;
+
+
+-- Varredura de pedidos pendentes (usada pelo cron e pode ser rodada à mão).
+create or replace function public.reconciliar_pix_pendentes()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r record;
+  v_n integer := 0;
+  v_res jsonb;
+begin
+  for r in
+    select id
+    from public.orders
+    where status = 'PENDENTE'
+      and pix_txid is not null
+      and total > 0
+      and created_at > now() - interval '3 days'
+    order by created_at desc
+    limit 30
+  loop
+    v_res := public.verificar_pagamento_pix(r.id);
+    if v_res->>'status' = 'PAGO' then
+      v_n := v_n + 1;
+    end if;
+  end loop;
+  return v_n;
+end;
+$$;
+
+revoke all on function public.reconciliar_pix_pendentes() from public, anon, authenticated;
+grant execute on function public.reconciliar_pix_pendentes() to service_role;
+
+
+-- Cron a cada minuto (se o pg_cron não estiver disponível, ignora sem erro).
+do $$
+begin
+  create extension if not exists pg_cron;
+  perform cron.unschedule(jobid) from cron.job where jobname = 'novastore_reconciliar_pix';
+  perform cron.schedule(
+    'novastore_reconciliar_pix',
+    '* * * * *',
+    'select public.reconciliar_pix_pendentes();'
+  );
+exception when others then
+  raise notice 'pg_cron indisponível (%). O site ainda confirma pelo polling.', sqlerrm;
+end $$;
+
+
+-- =============================================================================
+-- CONFIRMAR OS PIX QUE VOCÊ JÁ PAGOU (rode depois do patch):
+--   select public.reconciliar_pix_pendentes();
+-- Depois confira:
+--   select id, status, pix_txid, total, paid_at
+--   from public.orders order by created_at desc limit 10;
+-- =============================================================================
+
+-- =============================================================================
+-- PATCH — CAIXA "ENTREGA" DO CLIENTE
+-- Rode uma vez no SQL Editor do Supabase.
+--
+-- O admin envia a entrega pela aba "Entregas" (tabela public.messages). Este
+-- patch prepara o lado do cliente:
+--   1) messages.read_at            -> controla o contador de "não lidas" (📦)
+--   2) entrega_marcar_lidas()      -> o cliente marca as próprias como lidas
+--   3) trigger de aviso automático -> ao confirmar o pagamento, cai uma
+--                                     mensagem de boas-vindas na caixa
+--   4) garante o realtime da tabela messages
+-- =============================================================================
+
+-- 1) Coluna de leitura
+alter table public.messages
+  add column if not exists read_at timestamptz;
+
+create index if not exists idx_messages_receiver_unread
+  on public.messages(receiver_id)
+  where read_at is null;
+
+
+-- 2) Marcar como lidas (só as mensagens destinadas ao usuário logado)
+drop function if exists public.entrega_marcar_lidas();
+
+create or replace function public.entrega_marcar_lidas()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_n integer;
+begin
+  if auth.uid() is null then
+    return 0;
+  end if;
+
+  update public.messages
+  set read_at = now()
+  where receiver_id = auth.uid()
+    and read_at is null;
+
+  get diagnostics v_n = row_count;
+  return v_n;
+end;
+$$;
+
+revoke all on function public.entrega_marcar_lidas() from public, anon;
+grant execute on function public.entrega_marcar_lidas() to authenticated;
+
+
+-- 3) Aviso automático quando o pedido vira PAGO (Pix confirmado ou pedido grátis)
+--    Nunca bloqueia a confirmação do pagamento: qualquer erro aqui é ignorado.
+create or replace function public.notificar_pedido_pago()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_remetente uuid;
+begin
+  if new.status = 'PAGO'
+     and old.status is distinct from 'PAGO'
+     and new.customer_id is not null then
+
+    select id
+    into v_remetente
+    from public.profiles
+    where role = 'admin'
+    order by created_at
+    limit 1;
+
+    if v_remetente is not null then
+      insert into public.messages (order_id, sender_id, receiver_id, message_text)
+      values (
+        new.id,
+        v_remetente,
+        new.customer_id,
+        '🎉 Pedido #' || upper(left(new.id::text, 8)) || ' confirmado! ' ||
+        'Assim que a equipe enviar o seu produto (chave, login ou acesso), ele aparece aqui nesta caixa 📦.'
+      );
+    end if;
+  end if;
+
+  return new;
+exception when others then
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_notificar_pedido_pago on public.orders;
+create trigger trg_notificar_pedido_pago
+after update of status on public.orders
+for each row execute function public.notificar_pedido_pago();
+
+
+-- 4) Realtime (já costuma estar ativo; não faz nada se já estiver)
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'messages'
+  ) then
+    alter publication supabase_realtime add table public.messages;
+  end if;
+end $$;
