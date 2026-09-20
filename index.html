@@ -3,8 +3,44 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>NovaStore | Loja de produtos digitais</title>
-<meta name="description" content="Jogos, contas e assinaturas com pagamento via Pix e liberação imediata." />
+<title id="page-title">NovaStore | Loja de produtos digitais</title>
+<meta id="meta-description" name="description" content="Jogos, contas e assinaturas com pagamento via Pix e liberação imediata." />
+
+<!-- TODO: troque pela URL final do site em produção -->
+<link id="canonical-link" rel="canonical" href="https://www.novastore.com.br/" />
+<meta name="robots" content="index, follow" />
+
+<!-- Open Graph (WhatsApp, Discord, Telegram, Facebook) -->
+<meta id="og-type" property="og:type" content="website" />
+<meta id="og-site-name" property="og:site_name" content="NovaStore" />
+<meta id="og-title" property="og:title" content="NovaStore | Loja de produtos digitais" />
+<meta id="og-description" property="og:description" content="Jogos, contas e assinaturas com pagamento via Pix e liberação imediata." />
+<meta id="og-url" property="og:url" content="https://www.novastore.com.br/" />
+<meta id="og-image" property="og:image" content="https://www.novastore.com.br/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:locale" content="pt_BR" />
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta id="twitter-title" name="twitter:title" content="NovaStore | Loja de produtos digitais" />
+<meta id="twitter-description" name="twitter:description" content="Jogos, contas e assinaturas com pagamento via Pix e liberação imediata." />
+<meta id="twitter-image" name="twitter:image" content="https://www.novastore.com.br/og-image.png" />
+
+<!-- JSON-LD: dados estruturados da loja (ajuda o Google a exibir rich results) -->
+<script type="application/ld+json" id="ld-organization">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "NovaStore",
+  "url": "https://www.novastore.com.br/",
+  "logo": "https://www.novastore.com.br/apple-touch-icon.png",
+  "sameAs": []
+}
+</script>
+<script type="application/ld+json" id="ld-product" hidden>
+{}
+</script>
 
 <!-- Ícone padrão para a maioria dos navegadores de computador (abas) -->
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
@@ -786,7 +822,7 @@
         </a>
       </div>
       <div id="hero-image-box" class="hero-image-frame relative w-full overflow-hidden rounded-2xl border border-border">
-        <img id="hero-image-el" class="hidden h-full w-full object-cover" />
+        <img id="hero-image-el" class="hidden h-full w-full object-cover" alt="Destaque da loja" decoding="async" />
         <div id="hero-image-placeholder" class="flex h-full w-full items-center justify-center px-6 text-center text-xs text-muted">
           Configure a imagem do banner na área administrativa (Aparência).
         </div>
@@ -2270,6 +2306,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const supabase = createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 document.getElementById("year").textContent = new Date().getFullYear();
 
+/* Log de depuração: fica silencioso em produção. Para depurar localmente,
+   rode `localStorage.setItem('debug','1')` no console e recarregue a página. */
+const DEBUG = (() => { try { return localStorage.getItem("debug") === "1"; } catch { return false; } })();
+const dlog = (...args) => { if (DEBUG) console.log(...args); };
+const dwarn = (...args) => { if (DEBUG) console.warn(...args); };
+
 const fmt = (v) => Number(v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 /* mesma formatação de fmt, mas mostra "Grátis" em vez de "R$ 0,00" — usado em
    qualquer lugar que exibe preço final de produto/carrinho pro cliente */
@@ -2358,7 +2400,7 @@ function renderAuthUI() {
     document.getElementById("user-first-name").textContent = firstName;
     const avatarEl = document.getElementById("user-avatar");
     if (CURRENT_PROFILE?.avatar_url && safeMediaSrc(CURRENT_PROFILE.avatar_url)) {
-      avatarEl.innerHTML = `<img src="${safeMediaSrc(CURRENT_PROFILE.avatar_url)}" class="h-full w-full object-cover" />`;
+      avatarEl.innerHTML = `<img src="${safeMediaSrc(CURRENT_PROFILE.avatar_url)}" class="h-full w-full object-cover" alt="Foto de perfil" loading="lazy" decoding="async" />`;
     } else {
       avatarEl.textContent = firstName.charAt(0).toUpperCase();
     }
@@ -3145,12 +3187,12 @@ async function loadGlobalChatMessages() {
 function chatBubbleHTML(m, { mine, pendingLocalId } = {}) {
   const safeAvatar = safeMediaSrc(m.sender_avatar_url);
   const avatarInner = safeAvatar
-    ? `<img src="${safeAvatar}" class="h-full w-full object-cover" />`
+    ? `<img src="${safeAvatar}" class="h-full w-full object-cover" alt="Avatar" loading="lazy" decoding="async" />`
     : (m.sender_name || "?").trim().charAt(0).toUpperCase();
   const nameAttrs = `data-uid="${m.sender_id}" data-uname="${escapeHTML(m.sender_name || "")}" data-uavatar="${escapeHTML(m.sender_avatar_url || "")}"`;
   const safeImg = safeMediaSrc(m.image_url);
   const bodyHTML = safeImg
-    ? `<img src="${safeImg}" class="tg-img tg-img-zoom" data-full="${safeImg}" />`
+    ? `<img src="${safeImg}" class="tg-img tg-img-zoom" data-full="${safeImg}" alt="Imagem enviada no chat" loading="lazy" decoding="async" />`
     : `<span>${escapeHTML(m.message_text || "")}</span>`;
   const time = m.created_at ? new Date(m.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : chatTimeHTML();
   return `
@@ -3227,7 +3269,7 @@ async function sendGlobalChatMessage(imageFile) {
   } catch (err) {
     const bubble = el.querySelector(`[data-local-id="${localId}"]`);
     if (bubble) bubble.querySelector(".tg-spin")?.replaceWith(Object.assign(document.createElement("span"), { textContent: "⚠️ falhou", className: "text-red-300" }));
-    console.warn("Erro ao enviar mensagem do chat global:", err.message || err);
+    dwarn("Erro ao enviar mensagem do chat global:", err.message || err);
   }
 }
 
@@ -3290,7 +3332,7 @@ window.openProfilePopover = async (evt, userId, name, avatarUrl) => {
 
   const status = FRIEND_STATUS.get(userId) || "none";
   const safeAvatar = safeMediaSrc(avatarUrl);
-  const avatarInner = safeAvatar ? `<img src="${safeAvatar}" class="h-full w-full object-cover" />` : (name || "?").trim().charAt(0).toUpperCase();
+  const avatarInner = safeAvatar ? `<img src="${safeAvatar}" class="h-full w-full object-cover" alt="Avatar" loading="lazy" decoding="async" />` : (name || "?").trim().charAt(0).toUpperCase();
   /* nome/avatar do usuário-alvo são passados via data-* (não interpolados dentro
      de um onclick="...('...')"), porque um valor com aspas simples escapado como
      HTML entity ainda vira aspa de verdade quando o navegador decodifica o atributo
@@ -3420,7 +3462,7 @@ function renderFriendsListView() {
 
   const rowHTML = (u, extra = "") => {
     const safeAvatar = safeMediaSrc(u.avatar);
-    const avatarInner = safeAvatar ? `<img src="${safeAvatar}" class="h-full w-full object-cover" />` : (u.name || "?").trim().charAt(0).toUpperCase();
+    const avatarInner = safeAvatar ? `<img src="${safeAvatar}" class="h-full w-full object-cover" alt="Avatar" loading="lazy" decoding="async" />` : (u.name || "?").trim().charAt(0).toUpperCase();
     const dataAttrs = `data-tid="${u.id}" data-tname="${escapeHTML(u.name || "")}" data-tavatar="${escapeHTML(u.avatar || "")}"`;
     return `<div class="friend-row flex items-center gap-3 rounded-xl p-2.5">
       <div class="tg-avatar thread-trigger" ${dataAttrs}>${avatarInner}</div>
@@ -3461,7 +3503,7 @@ function debounceFriendSearch(e) {
       ? results.map((u) => {
           const status = FRIEND_STATUS.get(u.id) || "none";
           const safeAvatar = safeMediaSrc(u.avatar_url);
-          const avatarInner = safeAvatar ? `<img src="${safeAvatar}" class="h-full w-full object-cover" />` : (u.full_name || "?").trim().charAt(0).toUpperCase();
+          const avatarInner = safeAvatar ? `<img src="${safeAvatar}" class="h-full w-full object-cover" alt="Avatar" loading="lazy" decoding="async" />` : (u.full_name || "?").trim().charAt(0).toUpperCase();
           const actionBtn = status === "friends" ? `<span class="text-[11px] font-bold text-accent">✓ Amigo</span>`
             : status === "pending_out" ? `<span class="text-[11px] text-muted">Pendente</span>`
             : status === "pending_in" ? `<button onclick="respondFriendRequest('${u.id}', true)" class="rounded-lg bg-accent px-2.5 py-1 text-[11px] font-bold text-white">Aceitar</button>`
@@ -3508,7 +3550,7 @@ window.openFriendThread = async (userId, name, avatarUrl) => {
   document.getElementById("friends-thread-view").classList.add("flex");
   document.getElementById("friends-back-btn").classList.remove("hidden");
   const safeAvatar = safeMediaSrc(avatarUrl);
-  const avatarInner = safeAvatar ? `<img src="${safeAvatar}" class="h-full w-full object-cover" />` : (name || "?").trim().charAt(0).toUpperCase();
+  const avatarInner = safeAvatar ? `<img src="${safeAvatar}" class="h-full w-full object-cover" alt="Avatar" loading="lazy" decoding="async" />` : (name || "?").trim().charAt(0).toUpperCase();
   document.getElementById("friends-header-avatar").innerHTML = avatarInner;
   document.getElementById("friends-header-title").textContent = name || "Conversa";
   document.getElementById("friends-header-sub").textContent = "Conversa privada";
@@ -3551,7 +3593,7 @@ function friendBubbleHTML(m, pendingLocalId) {
   const mine = m.sender_id === CURRENT_USER?.id;
   const safeImg = safeMediaSrc(m.image_url);
   const bodyHTML = safeImg
-    ? `<img src="${safeImg}" class="tg-img tg-img-zoom" data-full="${safeImg}" />`
+    ? `<img src="${safeImg}" class="tg-img tg-img-zoom" data-full="${safeImg}" alt="Imagem enviada no chat" loading="lazy" decoding="async" />`
     : `<span>${escapeHTML(m.message_text || "")}</span>`;
   const time = m.created_at ? new Date(m.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : chatTimeHTML();
   return `<div class="flex" ${pendingLocalId ? `data-local-id="${pendingLocalId}"` : ""}>
@@ -3605,7 +3647,7 @@ async function sendFriendMessage(imageFile) {
   } catch (err) {
     const bubble = el.querySelector(`[data-local-id="${localId}"]`);
     if (bubble) bubble.querySelector(".tg-spin")?.replaceWith(Object.assign(document.createElement("span"), { textContent: "⚠️ falhou", className: "text-red-300" }));
-    console.warn("Erro ao enviar mensagem privada:", err.message || err);
+    dwarn("Erro ao enviar mensagem privada:", err.message || err);
   }
 }
 
@@ -4137,7 +4179,7 @@ async function loadSiteSettings() {
     if (error) throw error;
     if (data) SITE_SETTINGS = data;
   } catch (err) {
-    console.warn("Configurações de aparência não carregadas (tabela site_settings pode não existir ainda):", err.message || err);
+    dwarn("Configurações de aparência não carregadas (tabela site_settings pode não existir ainda):", err.message || err);
   }
   applySiteSettings(SITE_SETTINGS);
 }
@@ -4469,8 +4511,8 @@ function populateAppearanceForm() {
   currentBgUrl = SITE_SETTINGS.background_image_url || "";
   const overlayPct = Math.round((SITE_SETTINGS.background_overlay ?? 0.85) * 100);
   const heroOverlayPct = Math.round((SITE_SETTINGS.hero_overlay ?? 0.35) * 100);
-  document.getElementById("hero-image-preview").innerHTML = safeMediaSrc(currentHeroUrl) ? `<img src="${safeMediaSrc(currentHeroUrl)}" class="w-full h-auto block" />` : "Sem imagem";
-  document.getElementById("bg-image-preview").innerHTML = safeMediaSrc(currentBgUrl) ? `<img src="${safeMediaSrc(currentBgUrl)}" class="h-full w-full object-cover" />` : "Sem imagem";
+  document.getElementById("hero-image-preview").innerHTML = safeMediaSrc(currentHeroUrl) ? `<img src="${safeMediaSrc(currentHeroUrl)}" class="w-full h-auto block" alt="Pré-visualização do banner" decoding="async" />` : "Sem imagem";
+  document.getElementById("bg-image-preview").innerHTML = safeMediaSrc(currentBgUrl) ? `<img src="${safeMediaSrc(currentBgUrl)}" class="h-full w-full object-cover" alt="Pré-visualização do plano de fundo" decoding="async" />` : "Sem imagem";
   document.getElementById("hero-overlay-input").value = heroOverlayPct;
   document.getElementById("hero-overlay-value").textContent = heroOverlayPct + "%";
   document.getElementById("bg-overlay-input").value = overlayPct;
@@ -4545,7 +4587,7 @@ document.getElementById("hero-image-input").onchange = async (e) => {
   statusEl.textContent = "Enviando imagem...";
   try {
     currentHeroUrl = await uploadSiteAsset(file, "hero");
-    document.getElementById("hero-image-preview").innerHTML = `<img src="${safeMediaSrc(currentHeroUrl)}" class="w-full h-auto block" />`;
+    document.getElementById("hero-image-preview").innerHTML = `<img src="${safeMediaSrc(currentHeroUrl)}" class="w-full h-auto block" alt="Pré-visualização do banner" decoding="async" />`;
     statusEl.textContent = "Imagem enviada ✓";
   } catch (err) {
     statusEl.textContent = "Erro no upload: " + err.message;
@@ -4559,7 +4601,7 @@ document.getElementById("bg-image-input").onchange = async (e) => {
   statusEl.textContent = "Enviando imagem...";
   try {
     currentBgUrl = await uploadSiteAsset(file, "background");
-    document.getElementById("bg-image-preview").innerHTML = `<img src="${safeMediaSrc(currentBgUrl)}" class="h-full w-full object-cover" />`;
+    document.getElementById("bg-image-preview").innerHTML = `<img src="${safeMediaSrc(currentBgUrl)}" class="h-full w-full object-cover" alt="Pré-visualização do plano de fundo" decoding="async" />`;
     statusEl.textContent = "Imagem enviada ✓";
   } catch (err) {
     statusEl.textContent = "Erro no upload: " + err.message;
@@ -4712,7 +4754,7 @@ function productCardHTML(p, i = 0) {
     <div class="card-shine"></div>
     ${badge ? `<span class="${badge.cls} absolute left-3 top-3 z-10 rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide text-black shadow-lg">${badge.label}</span>` : ""}
     <div class="relative aspect-[1/1] w-full overflow-hidden bg-surface2">
-      ${safeMediaSrc(p.image_url) ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" />` : `<div class="flex h-full items-center justify-center text-muted">Sem imagem</div>`}
+      ${safeMediaSrc(p.image_url) ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" alt="${p.name}" loading="lazy" decoding="async" />` : `<div class="flex h-full items-center justify-center text-muted">Sem imagem</div>`}
       <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent"></div>
       ${cat ? `<span class="absolute left-3 ${badge ? "top-11" : "top-3"} flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white backdrop-blur">${cat.icon}${cat.label}</span>` : ""}
       ${p.type === "ASSINATURA" ? `<span class="absolute right-3 top-3 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white">Assinatura</span>` : ""}
@@ -4742,7 +4784,7 @@ function relatedProductCardHTML(p, i = 0) {
      style="animation-delay:${delay}ms">
     <div class="flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-2xl bg-zinc-900 p-6">
       ${safeMediaSrc(p.image_url)
-        ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-contain" />`
+        ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-contain" alt="${p.name}" loading="lazy" decoding="async" />`
         : `<div class="flex h-full w-full items-center justify-center text-muted">Sem imagem</div>`}
     </div>
     <div class="mt-4 text-left">
@@ -4825,6 +4867,79 @@ window.setProductGalleryImage = (i) => {
   });
 };
 
+/* Atualiza <title>, meta description, Open Graph, Twitter Card e JSON-LD
+   dinamicamente quando o usuário abre um produto — importante porque isso é
+   uma SPA e sem isso todo link de produto compartilhado mostra sempre o
+   mesmo título/descrição genéricos do site. */
+const SEO_DEFAULTS = {
+  title: "NovaStore | Loja de produtos digitais",
+  description: "Jogos, contas e assinaturas com pagamento via Pix e liberação imediata.",
+  image: "https://www.novastore.com.br/og-image.png",
+};
+
+function setMeta(id, attr, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (attr === "text") el.textContent = value;
+  else el.setAttribute(attr, value);
+}
+
+function updateSEOForProduct(p) {
+  const title = `${p.name} | NovaStore`;
+  const rawDesc = (p.description || SEO_DEFAULTS.description).replace(/\s+/g, " ").trim();
+  const description = rawDesc.length > 155 ? rawDesc.slice(0, 152) + "…" : rawDesc;
+  const image = safeMediaSrc(p.image_url) || SEO_DEFAULTS.image;
+  const slug = p.slug || p.id;
+  const url = `${location.origin}${location.pathname}?produto=${encodeURIComponent(slug)}`;
+
+  setMeta("page-title", "text", title);
+  setMeta("meta-description", "content", description);
+  setMeta("canonical-link", "href", url);
+  setMeta("og-title", "content", title);
+  setMeta("og-description", "content", description);
+  setMeta("og-url", "content", url);
+  setMeta("og-image", "content", image);
+  setMeta("og-type", "content", "product");
+  setMeta("twitter-title", "content", title);
+  setMeta("twitter-description", "content", description);
+  setMeta("twitter-image", "content", image);
+
+  const ldProduct = document.getElementById("ld-product");
+  if (ldProduct) {
+    ldProduct.hidden = false;
+    ldProduct.textContent = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: p.name,
+      description,
+      image: image ? [image] : undefined,
+      offers: {
+        "@type": "Offer",
+        priceCurrency: "BRL",
+        price: Number(p.price || (p.plans && p.plans[0] && p.plans[0].price) || 0),
+        availability: "https://schema.org/InStock",
+        url,
+      },
+    });
+  }
+}
+
+function resetSEOToDefaults() {
+  setMeta("page-title", "text", SEO_DEFAULTS.title);
+  setMeta("meta-description", "content", SEO_DEFAULTS.description);
+  setMeta("canonical-link", "href", `${location.origin}${location.pathname}`);
+  setMeta("og-title", "content", SEO_DEFAULTS.title);
+  setMeta("og-description", "content", SEO_DEFAULTS.description);
+  setMeta("og-url", "content", `${location.origin}${location.pathname}`);
+  setMeta("og-image", "content", SEO_DEFAULTS.image);
+  setMeta("og-type", "content", "website");
+  setMeta("twitter-title", "content", SEO_DEFAULTS.title);
+  setMeta("twitter-description", "content", SEO_DEFAULTS.description);
+  setMeta("twitter-image", "content", SEO_DEFAULTS.image);
+  const ldProduct = document.getElementById("ld-product");
+  if (ldProduct) { ldProduct.hidden = true; ldProduct.textContent = "{}"; }
+}
+
 function renderProductPage(p) {
   CURRENT_PRODUCT_GALLERY = productGalleryImages(p);
   const cat = categoryMeta(p.category);
@@ -4835,8 +4950,8 @@ function renderProductPage(p) {
   const id = p.id;
 
   const planIconHTML = (plan) => {
-    if (safeMediaSrc(plan.icon_url)) return `<img src="${safeMediaSrc(plan.icon_url)}" class="h-full w-full object-cover" />`;
-    if (safeMediaSrc(p.image_url)) return `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover" />`;
+    if (safeMediaSrc(plan.icon_url)) return `<img src="${safeMediaSrc(plan.icon_url)}" class="h-full w-full object-cover" alt="${plan.name || ''}" loading="lazy" decoding="async" />`;
+    if (safeMediaSrc(p.image_url)) return `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover" alt="${p.name}" loading="lazy" decoding="async" />`;
     return `<div class="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary to-[#4b2fd6] text-xs font-black text-white">${(plan.name || "?").charAt(0)}</div>`;
   };
 
@@ -4917,7 +5032,7 @@ function renderProductPage(p) {
 
         <div>
           <div class="product-page-box modal-image-frame mx-auto max-w-md overflow-hidden rounded-2xl border border-border bg-surface2 p-5 sm:max-w-lg">
-            <img id="product-gallery-main" src="${safeMediaSrc(productGalleryImages(p)[0]) || ""}" class="aspect-[4/5] w-full rounded-xl object-cover ${productGalleryImages(p)[0] ? "" : "hidden"}" />
+            <img id="product-gallery-main" src="${safeMediaSrc(productGalleryImages(p)[0]) || ""}" class="aspect-[4/5] w-full rounded-xl object-cover ${productGalleryImages(p)[0] ? "" : "hidden"}" alt="${p.name}" decoding="async" />
             ${productGalleryImages(p)[0] ? "" : `<div class="flex aspect-[4/5] items-center justify-center rounded-xl text-muted">Sem imagem</div>`}
           </div>
           ${productGalleryImages(p).length > 1 ? `
@@ -4925,7 +5040,7 @@ function renderProductPage(p) {
             ${productGalleryImages(p).map((url, i) => `
               <button type="button" onclick="setProductGalleryImage(${i})"
                 class="product-gallery-thumb h-16 w-16 shrink-0 overflow-hidden rounded-lg border ${i === 0 ? "border-primary" : "border-border"} bg-surface2 hover:border-primary/60">
-                <img src="${safeMediaSrc(url)}" class="h-full w-full object-cover" />
+                <img src="${safeMediaSrc(url)}" class="h-full w-full object-cover" alt="Foto adicional de ${p.name}" loading="lazy" decoding="async" />
               </button>`).join("")}
           </div>` : ""}
           <div class="purchase-badge mx-auto mt-5 flex w-fit items-center justify-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-5 py-2.5 text-sm font-bold text-accent">
@@ -5063,6 +5178,7 @@ window.goToProductPage = (id, opts = {}) => {
   if (!p) return;
 
   renderProductPage(p);
+  updateSEOForProduct(p);
   document.getElementById("store-home").classList.add("hidden");
   document.getElementById("product-page-view").classList.remove("hidden");
   document.querySelectorAll(".product-card.tilt").forEach(resetTilt);
@@ -5075,11 +5191,11 @@ window.goToProductPage = (id, opts = {}) => {
   // evita registrar a visualização na conta errada.
   supabase.auth.getSession().then(({ data: { session } }) => {
     const uid = session?.user?.id;
-    if (!uid) { console.warn("Visualização não registrada: ninguém logado nesta aba."); return; }
+    if (!uid) { dwarn("Visualização não registrada: ninguém logado nesta aba."); return; }
     supabase.from("product_views").insert({ cliente_id: uid, product_id: p.id, product_nome: p.name })
       .then(({ error }) => {
         if (error) console.error("Falha ao registrar visualização do produto:", error.message, error);
-        else console.debug(`Visualização registrada: ${p.name} (cliente ${uid})`);
+        else dlog(`Visualização registrada: ${p.name} (cliente ${uid})`);
       });
   });
 
@@ -5093,6 +5209,7 @@ window.goToProductPage = (id, opts = {}) => {
 window.goBackToStore = (opts = {}) => {
   document.getElementById("product-page-view").classList.add("hidden");
   document.getElementById("store-home").classList.remove("hidden");
+  resetSEOToDefaults();
   renderProducts();
   window.scrollTo({ top: 0, behavior: "instant" });
 
@@ -5183,7 +5300,7 @@ async function renderCart() {
     itemsEl.innerHTML = cart.map((i) => `
       <div class="mb-3 flex gap-3 rounded-xl border border-border bg-surface2 p-3">
         <div class="h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-bg">
-          ${safeMediaSrc(i.image) ? `<img src="${safeMediaSrc(i.image)}" class="h-full w-full object-cover" />` : ""}
+          ${safeMediaSrc(i.image) ? `<img src="${safeMediaSrc(i.image)}" class="h-full w-full object-cover" alt="${i.name || ''}" loading="lazy" decoding="async" />` : ""}
         </div>
         <div class="flex flex-1 flex-col justify-between">
           <div>
@@ -5229,7 +5346,7 @@ async function renderOffers() {
           return `
           <div class="flex items-center gap-3 rounded-lg border border-border bg-surface2 p-2">
             <div class="h-12 w-12 shrink-0 overflow-hidden rounded-md bg-bg">
-              ${safeMediaSrc(p.image_url) ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover" />` : ""}
+              ${safeMediaSrc(p.image_url) ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover" alt="${p.name}" loading="lazy" decoding="async" />` : ""}
             </div>
             <div class="flex-1">
               <p class="text-xs font-semibold leading-tight">${p.name}</p>
@@ -5536,7 +5653,7 @@ function renderPixScreen(data, ticket) {
       <div class="mb-4 text-4xl">📱</div>
       <h2 class="mb-2 font-display text-2xl font-bold uppercase">Pague com Pix para confirmar</h2>
       <p class="mb-4 text-sm text-muted">Escaneie o QR Code ou copie o código abaixo.</p>
-      ${data.qrCodeBase64 ? `<img src="data:image/png;base64,${data.qrCodeBase64}" class="mx-auto mb-4 w-56 rounded-xl border border-border bg-white p-3" />` : ""}
+      ${data.qrCodeBase64 ? `<img src="data:image/png;base64,${data.qrCodeBase64}" class="mx-auto mb-4 w-56 rounded-xl border border-border bg-white p-3" alt="QR Code Pix para pagamento" decoding="async" />` : ""}
       ${data.expiresAt ? `<p id="pix-countdown" class="mb-4 text-xs font-semibold text-yellow-400"></p>` : ""}
       ${data.qrCode ? `<button onclick="copyPixCode(this, '${data.qrCode.replace(/'/g, "\\'")}')" class="btn-press mx-auto mb-4 flex items-center gap-2 rounded-lg border border-border bg-surface2 px-4 py-2.5 text-sm font-semibold text-muted hover:border-primary/60">📋 Copiar código Pix</button>` : ""}
       ${ticketBadgeHTML(ticket)}
@@ -6052,7 +6169,7 @@ function renderAdminConvencerThread(msgs, adminId) {
     const fromAdmin = m.sender_id === adminId;
     return `<div class="flex ${fromAdmin ? "justify-end" : "justify-start"}">
       <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${fromAdmin ? "bg-primary text-white" : "bg-surface2 text-white"}">
-        ${m.message_text ? escapeHTML(m.message_text) : (safeMediaSrc(m.image_url) ? `<img src="${safeMediaSrc(m.image_url)}" class="max-w-[200px] rounded-lg" />` : "")}
+        ${m.message_text ? escapeHTML(m.message_text) : (safeMediaSrc(m.image_url) ? `<img src="${safeMediaSrc(m.image_url)}" class="max-w-[200px] rounded-lg" alt="Imagem enviada no chat" loading="lazy" decoding="async" />` : "")}
       </div>
     </div>`;
   }).join("");
@@ -6378,7 +6495,7 @@ async function loadAdminProducts() {
     <tr class="border-b border-border/60 last:border-0">
       <td class="flex items-center gap-3 px-4 py-3">
         <div class="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-surface2">
-          ${safeMediaSrc(p.image_url) ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover" />` : ""}
+          ${safeMediaSrc(p.image_url) ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover" alt="${p.name}" loading="lazy" decoding="async" />` : ""}
         </div>
         <span class="font-semibold">${p.name}</span>
       </td>
@@ -6929,7 +7046,7 @@ function renderImagesPreview() {
   if (!currentImages.length) { wrap.innerHTML = `<p class="text-xs text-muted">Nenhuma imagem adicionada ainda.</p>`; return; }
   wrap.innerHTML = currentImages.map((url, i) => `
     <div class="relative h-24 w-24 overflow-hidden rounded-lg border ${i === 0 ? "border-primary" : "border-border"} bg-surface2">
-      <img src="${safeMediaSrc(url)}" class="h-full w-full object-cover" />
+      <img src="${safeMediaSrc(url)}" class="h-full w-full object-cover" alt="Imagem" loading="lazy" decoding="async" />
       ${i === 0 ? `<span class="absolute left-1 top-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-white">★</span>` : ""}
       <button type="button" onclick="removeProductImage(${i})" title="Remover"
         class="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs font-bold text-white hover:bg-red-500">✕</button>
@@ -7426,7 +7543,7 @@ window.openContaDetalhe = async (clienteId) => {
     <div class="mb-5 flex items-start justify-between gap-3">
       <div class="flex items-center gap-3">
         <span class="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-xl font-black text-white">
-          ${safeMediaSrc(conta?.avatar_url) ? `<img src="${safeMediaSrc(conta.avatar_url)}" class="h-full w-full object-cover" />` : (conta?.full_name || "C").charAt(0).toUpperCase()}
+          ${safeMediaSrc(conta?.avatar_url) ? `<img src="${safeMediaSrc(conta.avatar_url)}" class="h-full w-full object-cover" alt="Avatar de ${conta?.full_name || "cliente"}" loading="lazy" decoding="async" />` : (conta?.full_name || "C").charAt(0).toUpperCase()}
         </span>
         <div>
           <p class="font-display text-lg font-bold text-white">${escapeHTML(conta?.full_name || "Cliente")}</p>
@@ -7863,7 +7980,7 @@ async function loadPainelCliente() {
   document.getElementById("painel-user-name").textContent = name;
   document.getElementById("painel-overview-name").textContent = firstName;
   const avatarHTML = safeMediaSrc(CURRENT_PROFILE?.avatar_url)
-    ? `<img src="${safeMediaSrc(CURRENT_PROFILE.avatar_url)}" class="h-full w-full object-cover" />`
+    ? `<img src="${safeMediaSrc(CURRENT_PROFILE.avatar_url)}" class="h-full w-full object-cover" alt="Foto de perfil" loading="lazy" decoding="async" />`
     : firstName.charAt(0).toUpperCase();
   document.getElementById("painel-avatar").innerHTML = avatarHTML;
   document.getElementById("painel-perfil-avatar").innerHTML = avatarHTML;
