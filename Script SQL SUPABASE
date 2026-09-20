@@ -1,0 +1,3014 @@
+-- =============================================================================
+-- NOVASTORE — SUPABASE SUPREMO / UNIFICADO
+-- =============================================================================
+-- Objetivo:
+--   1) Consolidar o schema usado pelo index.html em UM único script.
+--   2) Corrigir os scripts fracionados que estavam se sobrescrevendo.
+--   3) Fazer migrações aditivas para bancos já existentes.
+--   4) Corrigir as colunas ausentes usadas pelo site:
+--        - products.images
+--        - products.redirect_url
+--        - orders.cupom_codigo_usado
+--        - site_settings.estoque_baixo_limite
+--        - site_settings.estoque_minimo
+--        - site_settings.meta_vendas_mensal
+--        - cupons.* (modelo novo + compatibilidade com o modelo antigo)
+--   5) Centralizar o checkout em public.criar_pix_v2.
+--   6) Manter public.criar_pix como compatibilidade para chamadas antigas.
+--   7) Melhorar o diagnóstico do HTTP 400 do gateway Pix, sem expor token.
+--   8) Manter RLS, Storage e Realtime usados pelo site.
+--
+-- IMPORTANTE SOBRE O HTTP 400:
+--   O banco NÃO consegue adivinhar o contrato da API do gateway de pagamento.
+--   Este script deixa o corpo da requisição configurável por template em
+--   app_config.pix_gateway_payload_template e registra a resposta do gateway.
+--   Assim, um 400 deixa de ser um erro "cego": o corpo retornado pelo gateway
+--   pode ser consultado pelo admin na tabela pix_gateway_logs ou retornado
+--   temporariamente com pix_gateway_debug = true.
+--
+-- USO:
+--   Cole ESTE ARQUIVO INTEIRO no SQL Editor do Supabase e execute.
+--   O script é pensado para ser idempotente e para preservar dados existentes.
+-- =============================================================================
+
+
+-- =============================================================================
+-- 0. EXTENSÃO HTTP
+-- =============================================================================
+
+create extension if not exists http with schema extensions;
+
+
+-- =============================================================================
+-- 1. TABELAS PRINCIPAIS
+--    create table if not exists + colunas aditivas abaixo para instalações
+--    antigas que já possuem a tabela.
+-- =============================================================================
+
+create table if not exists public.profiles (
+  id                uuid primary key references auth.users(id) on delete cascade,
+  full_name         text,
+  email             text,
+  phone             text,
+  avatar_url        text,
+  role              text not null default 'client' check (role in ('client','admin')),
+  is_afiliado       boolean not null default false,
+  codigo_afiliado   text unique,
+  codigo_cliente    text unique,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+
+create table if not exists public.products (
+  id            uuid primary key default gen_random_uuid(),
+  name          text not null,
+  slug          text unique,
+  description   text,
+  category      text,
+  tags          text[] not null default '{}',
+  features      text[] not null default '{}',
+  type          text not null default 'UNICO' check (type in ('UNICO','ASSINATURA')),
+  price         numeric(10,2),
+  stock         integer,
+  image_url     text,
+  images        jsonb not null default '[]'::jsonb,
+  redirect_url  text,
+  plans         jsonb not null default '[]'::jsonb,
+  featured      boolean not null default false,
+  active        boolean not null default true,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+create table if not exists public.orders (
+  id                      uuid primary key default gen_random_uuid(),
+  customer_id             uuid references public.profiles(id) on delete set null,
+  customer_name           text,
+  customer_email          text,
+  items                   jsonb not null default '[]'::jsonb,
+  total                   numeric(10,2) not null default 0,
+  status                  text not null default 'PENDENTE'
+                            check (status in ('PENDENTE','PAGO','CANCELADO','EXPIRADO')),
+  paid_at                 timestamptz,
+  anunciante_codigo       text,
+  codigo_afiliado_usado   text,
+  afiliado_id             uuid references public.profiles(id) on delete set null,
+  cupom_usado             boolean not null default false,
+  desconto_aplicado       numeric(10,2) not null default 0,
+  cupom_codigo_usado      text,
+  pix_txid                text,
+  pix_qrcode_base64       text,
+  pix_copia_cola          text,
+  pix_expires_at          timestamptz,
+  created_at              timestamptz not null default now()
+);
+
+create table if not exists public.messages (
+  id            uuid primary key default gen_random_uuid(),
+  order_id      uuid not null references public.orders(id) on delete cascade,
+  sender_id     uuid not null references public.profiles(id) on delete cascade,
+  receiver_id   uuid references public.profiles(id) on delete set null,
+  message_text  text not null,
+  created_at    timestamptz not null default now()
+);
+
+create table if not exists public.chat_privado (
+  id            uuid primary key default gen_random_uuid(),
+  customer_id   uuid not null references public.profiles(id) on delete cascade,
+  sender_id     uuid not null references public.profiles(id) on delete cascade,
+  sender_role   text not null check (sender_role in ('client','admin')),
+  message_text  text,
+  read_at       timestamptz,
+  created_at    timestamptz not null default now()
+);
+
+create table if not exists public.chat_global (
+  id                uuid primary key default gen_random_uuid(),
+  sender_id         uuid not null references public.profiles(id) on delete cascade,
+  sender_name       text not null,
+  sender_role       text not null default 'client' check (sender_role in ('client','admin')),
+  sender_avatar_url text,
+  message_text      text,
+  image_url         text,
+  client_id         text,
+  created_at        timestamptz not null default now()
+);
+
+create table if not exists public.mensagens_privadas (
+  id            uuid primary key default gen_random_uuid(),
+  sender_id     uuid not null references public.profiles(id) on delete cascade,
+  receiver_id   uuid not null references public.profiles(id) on delete cascade,
+  message_text  text,
+  image_url     text,
+  read_at       timestamptz,
+  created_at    timestamptz not null default now()
+);
+
+create table if not exists public.amigos (
+  id                      uuid primary key default gen_random_uuid(),
+  requester_id            uuid not null references public.profiles(id) on delete cascade,
+  addressee_id            uuid not null references public.profiles(id) on delete cascade,
+  requester_name          text,
+  requester_avatar_url    text,
+  addressee_name          text,
+  addressee_avatar_url    text,
+  status                  text not null default 'pending'
+                            check (status in ('pending','accepted')),
+  created_at              timestamptz not null default now(),
+  updated_at              timestamptz not null default now(),
+  constraint amigos_sem_autoamizade check (requester_id <> addressee_id),
+  constraint amigos_par_unico unique (requester_id, addressee_id)
+);
+
+create table if not exists public.tickets (
+  id            uuid primary key default gen_random_uuid(),
+  customer_id   uuid not null references public.profiles(id) on delete cascade,
+  categoria     text,
+  assunto       text not null,
+  status        text not null default 'aberto'
+                  check (status in ('aberto','aguardando_cliente','respondido','fechado')),
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+create table if not exists public.ticket_mensagens (
+  id            uuid primary key default gen_random_uuid(),
+  ticket_id     uuid not null references public.tickets(id) on delete cascade,
+  sender_role   text not null check (sender_role in ('client','admin')),
+  message_text  text not null,
+  read_at       timestamptz,
+  created_at    timestamptz not null default now()
+);
+
+create table if not exists public.avaliacoes (
+  id            uuid primary key default gen_random_uuid(),
+  customer_id   uuid not null references public.profiles(id) on delete cascade,
+  product_id    uuid not null references public.products(id) on delete cascade,
+  customer_name text,
+  rating        smallint not null check (rating between 1 and 5),
+  comment       text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  constraint avaliacoes_unica_por_cliente_produto unique (customer_id, product_id)
+);
+
+create table if not exists public.site_settings (
+  id                       integer primary key default 1 check (id = 1),
+  hero_image_url           text,
+  hero_overlay             numeric(3,2) not null default 0.35,
+  background_image_url     text,
+  background_overlay       numeric(3,2) not null default 0.85,
+  theme_primary            text not null default '#7c5cff',
+  theme_accent             text not null default '#00e6a8',
+  effect_lightning         boolean not null default false,
+  effect_card_lightning    boolean not null default false,
+  card_lightning_frequency text default 'normal',
+  category_glow_enabled    boolean not null default false,
+  category_glow_color      text default '#7c5cff',
+  estoque_minimo           integer not null default 5,
+  estoque_baixo_limite     integer not null default 3,
+  meta_vendas_mensal       numeric(10,2),
+  updated_at               timestamptz not null default now()
+);
+
+create table if not exists public.product_views (
+  id            uuid primary key default gen_random_uuid(),
+  cliente_id    uuid not null references public.profiles(id) on delete cascade,
+  product_id    uuid references public.products(id) on delete set null,
+  product_nome  text,
+  created_at    timestamptz not null default now()
+);
+
+create table if not exists public.anunciantes (
+  id            uuid primary key default gen_random_uuid(),
+  nome          text not null,
+  codigo        text not null unique,
+  total_vendas  integer not null default 0,
+  created_at    timestamptz not null default now()
+);
+
+create table if not exists public.afiliados_indicacoes (
+  id            uuid primary key default gen_random_uuid(),
+  afiliado_id   uuid not null references public.profiles(id) on delete cascade,
+  cliente_id    uuid references public.profiles(id) on delete set null,
+  order_id      uuid references public.orders(id) on delete set null,
+  valor_venda   numeric(10,2) not null default 0,
+  comissao      numeric(10,2) not null default 0,
+  status        text not null default 'pendente'
+                  check (status in ('pendente','pago')),
+  created_at    timestamptz not null default now()
+);
+
+create table if not exists public.historico_vendas_anunciantes (
+  id            uuid primary key default gen_random_uuid(),
+  anunciante_id uuid not null references public.anunciantes(id) on delete cascade,
+  order_id      uuid references public.orders(id) on delete set null,
+  produto_nome  text,
+  valor_compra  numeric(10,2) not null default 0,
+  cliente_nome  text,
+  created_at    timestamptz not null default now()
+);
+
+create table if not exists public.sorteios (
+  id              uuid primary key default gen_random_uuid(),
+  titulo          text not null,
+  premio          text not null,
+  dias            integer,
+  data_sorteio    date not null,
+  status          text not null default 'aberto'
+                   check (status in ('aberto','finalizado')),
+  ganhador_nome   text,
+  ganhador_codigo text,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+create table if not exists public.app_config (
+  chave       text primary key,
+  valor       text,
+  updated_at  timestamptz not null default now()
+);
+
+create table if not exists public.cupons (
+  id                    uuid primary key default gen_random_uuid(),
+  codigo                text not null unique,
+  tipo_desconto         text not null default 'percentual'
+                          check (tipo_desconto in ('percentual','fixo')),
+  valor                 numeric(10,2) not null check (valor > 0),
+  valor_minimo_compra   numeric(10,2) not null default 0,
+  limite_uso            integer,
+  usos_atual            integer not null default 0,
+  ativo                 boolean not null default true,
+  expira_em             date,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+
+  -- Compatibilidade com a primeira versão da tabela cupons.
+  tipo                  text,
+  valor_minimo          numeric(10,2),
+  usos                  integer,
+  validade              timestamptz
+);
+
+create table if not exists public.admin_activity_log (
+  id          uuid primary key default gen_random_uuid(),
+  admin_id    uuid references public.profiles(id) on delete set null,
+  admin_name  text,
+  acao        text not null,
+  detalhes    text,
+  created_at  timestamptz not null default now()
+);
+
+create table if not exists public.pix_gateway_logs (
+  id                uuid primary key default gen_random_uuid(),
+  order_id          uuid references public.orders(id) on delete set null,
+  request_summary   jsonb not null default '{}'::jsonb,
+  http_status       integer,
+  response_body     text,
+  created_at        timestamptz not null default now()
+);
+
+
+-- =============================================================================
+-- 2. MIGRAÇÕES ADITIVAS PARA INSTALAÇÕES ANTIGAS
+-- =============================================================================
+
+alter table public.products
+  add column if not exists images jsonb not null default '[]'::jsonb,
+  add column if not exists redirect_url text;
+
+alter table public.orders
+  add column if not exists cupom_codigo_usado text;
+
+alter table public.site_settings
+  add column if not exists estoque_minimo integer not null default 5,
+  add column if not exists estoque_baixo_limite integer not null default 3,
+  add column if not exists meta_vendas_mensal numeric(10,2);
+
+alter table public.cupons
+  add column if not exists tipo_desconto text,
+  add column if not exists valor_minimo_compra numeric(10,2),
+  add column if not exists limite_uso integer,
+  add column if not exists usos_atual integer,
+  add column if not exists ativo boolean,
+  add column if not exists expira_em date,
+  add column if not exists created_at timestamptz,
+  add column if not exists updated_at timestamptz,
+  add column if not exists tipo text,
+  add column if not exists valor_minimo numeric(10,2),
+  add column if not exists usos integer,
+  add column if not exists validade timestamptz;
+
+-- Normaliza defaults/valores ausentes na tabela cupons antiga.
+update public.cupons
+set
+  tipo_desconto       = coalesce(nullif(tipo_desconto, ''), nullif(tipo, ''), 'percentual'),
+  valor_minimo_compra = coalesce(valor_minimo_compra, valor_minimo, 0),
+  usos_atual          = coalesce(usos_atual, usos, 0),
+  ativo               = coalesce(ativo, true),
+  created_at          = coalesce(created_at, now()),
+  updated_at          = coalesce(updated_at, now())
+where true;
+
+-- expira_em recebe a validade antiga, quando houver.
+update public.cupons
+set expira_em = coalesce(expira_em, validade::date)
+where validade is not null;
+
+-- Migra a imagem principal existente para a galeria quando a galeria ainda
+-- estiver vazia.
+update public.products
+set images = jsonb_build_array(image_url)
+where (images is null or images = '[]'::jsonb)
+  and image_url is not null;
+
+-- Inicializa a linha única de configurações do site.
+insert into public.site_settings (id)
+values (1)
+on conflict (id) do nothing;
+
+
+-- =============================================================================
+-- 3. COMPATIBILIDADE DE admin_activity_log
+-- =============================================================================
+-- Uma versão antiga criou detalhes como jsonb; o front atual envia texto.
+-- Converte somente quando a coluna realmente estiver em jsonb.
+
+do $$
+declare
+  v_type text;
+begin
+  select data_type into v_type
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name   = 'admin_activity_log'
+    and column_name  = 'detalhes';
+
+  if v_type = 'jsonb' then
+    alter table public.admin_activity_log
+      alter column detalhes type text
+      using (
+        case
+          when detalhes is null then null
+          when jsonb_typeof(detalhes) = 'string' then detalhes #>> '{}'
+          else detalhes::text
+        end
+      );
+  end if;
+end $$;
+
+
+-- =============================================================================
+-- 4. CONFIGURAÇÃO DO GATEWAY / APP
+-- =============================================================================
+-- NÃO sobrescreve valores que já existam.
+-- O token jamais é exposto por política RLS.
+
+insert into public.app_config (chave, valor) values
+  ('pix_gateway_url', ''),
+  ('pix_gateway_token', ''),
+  ('afiliado_comissao_percentual', '10'),
+  ('pix_gateway_auth_header', 'Authorization'),
+  ('pix_gateway_auth_prefix', 'Bearer '),
+  ('pix_gateway_debug', 'false'),
+  ('pix_gateway_payload_template',
+   '{"valor":{{valor_json}},"descricao":{{descricao_json}},"referencia_externa":{{order_id_json}},"pagador":{"nome":{{nome_json}},"email":{{email_json}}}}')
+on conflict (chave) do nothing;
+
+
+-- =============================================================================
+-- 5. FUNÇÕES AUXILIARES
+-- =============================================================================
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.profiles p
+    where p.id = auth.uid()
+      and p.role = 'admin'
+  );
+$$;
+
+
+create or replace function public.gerar_codigo_4_digitos()
+returns text
+language sql
+as $$
+  select '#' || lpad((floor(random() * 9000) + 1000)::int::text, 4, '0');
+$$;
+
+
+create or replace function public.gerar_codigo_cliente_unico()
+returns text
+language plpgsql
+as $$
+declare
+  v_codigo text;
+  v_tentativas integer := 0;
+begin
+  loop
+    v_codigo := public.gerar_codigo_4_digitos();
+    v_tentativas := v_tentativas + 1;
+
+    exit when not exists (
+      select 1
+      from public.profiles
+      where codigo_cliente = v_codigo
+    );
+
+    if v_tentativas >= 50 then
+      raise exception 'Não foi possível gerar um código de cliente único.';
+    end if;
+  end loop;
+
+  return v_codigo;
+end;
+$$;
+
+
+-- =============================================================================
+-- 6. TRIGGERS
+-- =============================================================================
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (
+    id, email, full_name, role, codigo_cliente
+  )
+  values (
+    new.id,
+    new.email,
+    coalesce(
+      nullif(new.raw_user_meta_data->>'full_name', ''),
+      split_part(new.email, '@', 1)
+    ),
+    'client',
+    public.gerar_codigo_cliente_unico()
+  )
+  on conflict (id) do nothing;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute function public.handle_new_user();
+
+
+drop trigger if exists trg_profiles_updated_at on public.profiles;
+create trigger trg_profiles_updated_at
+before update on public.profiles
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_products_updated_at on public.products;
+create trigger trg_products_updated_at
+before update on public.products
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_tickets_updated_at on public.tickets;
+create trigger trg_tickets_updated_at
+before update on public.tickets
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_amigos_updated_at on public.amigos;
+create trigger trg_amigos_updated_at
+before update on public.amigos
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_avaliacoes_updated_at on public.avaliacoes;
+create trigger trg_avaliacoes_updated_at
+before update on public.avaliacoes
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_sorteios_updated_at on public.sorteios;
+create trigger trg_sorteios_updated_at
+before update on public.sorteios
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_site_settings_updated_at on public.site_settings;
+create trigger trg_site_settings_updated_at
+before update on public.site_settings
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_cupons_updated_at on public.cupons;
+create trigger trg_cupons_updated_at
+before update on public.cupons
+for each row execute function public.set_updated_at();
+
+
+create or replace function public.protect_profile_privileged_fields()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    new.role             := old.role;
+    new.is_afiliado      := old.is_afiliado;
+    new.codigo_afiliado  := old.codigo_afiliado;
+    new.codigo_cliente   := old.codigo_cliente;
+    new.email            := old.email;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_protect_profile_privileged_fields on public.profiles;
+create trigger trg_protect_profile_privileged_fields
+before update on public.profiles
+for each row execute function public.protect_profile_privileged_fields();
+
+
+create or replace function public.enforce_avaliacao_requer_compra()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1
+    from public.orders o
+    where o.customer_id = new.customer_id
+      and o.status = 'PAGO'
+      and exists (
+        select 1
+        from jsonb_array_elements(coalesce(o.items, '[]'::jsonb)) it
+        where (it->>'productId')::uuid = new.product_id
+      )
+  ) then
+    raise exception 'Você só pode avaliar produtos que já comprou.';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_avaliacao_requer_compra on public.avaliacoes;
+create trigger trg_avaliacao_requer_compra
+before insert or update on public.avaliacoes
+for each row execute function public.enforce_avaliacao_requer_compra();
+
+
+-- =============================================================================
+-- 7. ÍNDICES
+-- =============================================================================
+
+create index if not exists idx_orders_customer_id          on public.orders(customer_id);
+create index if not exists idx_orders_status               on public.orders(status);
+create index if not exists idx_orders_created_at           on public.orders(created_at desc);
+create index if not exists idx_orders_afiliado_id          on public.orders(afiliado_id);
+create index if not exists idx_orders_cupom_codigo         on public.orders(cupom_codigo_usado);
+create index if not exists idx_messages_order_id           on public.messages(order_id);
+create index if not exists idx_chat_privado_customer_id    on public.chat_privado(customer_id);
+create index if not exists idx_chat_global_created_at      on public.chat_global(created_at desc);
+create index if not exists idx_mensagens_privadas_sender   on public.mensagens_privadas(sender_id);
+create index if not exists idx_mensagens_privadas_receiver on public.mensagens_privadas(receiver_id);
+create index if not exists idx_amigos_requester            on public.amigos(requester_id);
+create index if not exists idx_amigos_addressee            on public.amigos(addressee_id);
+create index if not exists idx_tickets_customer_id         on public.tickets(customer_id);
+create index if not exists idx_ticket_mensagens_ticket_id  on public.ticket_mensagens(ticket_id);
+create index if not exists idx_avaliacoes_product_id       on public.avaliacoes(product_id);
+create index if not exists idx_product_views_cliente_id    on public.product_views(cliente_id);
+create index if not exists idx_product_views_product_id    on public.product_views(product_id);
+create index if not exists idx_afiliados_indicacoes_afiliado on public.afiliados_indicacoes(afiliado_id);
+create index if not exists idx_historico_vendas_anunciante on public.historico_vendas_anunciantes(anunciante_id);
+create index if not exists idx_products_active             on public.products(active);
+create index if not exists idx_products_slug               on public.products(slug);
+create index if not exists idx_profiles_codigo_afiliado    on public.profiles(codigo_afiliado);
+create index if not exists idx_profiles_codigo_cliente     on public.profiles(codigo_cliente);
+create index if not exists idx_cupons_codigo               on public.cupons(codigo);
+create index if not exists idx_cupons_ativo                on public.cupons(ativo);
+create index if not exists idx_pix_gateway_logs_order      on public.pix_gateway_logs(order_id);
+create index if not exists idx_pix_gateway_logs_created    on public.pix_gateway_logs(created_at desc);
+
+
+-- =============================================================================
+-- 8. ROW LEVEL SECURITY
+-- =============================================================================
+
+alter table public.profiles enable row level security;
+alter table public.products enable row level security;
+alter table public.orders enable row level security;
+alter table public.messages enable row level security;
+alter table public.chat_privado enable row level security;
+alter table public.chat_global enable row level security;
+alter table public.mensagens_privadas enable row level security;
+alter table public.amigos enable row level security;
+alter table public.tickets enable row level security;
+alter table public.ticket_mensagens enable row level security;
+alter table public.avaliacoes enable row level security;
+alter table public.site_settings enable row level security;
+alter table public.product_views enable row level security;
+alter table public.anunciantes enable row level security;
+alter table public.afiliados_indicacoes enable row level security;
+alter table public.historico_vendas_anunciantes enable row level security;
+alter table public.sorteios enable row level security;
+alter table public.app_config enable row level security;
+alter table public.cupons enable row level security;
+alter table public.admin_activity_log enable row level security;
+alter table public.pix_gateway_logs enable row level security;
+
+
+-- profiles
+drop policy if exists "profiles_select_authenticated" on public.profiles;
+create policy "profiles_select_authenticated"
+on public.profiles
+for select
+to authenticated
+using (true);
+
+drop policy if exists "profiles_update_self_or_admin" on public.profiles;
+create policy "profiles_update_self_or_admin"
+on public.profiles
+for update
+to authenticated
+using (auth.uid() = id or public.is_admin())
+with check (auth.uid() = id or public.is_admin());
+
+
+-- products
+drop policy if exists "products_select_public_active_or_admin" on public.products;
+create policy "products_select_public_active_or_admin"
+on public.products
+for select
+to anon, authenticated
+using (active = true or public.is_admin());
+
+drop policy if exists "products_admin_all" on public.products;
+create policy "products_admin_all"
+on public.products
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+
+-- orders
+drop policy if exists "orders_select_own_or_admin" on public.orders;
+create policy "orders_select_own_or_admin"
+on public.orders
+for select
+to authenticated
+using (customer_id = auth.uid() or public.is_admin());
+
+drop policy if exists "orders_admin_update" on public.orders;
+create policy "orders_admin_update"
+on public.orders
+for update
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+drop policy if exists "orders_admin_delete" on public.orders;
+create policy "orders_admin_delete"
+on public.orders
+for delete
+to authenticated
+using (public.is_admin());
+
+
+-- messages
+drop policy if exists "messages_select_participant_or_admin" on public.messages;
+create policy "messages_select_participant_or_admin"
+on public.messages
+for select
+to authenticated
+using (sender_id = auth.uid() or receiver_id = auth.uid() or public.is_admin());
+
+drop policy if exists "messages_insert_as_self" on public.messages;
+create policy "messages_insert_as_self"
+on public.messages
+for insert
+to authenticated
+with check (
+  sender_id = auth.uid()
+  and exists (
+    select 1
+    from public.orders o
+    where o.id = order_id
+      and (o.customer_id = auth.uid() or public.is_admin())
+  )
+);
+
+
+-- chat_privado
+drop policy if exists "chat_privado_select_own_or_admin" on public.chat_privado;
+create policy "chat_privado_select_own_or_admin"
+on public.chat_privado
+for select
+to authenticated
+using (customer_id = auth.uid() or public.is_admin());
+
+drop policy if exists "chat_privado_insert" on public.chat_privado;
+create policy "chat_privado_insert"
+on public.chat_privado
+for insert
+to authenticated
+with check (
+  sender_id = auth.uid()
+  and (customer_id = auth.uid() or public.is_admin())
+);
+
+drop policy if exists "chat_privado_update_read" on public.chat_privado;
+create policy "chat_privado_update_read"
+on public.chat_privado
+for update
+to authenticated
+using (customer_id = auth.uid() or public.is_admin())
+with check (customer_id = auth.uid() or public.is_admin());
+
+
+-- chat_global
+drop policy if exists "chat_global_select_authenticated" on public.chat_global;
+create policy "chat_global_select_authenticated"
+on public.chat_global
+for select
+to authenticated
+using (true);
+
+drop policy if exists "chat_global_insert_as_self" on public.chat_global;
+create policy "chat_global_insert_as_self"
+on public.chat_global
+for insert
+to authenticated
+with check (sender_id = auth.uid());
+
+drop policy if exists "chat_global_delete_admin" on public.chat_global;
+create policy "chat_global_delete_admin"
+on public.chat_global
+for delete
+to authenticated
+using (public.is_admin());
+
+
+-- mensagens_privadas
+drop policy if exists "mensagens_privadas_select_participant" on public.mensagens_privadas;
+create policy "mensagens_privadas_select_participant"
+on public.mensagens_privadas
+for select
+to authenticated
+using (sender_id = auth.uid() or receiver_id = auth.uid());
+
+drop policy if exists "mensagens_privadas_insert_as_self" on public.mensagens_privadas;
+create policy "mensagens_privadas_insert_as_self"
+on public.mensagens_privadas
+for insert
+to authenticated
+with check (sender_id = auth.uid());
+
+drop policy if exists "mensagens_privadas_update_participant" on public.mensagens_privadas;
+create policy "mensagens_privadas_update_participant"
+on public.mensagens_privadas
+for update
+to authenticated
+using (sender_id = auth.uid() or receiver_id = auth.uid())
+with check (sender_id = auth.uid() or receiver_id = auth.uid());
+
+
+-- amigos
+drop policy if exists "amigos_select_participant_or_admin" on public.amigos;
+create policy "amigos_select_participant_or_admin"
+on public.amigos
+for select
+to authenticated
+using (requester_id = auth.uid() or addressee_id = auth.uid() or public.is_admin());
+
+drop policy if exists "amigos_insert" on public.amigos;
+create policy "amigos_insert"
+on public.amigos
+for insert
+to authenticated
+with check (requester_id = auth.uid() or public.is_admin());
+
+drop policy if exists "amigos_update_participant_or_admin" on public.amigos;
+create policy "amigos_update_participant_or_admin"
+on public.amigos
+for update
+to authenticated
+using (requester_id = auth.uid() or addressee_id = auth.uid() or public.is_admin())
+with check (requester_id = auth.uid() or addressee_id = auth.uid() or public.is_admin());
+
+drop policy if exists "amigos_delete_participant_or_admin" on public.amigos;
+create policy "amigos_delete_participant_or_admin"
+on public.amigos
+for delete
+to authenticated
+using (requester_id = auth.uid() or addressee_id = auth.uid() or public.is_admin());
+
+
+-- tickets
+drop policy if exists "tickets_select_own_or_admin" on public.tickets;
+create policy "tickets_select_own_or_admin"
+on public.tickets
+for select
+to authenticated
+using (customer_id = auth.uid() or public.is_admin());
+
+drop policy if exists "tickets_insert_own" on public.tickets;
+create policy "tickets_insert_own"
+on public.tickets
+for insert
+to authenticated
+with check (customer_id = auth.uid());
+
+drop policy if exists "tickets_update_own_or_admin" on public.tickets;
+create policy "tickets_update_own_or_admin"
+on public.tickets
+for update
+to authenticated
+using (customer_id = auth.uid() or public.is_admin())
+with check (customer_id = auth.uid() or public.is_admin());
+
+
+-- ticket_mensagens
+drop policy if exists "ticket_mensagens_select" on public.ticket_mensagens;
+create policy "ticket_mensagens_select"
+on public.ticket_mensagens
+for select
+to authenticated
+using (
+  public.is_admin()
+  or exists (
+    select 1 from public.tickets t
+    where t.id = ticket_id
+      and t.customer_id = auth.uid()
+  )
+);
+
+drop policy if exists "ticket_mensagens_insert" on public.ticket_mensagens;
+create policy "ticket_mensagens_insert"
+on public.ticket_mensagens
+for insert
+to authenticated
+with check (
+  (sender_role = 'admin' and public.is_admin())
+  or
+  (sender_role = 'client' and exists (
+    select 1 from public.tickets t
+    where t.id = ticket_id
+      and t.customer_id = auth.uid()
+  ))
+);
+
+drop policy if exists "ticket_mensagens_update_read" on public.ticket_mensagens;
+create policy "ticket_mensagens_update_read"
+on public.ticket_mensagens
+for update
+to authenticated
+using (
+  public.is_admin()
+  or exists (
+    select 1 from public.tickets t
+    where t.id = ticket_id
+      and t.customer_id = auth.uid()
+  )
+);
+
+
+-- avaliacoes
+drop policy if exists "avaliacoes_select_public" on public.avaliacoes;
+create policy "avaliacoes_select_public"
+on public.avaliacoes
+for select
+to authenticated
+using (true);
+
+drop policy if exists "avaliacoes_insert_own" on public.avaliacoes;
+create policy "avaliacoes_insert_own"
+on public.avaliacoes
+for insert
+to authenticated
+with check (customer_id = auth.uid());
+
+drop policy if exists "avaliacoes_update_own" on public.avaliacoes;
+create policy "avaliacoes_update_own"
+on public.avaliacoes
+for update
+to authenticated
+using (customer_id = auth.uid())
+with check (customer_id = auth.uid());
+
+drop policy if exists "avaliacoes_admin_delete" on public.avaliacoes;
+create policy "avaliacoes_admin_delete"
+on public.avaliacoes
+for delete
+to authenticated
+using (public.is_admin());
+
+
+-- site_settings
+drop policy if exists "site_settings_select_public" on public.site_settings;
+create policy "site_settings_select_public"
+on public.site_settings
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "site_settings_admin_write" on public.site_settings;
+create policy "site_settings_admin_write"
+on public.site_settings
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+
+-- product_views
+drop policy if exists "product_views_select_own_or_admin" on public.product_views;
+create policy "product_views_select_own_or_admin"
+on public.product_views
+for select
+to authenticated
+using (cliente_id = auth.uid() or public.is_admin());
+
+drop policy if exists "product_views_insert_own" on public.product_views;
+create policy "product_views_insert_own"
+on public.product_views
+for insert
+to authenticated
+with check (cliente_id = auth.uid());
+
+
+-- anunciantes
+drop policy if exists "anunciantes_select_authenticated" on public.anunciantes;
+create policy "anunciantes_select_authenticated"
+on public.anunciantes
+for select
+to authenticated
+using (true);
+
+drop policy if exists "anunciantes_admin_write" on public.anunciantes;
+create policy "anunciantes_admin_write"
+on public.anunciantes
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+
+-- afiliados_indicacoes
+drop policy if exists "afiliados_indicacoes_select_own_or_admin" on public.afiliados_indicacoes;
+create policy "afiliados_indicacoes_select_own_or_admin"
+on public.afiliados_indicacoes
+for select
+to authenticated
+using (afiliado_id = auth.uid() or public.is_admin());
+
+drop policy if exists "afiliados_indicacoes_admin_write" on public.afiliados_indicacoes;
+create policy "afiliados_indicacoes_admin_write"
+on public.afiliados_indicacoes
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+
+-- historico_vendas_anunciantes
+drop policy if exists "historico_vendas_anunciantes_admin_only" on public.historico_vendas_anunciantes;
+create policy "historico_vendas_anunciantes_admin_only"
+on public.historico_vendas_anunciantes
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+
+-- sorteios
+drop policy if exists "sorteios_select_public" on public.sorteios;
+create policy "sorteios_select_public"
+on public.sorteios
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists "sorteios_admin_write" on public.sorteios;
+create policy "sorteios_admin_write"
+on public.sorteios
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+
+-- app_config:
+-- NENHUMA política para anon/authenticated.
+-- As funções SECURITY DEFINER leem esta tabela.
+-- Não liberar SELECT aqui.
+drop policy if exists "app_config_admin_select" on public.app_config;
+
+
+-- cupons
+drop policy if exists "cupons_admin_all" on public.cupons;
+create policy "cupons_admin_all"
+on public.cupons
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+
+-- admin_activity_log
+drop policy if exists "admin_activity_log_admin_all" on public.admin_activity_log;
+create policy "admin_activity_log_admin_all"
+on public.admin_activity_log
+for all
+to authenticated
+using (public.is_admin())
+with check (public.is_admin());
+
+
+-- pix_gateway_logs
+drop policy if exists "pix_gateway_logs_admin_select" on public.pix_gateway_logs;
+create policy "pix_gateway_logs_admin_select"
+on public.pix_gateway_logs
+for select
+to authenticated
+using (public.is_admin());
+
+
+-- =============================================================================
+-- 9. FUNÇÃO DE NORMALIZAÇÃO / VALIDAÇÃO DE CUPOM
+-- =============================================================================
+
+create or replace function public.validar_cupom(
+  p_codigo text,
+  p_subtotal numeric
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_cupom public.cupons;
+  v_subtotal numeric(10,2) := round(coalesce(p_subtotal, 0), 2);
+  v_desconto numeric(10,2);
+begin
+  if auth.uid() is null then
+    return jsonb_build_object(
+      'valido', false,
+      'erro', 'Faça login para validar um cupom.'
+    );
+  end if;
+
+  if p_codigo is null or trim(p_codigo) = '' then
+    return jsonb_build_object(
+      'valido', false,
+      'erro', 'Informe um código de cupom.'
+    );
+  end if;
+
+  select *
+  into v_cupom
+  from public.cupons
+  where upper(trim(codigo)) = upper(trim(p_codigo))
+  limit 1;
+
+  if not found then
+    return jsonb_build_object(
+      'valido', false,
+      'erro', 'Cupom não encontrado.'
+    );
+  end if;
+
+  if coalesce(v_cupom.ativo, true) is not true then
+    return jsonb_build_object(
+      'valido', false,
+      'erro', 'Este cupom não está mais ativo.'
+    );
+  end if;
+
+  if v_cupom.expira_em is not null
+     and v_cupom.expira_em < current_date then
+    return jsonb_build_object(
+      'valido', false,
+      'erro', 'Este cupom expirou.'
+    );
+  end if;
+
+  if v_cupom.limite_uso is not null
+     and coalesce(v_cupom.usos_atual, 0) >= v_cupom.limite_uso then
+    return jsonb_build_object(
+      'valido', false,
+      'erro', 'Este cupom já atingiu o limite de usos.'
+    );
+  end if;
+
+  if v_subtotal < coalesce(v_cupom.valor_minimo_compra, 0) then
+    return jsonb_build_object(
+      'valido', false,
+      'erro',
+      'Esse cupom vale a partir de ' ||
+      to_char(coalesce(v_cupom.valor_minimo_compra, 0), 'FM999990.00') ||
+      '.'
+    );
+  end if;
+
+  if v_cupom.tipo_desconto = 'percentual' then
+    v_desconto := round(
+      v_subtotal * (coalesce(v_cupom.valor, 0) / 100.0),
+      2
+    );
+  else
+    v_desconto := least(
+      coalesce(v_cupom.valor, 0),
+      v_subtotal
+    );
+  end if;
+
+  return jsonb_build_object(
+    'valido', true,
+    'codigo', v_cupom.codigo,
+    'tipo_desconto', v_cupom.tipo_desconto,
+    'valor', v_cupom.valor,
+    'desconto', v_desconto
+  );
+end;
+$$;
+
+
+-- =============================================================================
+-- 10. LOG DO GATEWAY
+-- =============================================================================
+
+create or replace function public.registrar_pix_gateway_log(
+  p_order_id uuid,
+  p_request_summary jsonb,
+  p_http_status integer,
+  p_response_body text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.pix_gateway_logs (
+    order_id,
+    request_summary,
+    http_status,
+    response_body
+  )
+  values (
+    p_order_id,
+    coalesce(p_request_summary, '{}'::jsonb),
+    p_http_status,
+    left(coalesce(p_response_body, ''), 12000)
+  );
+end;
+$$;
+
+revoke all on function public.registrar_pix_gateway_log(uuid, jsonb, integer, text)
+from public, anon, authenticated;
+
+grant execute on function public.registrar_pix_gateway_log(uuid, jsonb, integer, text)
+to service_role;
+
+
+-- =============================================================================
+-- 11. CONFIRMAÇÃO DE PAGAMENTO
+-- =============================================================================
+
+create or replace function public.confirmar_pagamento_pix(
+  p_order_id uuid,
+  p_txid text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_order         public.orders;
+  v_item          jsonb;
+  v_comissao_pct  numeric;
+  v_anunciante_id uuid;
+  v_afiliado_id   uuid;
+begin
+  select *
+  into v_order
+  from public.orders
+  where id = p_order_id
+  for update;
+
+  if not found then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'Pedido não encontrado.'
+    );
+  end if;
+
+  if v_order.status = 'PAGO' then
+    return jsonb_build_object(
+      'ok', true,
+      'already', true,
+      'orderId', v_order.id
+    );
+  end if;
+
+  if v_order.status = 'CANCELADO' or v_order.status = 'EXPIRADO' then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'Este pedido não está disponível para confirmação.'
+    );
+  end if;
+
+  update public.orders
+  set
+    status   = 'PAGO',
+    paid_at  = now(),
+    pix_txid = coalesce(p_txid, pix_txid)
+  where id = p_order_id;
+
+  -- Baixa do estoque no momento da liberação.
+  for v_item in
+    select *
+    from jsonb_array_elements(coalesce(v_order.items, '[]'::jsonb))
+  loop
+    update public.products
+    set stock = greatest(
+      stock - coalesce((v_item->>'quantity')::integer, 1),
+      0
+    )
+    where id = (v_item->>'productId')::uuid
+      and type = 'UNICO'
+      and stock is not null;
+  end loop;
+
+  -- Venda de anunciante: somente pedidos realmente pagos e > R$ 0.
+  if v_order.total > 0 and v_order.anunciante_codigo is not null then
+
+    select id
+    into v_anunciante_id
+    from public.anunciantes
+    where codigo = v_order.anunciante_codigo
+    limit 1;
+
+    if v_anunciante_id is not null then
+
+      update public.anunciantes
+      set total_vendas = total_vendas + 1
+      where id = v_anunciante_id;
+
+      insert into public.historico_vendas_anunciantes (
+        anunciante_id,
+        order_id,
+        produto_nome,
+        valor_compra,
+        cliente_nome
+      )
+      values (
+        v_anunciante_id,
+        v_order.id,
+        (
+          select string_agg(it->>'name', ', ')
+          from jsonb_array_elements(coalesce(v_order.items, '[]'::jsonb)) it
+        ),
+        v_order.total,
+        v_order.customer_name
+      );
+    end if;
+  end if;
+
+  -- Comissão de afiliado somente sobre pedidos realmente pagos > R$ 0.
+  if v_order.total > 0 and v_order.afiliado_id is not null then
+
+    select id
+    into v_afiliado_id
+    from public.profiles
+    where id = v_order.afiliado_id
+      and is_afiliado = true
+      and id <> v_order.customer_id
+    limit 1;
+
+    if v_afiliado_id is not null then
+
+      select coalesce(valor::numeric, 10)
+      into v_comissao_pct
+      from public.app_config
+      where chave = 'afiliado_comissao_percentual';
+
+      insert into public.afiliados_indicacoes (
+        afiliado_id,
+        cliente_id,
+        order_id,
+        valor_venda,
+        comissao,
+        status
+      )
+      values (
+        v_afiliado_id,
+        v_order.customer_id,
+        v_order.id,
+        v_order.total,
+        round(
+          v_order.total *
+          (coalesce(v_comissao_pct, 10) / 100.0),
+          2
+        ),
+        'pendente'
+      );
+    end if;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'orderId', v_order.id
+  );
+end;
+$$;
+
+revoke all on function public.confirmar_pagamento_pix(uuid, text)
+from public, anon, authenticated;
+
+grant execute on function public.confirmar_pagamento_pix(uuid, text)
+to service_role;
+
+
+-- =============================================================================
+-- 12. CRIAR PIX V2 — ÚNICA IMPLEMENTAÇÃO OFICIAL DO CHECKOUT
+-- =============================================================================
+-- Esta função:
+--   - ignora qualquer preço enviado pelo navegador;
+--   - recalcula preço no banco;
+--   - valida produto, tipo, plano e estoque;
+--   - aceita código de anunciante ou afiliado;
+--   - impede autoafiliado;
+--   - aceita cupom promocional;
+--   - permite pedido gratuito sem gateway;
+--   - monta requisição Pix usando template configurável;
+--   - registra resposta do gateway;
+--   - retorna debug somente quando pix_gateway_debug = true.
+--
+-- Placeholders disponíveis no template:
+--   {{valor_json}}              ex.: 6.00
+--   {{valor_centavos}}          ex.: 600
+--   {{descricao_json}}          ex.: "Pedido NovaStore #..."
+--   {{order_id_json}}           ex.: "uuid"
+--   {{nome_json}}               ex.: "Nome"
+--   {{email_json}}              ex.: "email@..."
+--   {{valor}}                   alias numérico
+--   {{order_id}}                UUID em texto
+-- =============================================================================
+
+create or replace function public.criar_pix_v2(
+  p_name              text,
+  p_email             text,
+  p_items             jsonb,
+  p_customer_id       uuid default null,
+  p_anunciante_codigo text default null,
+  p_afiliado_id       uuid default null,
+  p_cupom_codigo      text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_subtotal                numeric(10,2) := 0;
+  v_desconto                numeric(10,2) := 0;
+  v_total_bruto             numeric(10,2) := 0;
+  v_total                   numeric(10,2) := 0;
+
+  v_tem_codigo              boolean := false;
+  v_codigo_afiliado_usado   text := null;
+  v_anunciante_codigo       text := null;
+  v_cupom_codigo_usado      text := null;
+
+  v_order_id                uuid;
+  v_item                    jsonb;
+  v_items_reais             jsonb := '[]'::jsonb;
+
+  v_product                 public.products;
+  v_product_id              uuid;
+  v_quantity                integer;
+  v_plan_id                 integer;
+  v_plan                    jsonb;
+  v_item_price              numeric(10,2);
+  v_item_plan_name          text;
+
+  v_cupom                   public.cupons;
+  v_desconto_minimo_codigo  numeric := 80;
+  v_max_qtd_item             constant integer := 20;
+
+  v_gateway_url             text;
+  v_gateway_token           text;
+  v_gateway_auth_header     text;
+  v_gateway_auth_prefix     text;
+  v_gateway_template        text;
+  v_gateway_payload_text    text;
+  v_gateway_payload         jsonb;
+
+  v_http_response            extensions.http_response;
+  v_gateway_body_text       text;
+  v_gateway_body             jsonb;
+
+  v_pix_qrcode_base64        text;
+  v_pix_copia_cola            text;
+  v_pix_txid                 text;
+  v_pix_expira               timestamptz;
+
+  v_debug                    boolean := false;
+  v_debug_text               text;
+  v_confirm                  jsonb;
+
+  v_descricao                text;
+begin
+  -- O checkout do front exige login.
+  if auth.uid() is null then
+    return jsonb_build_object(
+      'error', 'Faça login antes de finalizar a compra.'
+    );
+  end if;
+
+  -- O cliente só pode criar pedido para si.
+  if p_customer_id is null then
+    p_customer_id := auth.uid();
+  elsif p_customer_id <> auth.uid() and not public.is_admin() then
+    return jsonb_build_object(
+      'error', 'Cliente inválido para este checkout.'
+    );
+  end if;
+
+  if p_name is null or length(trim(p_name)) < 2 then
+    return jsonb_build_object(
+      'error', 'Informe seu nome completo.'
+    );
+  end if;
+
+  if p_email is null or position('@' in p_email) = 0 then
+    return jsonb_build_object(
+      'error', 'Informe um e-mail válido.'
+    );
+  end if;
+
+  if p_items is null
+     or jsonb_typeof(p_items) <> 'array'
+     or jsonb_array_length(p_items) = 0 then
+    return jsonb_build_object(
+      'error', 'Carrinho vazio.'
+    );
+  end if;
+
+  -- ===========================================================
+  -- 1) Recalcula itens e preços usando somente o banco.
+  -- ===========================================================
+  for v_item in
+    select *
+    from jsonb_array_elements(p_items)
+  loop
+
+    begin
+      v_product_id := (v_item->>'productId')::uuid;
+    exception
+      when others then
+        return jsonb_build_object(
+          'error', 'Item do carrinho inválido.'
+        );
+    end;
+
+    begin
+      v_quantity := floor(
+        coalesce((v_item->>'quantity')::numeric, 0)
+      )::integer;
+    exception
+      when others then
+        return jsonb_build_object(
+          'error', 'Quantidade inválida para um dos itens.'
+        );
+    end;
+
+    if v_quantity is null or v_quantity <= 0 then
+      return jsonb_build_object(
+        'error', 'Quantidade inválida para um dos itens.'
+      );
+    end if;
+
+    if v_quantity > v_max_qtd_item then
+      return jsonb_build_object(
+        'error',
+        'Quantidade muito alta para um único item (máximo ' ||
+        v_max_qtd_item || ' por item).'
+      );
+    end if;
+
+    -- Bloqueio curto da linha do produto durante a validação.
+    select *
+    into v_product
+    from public.products
+    where id = v_product_id
+    for update;
+
+    if not found then
+      return jsonb_build_object(
+        'error', 'Um dos produtos do carrinho não existe mais.'
+      );
+    end if;
+
+    if not v_product.active then
+      return jsonb_build_object(
+        'error',
+        'O produto "' || v_product.name ||
+        '" não está mais disponível.'
+      );
+    end if;
+
+    v_plan_id := null;
+    v_item_plan_name := null;
+
+    if v_product.type = 'ASSINATURA' then
+
+      if v_item->>'planId' is null
+         or trim(v_item->>'planId') = '' then
+        return jsonb_build_object(
+          'error',
+          'Selecione um plano para "' ||
+          v_product.name || '".'
+        );
+      end if;
+
+      begin
+        v_plan_id := (v_item->>'planId')::integer;
+      exception
+        when others then
+          return jsonb_build_object(
+            'error',
+            'Plano inválido para "' ||
+            v_product.name || '".'
+          );
+      end;
+
+      if v_plan_id < 0
+         or v_plan_id >= jsonb_array_length(
+              coalesce(v_product.plans, '[]'::jsonb)
+            ) then
+        return jsonb_build_object(
+          'error',
+          'Plano inválido para "' ||
+          v_product.name || '".'
+        );
+      end if;
+
+      v_plan := v_product.plans -> v_plan_id;
+
+      if v_plan is null
+         or v_plan->>'price' is null then
+        return jsonb_build_object(
+          'error',
+          'Plano sem preço configurado para "' ||
+          v_product.name || '".'
+        );
+      end if;
+
+      begin
+        v_item_price := (v_plan->>'price')::numeric(10,2);
+      exception
+        when others then
+          return jsonb_build_object(
+            'error',
+            'Preço inválido no plano de "' ||
+            v_product.name || '".'
+          );
+      end;
+
+      if v_item_price < 0 then
+        return jsonb_build_object(
+          'error',
+          'Preço inválido no plano de "' ||
+          v_product.name || '".'
+        );
+      end if;
+
+      v_item_plan_name := v_plan->>'name';
+
+    else
+
+      if v_product.price is null then
+        return jsonb_build_object(
+          'error',
+          'Produto "' ||
+          v_product.name ||
+          '" está sem preço configurado.'
+        );
+      end if;
+
+      if v_product.price < 0 then
+        return jsonb_build_object(
+          'error',
+          'Produto "' ||
+          v_product.name ||
+          '" possui preço inválido.'
+        );
+      end if;
+
+      v_item_price := v_product.price;
+
+      if v_product.stock is not null
+         and v_product.stock < v_quantity then
+        return jsonb_build_object(
+          'error',
+          'Estoque insuficiente para "' ||
+          v_product.name || '".'
+        );
+      end if;
+    end if;
+
+    v_subtotal :=
+      v_subtotal +
+      (v_item_price * v_quantity);
+
+    -- NÃO grava nome/preço do navegador:
+    -- o pedido recebe apenas os dados reconstruídos pelo banco.
+    v_items_reais :=
+      v_items_reais ||
+      jsonb_build_array(
+        jsonb_build_object(
+          'productId', v_product_id,
+          'planId',    v_plan_id,
+          'name',      v_product.name,
+          'planName',  v_item_plan_name,
+          'price',     v_item_price,
+          'quantity',  v_quantity
+        )
+      );
+
+  end loop;
+
+
+  -- ===========================================================
+  -- 2) Código de anunciante / afiliado.
+  -- ===========================================================
+
+  if p_anunciante_codigo is not null
+     and trim(p_anunciante_codigo) <> '' then
+
+    select codigo
+    into v_anunciante_codigo
+    from public.anunciantes
+    where upper(trim(codigo)) =
+          upper(trim(p_anunciante_codigo))
+    limit 1;
+
+    if v_anunciante_codigo is not null then
+      v_tem_codigo := true;
+    end if;
+  end if;
+
+
+  if not v_tem_codigo
+     and p_afiliado_id is not null
+     and p_afiliado_id <> p_customer_id then
+
+    select codigo_afiliado
+    into v_codigo_afiliado_usado
+    from public.profiles
+    where id = p_afiliado_id
+      and is_afiliado = true
+      and codigo_afiliado is not null
+    limit 1;
+
+    if v_codigo_afiliado_usado is not null then
+      v_tem_codigo := true;
+    end if;
+  end if;
+
+
+  if v_tem_codigo
+     and v_subtotal >= v_desconto_minimo_codigo then
+
+    v_desconto :=
+      round(v_subtotal * 0.10, 2);
+
+  end if;
+
+
+  -- ===========================================================
+  -- 3) Cupom promocional.
+  -- ===========================================================
+
+  if p_cupom_codigo is not null
+     and trim(p_cupom_codigo) <> '' then
+
+    select *
+    into v_cupom
+    from public.cupons
+    where upper(trim(codigo)) =
+          upper(trim(p_cupom_codigo))
+    for update;
+
+    if not found then
+      return jsonb_build_object(
+        'error', 'Cupom não encontrado.'
+      );
+    end if;
+
+    if coalesce(v_cupom.ativo, true) is not true then
+      return jsonb_build_object(
+        'error', 'Este cupom não está mais ativo.'
+      );
+    end if;
+
+    if v_cupom.expira_em is not null
+       and v_cupom.expira_em < current_date then
+      return jsonb_build_object(
+        'error', 'Este cupom expirou.'
+      );
+    end if;
+
+    if v_cupom.limite_uso is not null
+       and coalesce(v_cupom.usos_atual, 0) >=
+           v_cupom.limite_uso then
+      return jsonb_build_object(
+        'error',
+        'Este cupom já atingiu o limite de usos.'
+      );
+    end if;
+
+    if v_subtotal <
+       coalesce(v_cupom.valor_minimo_compra, 0) then
+      return jsonb_build_object(
+        'error',
+        'Esse cupom vale a partir de ' ||
+        to_char(
+          coalesce(v_cupom.valor_minimo_compra, 0),
+          'FM999990.00'
+        ) ||
+        '.'
+      );
+    end if;
+
+    if v_cupom.tipo_desconto = 'percentual' then
+      v_desconto :=
+        round(
+          v_subtotal *
+          (coalesce(v_cupom.valor, 0) / 100.0),
+          2
+        );
+    else
+      v_desconto :=
+        least(
+          coalesce(v_cupom.valor, 0),
+          v_subtotal
+        );
+    end if;
+
+    v_cupom_codigo_usado := v_cupom.codigo;
+
+    -- Não acumula com o desconto de indicação.
+    v_tem_codigo := true;
+
+    update public.cupons
+    set
+      usos_atual = coalesce(usos_atual, 0) + 1,
+      usos       = coalesce(usos, coalesce(usos_atual, 0) + 1),
+      updated_at = now()
+    where id = v_cupom.id;
+  end if;
+
+
+  -- ===========================================================
+  -- 4) Total final, antes do piso da cobrança Pix.
+  -- ===========================================================
+
+  v_total_bruto :=
+    round(v_subtotal - v_desconto, 2);
+
+
+  -- ===========================================================
+  -- 5) PEDIDO GRÁTIS:
+  --    não chama o gateway.
+  -- ===========================================================
+
+  if v_total_bruto <= 0 then
+
+    insert into public.orders (
+      customer_id,
+      customer_name,
+      customer_email,
+      items,
+      total,
+      status,
+      anunciante_codigo,
+      codigo_afiliado_usado,
+      afiliado_id,
+      cupom_usado,
+      desconto_aplicado,
+      cupom_codigo_usado
+    )
+    values (
+      p_customer_id,
+      trim(p_name),
+      lower(trim(p_email)),
+      v_items_reais,
+      0,
+      'PENDENTE',
+      v_anunciante_codigo,
+      v_codigo_afiliado_usado,
+      p_afiliado_id,
+      v_cupom_codigo_usado is not null,
+      v_desconto,
+      v_cupom_codigo_usado
+    )
+    returning id into v_order_id;
+
+    v_confirm :=
+      public.confirmar_pagamento_pix(
+        v_order_id,
+        null
+      );
+
+    if v_confirm is null
+       or (v_confirm->>'ok') is distinct from 'true' then
+
+      return jsonb_build_object(
+        'error',
+        'Não foi possível liberar o pedido gratuito automaticamente. ' ||
+        'Pedido: #' || v_order_id || '.'
+      );
+    end if;
+
+    return jsonb_build_object(
+      'orderId', v_order_id,
+      'free', true
+    );
+  end if;
+
+
+  v_total := greatest(
+    round(v_total_bruto, 2),
+    0.01
+  );
+
+
+  -- ===========================================================
+  -- 6) Validação/configuração do gateway ANTES de chamar HTTP.
+  -- ===========================================================
+
+  select valor
+  into v_gateway_url
+  from public.app_config
+  where chave = 'pix_gateway_url';
+
+  select valor
+  into v_gateway_token
+  from public.app_config
+  where chave = 'pix_gateway_token';
+
+  select valor
+  into v_gateway_auth_header
+  from public.app_config
+  where chave = 'pix_gateway_auth_header';
+
+  select valor
+  into v_gateway_auth_prefix
+  from public.app_config
+  where chave = 'pix_gateway_auth_prefix';
+
+  select valor
+  into v_gateway_template
+  from public.app_config
+  where chave = 'pix_gateway_payload_template';
+
+  select lower(coalesce(valor, 'false')) in ('1','true','yes','on')
+  into v_debug
+  from public.app_config
+  where chave = 'pix_gateway_debug';
+
+  if v_debug is null then
+    v_debug := false;
+  end if;
+
+  if v_gateway_url is null
+     or trim(v_gateway_url) = '' then
+    return jsonb_build_object(
+      'error',
+      'Pagamento Pix ainda não configurado. ' ||
+      'Preencha pix_gateway_url e pix_gateway_token em app_config.'
+    );
+  end if;
+
+
+  -- ===========================================================
+  -- 7) Cria pedido PENDENTE.
+  -- ===========================================================
+
+  insert into public.orders (
+    customer_id,
+    customer_name,
+    customer_email,
+    items,
+    total,
+    status,
+    anunciante_codigo,
+    codigo_afiliado_usado,
+    afiliado_id,
+    cupom_usado,
+    desconto_aplicado,
+    cupom_codigo_usado
+  )
+  values (
+    p_customer_id,
+    trim(p_name),
+    lower(trim(p_email)),
+    v_items_reais,
+    v_total,
+    'PENDENTE',
+    v_anunciante_codigo,
+    v_codigo_afiliado_usado,
+    p_afiliado_id,
+    v_cupom_codigo_usado is not null,
+    v_desconto,
+    v_cupom_codigo_usado
+  )
+  returning id into v_order_id;
+
+
+  -- ===========================================================
+  -- 8) Monta payload configurável.
+  -- ===========================================================
+
+  v_descricao :=
+    'Pedido NovaStore #' || v_order_id;
+
+  -- Mercado Pago /v1/payments: payload com os nomes oficiais da API.
+  if v_gateway_template is null
+     or trim(v_gateway_template) = '' then
+
+    v_gateway_template :=
+      '{"transaction_amount":{{valor_json}},' ||
+      '"description":{{descricao_json}},' ||
+      '"external_reference":{{order_id_json}},' ||
+      '"payment_method_id":"pix",' ||
+      '"payer":{"email":{{email_json}}}}';
+  end if;
+
+  v_gateway_payload_text := v_gateway_template;
+
+  -- Placeholders JSON-safe.
+  v_gateway_payload_text :=
+    replace(
+      v_gateway_payload_text,
+      '{{valor_json}}',
+      to_jsonb(v_total)::text
+    );
+
+  v_gateway_payload_text :=
+    replace(
+      v_gateway_payload_text,
+      '{{descricao_json}}',
+      to_jsonb(v_descricao)::text
+    );
+
+  v_gateway_payload_text :=
+    replace(
+      v_gateway_payload_text,
+      '{{order_id_json}}',
+      to_jsonb(v_order_id::text)::text
+    );
+
+  v_gateway_payload_text :=
+    replace(
+      v_gateway_payload_text,
+      '{{nome_json}}',
+      to_jsonb(trim(p_name))::text
+    );
+
+  v_gateway_payload_text :=
+    replace(
+      v_gateway_payload_text,
+      '{{email_json}}',
+      to_jsonb(lower(trim(p_email)))::text
+    );
+
+  -- Placeholders numéricos / texto.
+  v_gateway_payload_text :=
+    replace(
+      v_gateway_payload_text,
+      '{{valor}}',
+      to_char(v_total, 'FM999999990.00')
+    );
+
+  v_gateway_payload_text :=
+    replace(
+      v_gateway_payload_text,
+      '{{valor_centavos}}',
+      round(v_total * 100)::bigint::text
+    );
+
+  v_gateway_payload_text :=
+    replace(
+      v_gateway_payload_text,
+      '{{order_id}}',
+      v_order_id::text
+    );
+
+  begin
+    v_gateway_payload :=
+      v_gateway_payload_text::jsonb;
+  exception
+    when others then
+
+      update public.orders
+      set status = 'CANCELADO'
+      where id = v_order_id;
+
+      perform public.registrar_pix_gateway_log(
+        v_order_id,
+        jsonb_build_object(
+          'valor', v_total,
+          'template', left(v_gateway_template, 8000)
+        ),
+        null,
+        'Template de payload inválido: ' || sqlerrm
+      );
+
+      return jsonb_build_object(
+        'error',
+        'A configuração do corpo do gateway Pix está inválida.',
+        'orderId', v_order_id
+      );
+  end;
+
+
+  -- ===========================================================
+  -- 9) Chamada HTTP.
+  -- ===========================================================
+
+  v_gateway_body_text := null;
+
+  begin
+
+    select *
+    into v_http_response
+    from extensions.http(
+      (
+        'POST',
+        v_gateway_url,
+        ARRAY[
+          extensions.http_header(
+            coalesce(
+              nullif(trim(v_gateway_auth_header), ''),
+              'Authorization'
+            ),
+            coalesce(v_gateway_auth_prefix, 'Bearer ') ||
+            v_gateway_token
+          ),
+          extensions.http_header(
+            'Accept',
+            'application/json'
+          ),
+          extensions.http_header(
+            'X-Idempotency-Key',
+            gen_random_uuid()::text
+          )
+        ],
+        'application/json',
+        v_gateway_payload::text
+      )::extensions.http_request
+    );
+
+  exception
+    when others then
+
+      -- Falhou antes de receber HTTP.
+      if v_cupom_codigo_usado is not null then
+        update public.cupons
+        set
+          usos_atual = greatest(coalesce(usos_atual, 0) - 1, 0),
+          usos       = greatest(coalesce(usos, 0) - 1, 0),
+          updated_at = now()
+        where codigo = v_cupom_codigo_usado;
+      end if;
+
+      update public.orders
+      set status = 'CANCELADO'
+      where id = v_order_id;
+
+      perform public.registrar_pix_gateway_log(
+        v_order_id,
+        jsonb_build_object(
+          'valor', v_total,
+          'orderId', v_order_id
+        ),
+        null,
+        'Exceção na chamada HTTP: ' || sqlerrm
+      );
+
+      if v_debug then
+        return jsonb_build_object(
+          'error',
+          'Não foi possível conectar ao gateway de pagamento.',
+          'orderId', v_order_id,
+          'debug', sqlerrm
+        );
+      end if;
+
+      return jsonb_build_object(
+        'error',
+        'Não foi possível conectar ao gateway de pagamento.',
+        'orderId', v_order_id
+      );
+  end;
+
+
+  v_gateway_body_text :=
+    left(
+      coalesce(v_http_response.content, ''),
+      12000
+    );
+
+
+  perform public.registrar_pix_gateway_log(
+    v_order_id,
+    jsonb_build_object(
+      'valor', v_total,
+      'orderId', v_order_id
+    ),
+    v_http_response.status,
+    v_gateway_body_text
+  );
+
+
+  -- ===========================================================
+  -- 10) HTTP != 2xx
+  -- ===========================================================
+
+  if v_http_response.status not between 200 and 299 then
+
+    if v_cupom_codigo_usado is not null then
+      update public.cupons
+      set
+        usos_atual = greatest(coalesce(usos_atual, 0) - 1, 0),
+        usos       = greatest(coalesce(usos, 0) - 1, 0),
+        updated_at = now()
+      where codigo = v_cupom_codigo_usado;
+    end if;
+
+    update public.orders
+    set status = 'CANCELADO'
+    where id = v_order_id;
+
+    if v_debug then
+      return jsonb_build_object(
+        'error',
+        'O gateway de pagamento recusou a cobrança (HTTP ' ||
+        v_http_response.status || ').',
+        'orderId', v_order_id,
+        'gatewayStatus', v_http_response.status,
+        'debug', v_gateway_body_text
+      );
+    end if;
+
+    return jsonb_build_object(
+      'error',
+      'O gateway de pagamento recusou a cobrança (HTTP ' ||
+      v_http_response.status || ').',
+      'orderId', v_order_id,
+      'gatewayStatus', v_http_response.status
+    );
+  end if;
+
+
+  -- ===========================================================
+  -- 11) Interpreta resposta JSON do gateway.
+  --      Aceita vários formatos comuns sem obrigar o site a
+  --      conhecer o formato interno da API.
+  -- ===========================================================
+
+  begin
+    v_gateway_body :=
+      v_http_response.content::jsonb;
+  exception
+    when others then
+
+      update public.orders
+      set status = 'CANCELADO'
+      where id = v_order_id;
+
+      if v_cupom_codigo_usado is not null then
+        update public.cupons
+        set
+          usos_atual = greatest(coalesce(usos_atual, 0) - 1, 0),
+          usos       = greatest(coalesce(usos, 0) - 1, 0),
+          updated_at = now()
+        where codigo = v_cupom_codigo_usado;
+      end if;
+
+      if v_debug then
+        return jsonb_build_object(
+          'error',
+          'O gateway respondeu, mas não retornou JSON válido.',
+          'orderId', v_order_id,
+          'gatewayStatus', v_http_response.status,
+          'debug', v_gateway_body_text
+        );
+      end if;
+
+      return jsonb_build_object(
+        'error',
+        'O gateway respondeu em formato inválido.',
+        'orderId', v_order_id
+      );
+  end;
+
+
+  -- QR base64: raiz -> data -> pix -> MP-like path.
+  v_pix_qrcode_base64 :=
+    coalesce(
+      v_gateway_body->>'qr_code_base64',
+      v_gateway_body->>'qrCodeBase64',
+      v_gateway_body->'data'->>'qr_code_base64',
+      v_gateway_body->'data'->>'qrCodeBase64',
+      v_gateway_body->'pix'->>'qr_code_base64',
+      v_gateway_body->'pix'->>'qrCodeBase64',
+      v_gateway_body#>>'{point_of_interaction,transaction_data,qr_code_base64}'
+    );
+
+  -- Copia e cola: raiz -> data -> pix -> payload/qrCode.
+  v_pix_copia_cola :=
+    coalesce(
+      v_gateway_body->>'qr_code',
+      v_gateway_body->>'qrCode',
+      v_gateway_body->>'payload',
+      v_gateway_body->'data'->>'qr_code',
+      v_gateway_body->'data'->>'qrCode',
+      v_gateway_body->'data'->>'payload',
+      v_gateway_body->'pix'->>'qr_code',
+      v_gateway_body->'pix'->>'qrCode',
+      v_gateway_body->'pix'->>'payload',
+      v_gateway_body#>>'{point_of_interaction,transaction_data,qr_code}'
+    );
+
+  -- TXID / ID de cobrança.
+  v_pix_txid :=
+    coalesce(
+      v_gateway_body->>'txid',
+      v_gateway_body->>'transaction_id',
+      v_gateway_body->>'id',
+      v_gateway_body->'data'->>'txid',
+      v_gateway_body->'data'->>'transaction_id',
+      v_gateway_body->'data'->>'id',
+      v_gateway_body->'pix'->>'txid'
+    );
+
+  -- Expiração aceita ISO/timestamp quando o gateway oferece.
+  begin
+    v_pix_expira :=
+      nullif(
+        coalesce(
+          v_gateway_body->>'date_of_expiration',
+          v_gateway_body->>'expires_at',
+          v_gateway_body->>'expiresAt',
+          v_gateway_body->'data'->>'date_of_expiration',
+          v_gateway_body->'data'->>'expires_at',
+          v_gateway_body->'data'->>'expiresAt',
+          v_gateway_body->'pix'->>'date_of_expiration',
+          v_gateway_body->'pix'->>'expires_at'
+        ),
+        ''
+      )::timestamptz;
+  exception
+    when others then
+      v_pix_expira := null;
+  end;
+
+
+  -- Alguns gateways retornam somente um payload Pix, sem imagem Base64.
+  if v_pix_qrcode_base64 is null
+     and v_pix_copia_cola is null
+     and v_pix_txid is null then
+
+    update public.orders
+    set status = 'CANCELADO'
+    where id = v_order_id;
+
+    if v_cupom_codigo_usado is not null then
+      update public.cupons
+      set
+        usos_atual = greatest(coalesce(usos_atual, 0) - 1, 0),
+        usos       = greatest(coalesce(usos, 0) - 1, 0),
+        updated_at = now()
+      where codigo = v_cupom_codigo_usado;
+    end if;
+
+    if v_debug then
+      return jsonb_build_object(
+        'error',
+        'O gateway respondeu 2xx, mas não devolveu um QR Code/txid reconhecível.',
+        'orderId', v_order_id,
+        'gatewayStatus', v_http_response.status,
+        'debug', v_gateway_body_text
+      );
+    end if;
+
+    return jsonb_build_object(
+      'error',
+      'O gateway respondeu sem os dados necessários para o Pix.',
+      'orderId', v_order_id
+    );
+  end if;
+
+
+  -- ===========================================================
+  -- 12) Salva dados Pix.
+  -- ===========================================================
+
+  update public.orders
+  set
+    pix_qrcode_base64 = v_pix_qrcode_base64,
+    pix_copia_cola    = v_pix_copia_cola,
+    pix_txid          = v_pix_txid,
+    pix_expires_at    = coalesce(
+      v_pix_expira,
+      now() + interval '30 minutes'
+    )
+  where id = v_order_id;
+
+
+  return jsonb_build_object(
+    'orderId',
+    v_order_id,
+    'qrCodeBase64',
+    v_pix_qrcode_base64,
+    'qrCode',
+    v_pix_copia_cola,
+    'expiresAt',
+    coalesce(
+      v_pix_expira,
+      now() + interval '30 minutes'
+    )
+  );
+end;
+$$;
+
+
+revoke all on function public.criar_pix_v2(
+  text, text, jsonb, uuid, text, uuid, text
+)
+from public, anon;
+
+grant execute on function public.criar_pix_v2(
+  text, text, jsonb, uuid, text, uuid, text
+)
+to authenticated;
+
+
+-- =============================================================================
+-- 13. criar_pix — COMPATIBILIDADE
+-- =============================================================================
+-- O site atual chama criar_pix_v2, mas chamadas antigas podem continuar
+-- funcionando. Não existe uma segunda implementação de gateway aqui.
+
+create or replace function public.criar_pix(
+  p_name              text,
+  p_email             text,
+  p_items             jsonb,
+  p_customer_id       uuid default null,
+  p_anunciante_codigo text default null,
+  p_afiliado_id       uuid default null
+)
+returns jsonb
+language sql
+security definer
+set search_path = public
+as $$
+  select public.criar_pix_v2(
+    p_name,
+    p_email,
+    p_items,
+    p_customer_id,
+    p_anunciante_codigo,
+    p_afiliado_id,
+    null
+  );
+$$;
+
+revoke all on function public.criar_pix(
+  text, text, jsonb, uuid, text, uuid
+)
+from public, anon;
+
+grant execute on function public.criar_pix(
+  text, text, jsonb, uuid, text, uuid
+)
+to authenticated;
+
+
+-- =============================================================================
+-- 14. STATUS DO PEDIDO
+-- =============================================================================
+
+create or replace function public.get_order_status(order_id uuid)
+returns text
+language sql
+security definer
+set search_path = public
+as $$
+  select o.status
+  from public.orders o
+  where o.id = $1
+    and (
+      o.customer_id = auth.uid()
+      or public.is_admin()
+    );
+$$;
+
+revoke all on function public.get_order_status(uuid)
+from public, anon;
+
+grant execute on function public.get_order_status(uuid)
+to authenticated;
+
+
+-- =============================================================================
+-- 15. SORTEIO
+-- =============================================================================
+
+create or replace function public.sorteio_listar_participantes()
+returns table(
+  nome text,
+  codigo_cliente text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Apenas administradores podem listar participantes.';
+  end if;
+
+  return query
+    select distinct
+      p.full_name,
+      p.codigo_cliente
+    from public.profiles p
+    join public.orders o
+      on o.customer_id = p.id
+     and o.status = 'PAGO'
+     and o.total > 0
+    where p.codigo_cliente is not null
+    order by 1;
+end;
+$$;
+
+grant execute on function public.sorteio_listar_participantes()
+to authenticated;
+
+
+create or replace function public.sorteio_definir_ganhador(
+  p_sorteio_id uuid,
+  p_codigo text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_nome text;
+begin
+  if not public.is_admin() then
+    raise exception 'Apenas administradores podem definir o ganhador.';
+  end if;
+
+  select full_name
+  into v_nome
+  from public.profiles
+  where codigo_cliente = p_codigo
+  limit 1;
+
+  if v_nome is null then
+    return jsonb_build_object(
+      'error',
+      'Cliente com esse código não encontrado.'
+    );
+  end if;
+
+  update public.sorteios
+  set
+    ganhador_nome = v_nome,
+    ganhador_codigo = p_codigo,
+    status = 'finalizado'
+  where id = p_sorteio_id;
+
+  return jsonb_build_object(
+    'ok', true
+  );
+end;
+$$;
+
+grant execute on function public.sorteio_definir_ganhador(uuid, text)
+to authenticated;
+
+
+-- =============================================================================
+-- 16. LOG DE ATIVIDADE DO ADMIN
+-- =============================================================================
+
+create or replace function public.log_admin_activity(
+  p_acao text,
+  p_detalhes jsonb default '{}'::jsonb
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_nome text;
+begin
+  if not public.is_admin() then
+    raise exception 'Apenas administradores podem registrar atividade.';
+  end if;
+
+  select full_name
+  into v_nome
+  from public.profiles
+  where id = auth.uid();
+
+  insert into public.admin_activity_log (
+    admin_id,
+    admin_name,
+    acao,
+    detalhes
+  )
+  values (
+    auth.uid(),
+    coalesce(v_nome, 'Admin'),
+    p_acao,
+    coalesce(p_detalhes, '{}'::jsonb)::text
+  );
+end;
+$$;
+
+grant execute on function public.log_admin_activity(text, jsonb)
+to authenticated;
+
+
+-- =============================================================================
+-- 17. DIAGNÓSTICO ADMIN DO PIX
+-- =============================================================================
+-- Não retorna token. Útil para confirmar rapidamente:
+--   - URL configurada
+--   - debug ligado/desligado
+--   - template
+--   - últimos erros HTTP.
+--
+-- Uso no SQL Editor, logado como admin:
+--   select public.diagnostico_pix_novastore();
+
+create or replace function public.diagnostico_pix_novastore()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_url text;
+  v_token text;
+  v_debug text;
+  v_template text;
+  v_logs jsonb;
+begin
+  if not public.is_admin() then
+    raise exception 'Apenas administradores podem consultar o diagnóstico.';
+  end if;
+
+  select valor into v_url
+  from public.app_config
+  where chave = 'pix_gateway_url';
+
+  select valor into v_token
+  from public.app_config
+  where chave = 'pix_gateway_token';
+
+  select valor into v_debug
+  from public.app_config
+  where chave = 'pix_gateway_debug';
+
+  select valor into v_template
+  from public.app_config
+  where chave = 'pix_gateway_payload_template';
+
+  select coalesce(
+    jsonb_agg(
+      jsonb_build_object(
+        'created_at', l.created_at,
+        'order_id', l.order_id,
+        'http_status', l.http_status,
+        'request_summary', l.request_summary,
+        'response_body', left(coalesce(l.response_body, ''), 4000)
+      )
+      order by l.created_at desc
+    ),
+    '[]'::jsonb
+  )
+  into v_logs
+  from (
+    select *
+    from public.pix_gateway_logs
+    order by created_at desc
+    limit 10
+  ) l;
+
+  return jsonb_build_object(
+    'gateway_url_configurado',
+    coalesce(v_url, '') <> '',
+    'gateway_url',
+    v_url,
+    'gateway_token_configurado',
+    coalesce(v_token, '') <> '',
+    'debug',
+    lower(coalesce(v_debug, 'false')) in ('1','true','yes','on'),
+    'payload_template',
+    v_template,
+    'ultimos_logs',
+    v_logs
+  );
+end;
+$$;
+
+revoke all on function public.diagnostico_pix_novastore()
+from public, anon;
+
+grant execute on function public.diagnostico_pix_novastore()
+to authenticated;
+
+
+-- =============================================================================
+-- 18. STORAGE
+-- =============================================================================
+
+insert into storage.buckets (id, name, public)
+values
+  ('product-images', 'product-images', true),
+  ('site-assets', 'site-assets', true),
+  ('chat-uploads', 'chat-uploads', true)
+on conflict (id) do nothing;
+
+
+-- product-images
+drop policy if exists "product_images_public_read" on storage.objects;
+create policy "product_images_public_read"
+on storage.objects
+for select
+to public
+using (bucket_id = 'product-images');
+
+drop policy if exists "product_images_admin_insert" on storage.objects;
+create policy "product_images_admin_insert"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'product-images'
+  and public.is_admin()
+);
+
+drop policy if exists "product_images_admin_update" on storage.objects;
+create policy "product_images_admin_update"
+on storage.objects
+for update
+to authenticated
+using (
+  bucket_id = 'product-images'
+  and public.is_admin()
+)
+with check (
+  bucket_id = 'product-images'
+  and public.is_admin()
+);
+
+drop policy if exists "product_images_admin_delete" on storage.objects;
+create policy "product_images_admin_delete"
+on storage.objects
+for delete
+to authenticated
+using (
+  bucket_id = 'product-images'
+  and public.is_admin()
+);
+
+
+-- site-assets
+drop policy if exists "site_assets_public_read" on storage.objects;
+create policy "site_assets_public_read"
+on storage.objects
+for select
+to public
+using (bucket_id = 'site-assets');
+
+drop policy if exists "site_assets_admin_insert" on storage.objects;
+create policy "site_assets_admin_insert"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'site-assets'
+  and public.is_admin()
+);
+
+drop policy if exists "site_assets_admin_update" on storage.objects;
+create policy "site_assets_admin_update"
+on storage.objects
+for update
+to authenticated
+using (
+  bucket_id = 'site-assets'
+  and public.is_admin()
+)
+with check (
+  bucket_id = 'site-assets'
+  and public.is_admin()
+);
+
+drop policy if exists "site_assets_admin_delete" on storage.objects;
+create policy "site_assets_admin_delete"
+on storage.objects
+for delete
+to authenticated
+using (
+  bucket_id = 'site-assets'
+  and public.is_admin()
+);
+
+
+-- chat-uploads
+drop policy if exists "chat_uploads_public_read" on storage.objects;
+create policy "chat_uploads_public_read"
+on storage.objects
+for select
+to public
+using (bucket_id = 'chat-uploads');
+
+drop policy if exists "chat_uploads_insert_own_folder" on storage.objects;
+create policy "chat_uploads_insert_own_folder"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'chat-uploads'
+  and (
+    name like 'global/' || auth.uid()::text || '/%'
+    or
+    name like 'private/' || auth.uid()::text || '/%'
+  )
+);
+
+
+-- =============================================================================
+-- 19. REALTIME
+-- =============================================================================
+
+do $$
+declare
+  t text;
+begin
+  foreach t in ARRAY
+    ARRAY[
+      'chat_privado',
+      'chat_global',
+      'mensagens_privadas',
+      'tickets',
+      'ticket_mensagens',
+      'messages',
+      'orders'
+    ]
+  loop
+
+    if not exists (
+      select 1
+      from pg_publication_tables
+      where pubname = 'supabase_realtime'
+        and schemaname = 'public'
+        and tablename = t
+    ) then
+      execute format(
+        'alter publication supabase_realtime add table public.%I',
+        t
+      );
+    end if;
+
+  end loop;
+end $$;
+
+
+-- =============================================================================
+-- 20. PERMISSÕES FINAIS DAS RPCs
+-- =============================================================================
+
+grant execute on function public.validar_cupom(text, numeric)
+to authenticated;
+
+grant execute on function public.log_admin_activity(text, jsonb)
+to authenticated;
+
+grant execute on function public.sorteio_listar_participantes()
+to authenticated;
+
+grant execute on function public.sorteio_definir_ganhador(uuid, text)
+to authenticated;
+
+
+-- =============================================================================
+-- 21. CHECAGEM / DADOS INICIAIS
+-- =============================================================================
+
+insert into public.site_settings (id)
+values (1)
+on conflict (id) do nothing;
+
+
+-- =============================================================================
+-- 22. TORNAR USUÁRIO ADMIN
+-- =============================================================================
+-- Execute SOMENTE trocando pelo e-mail correto:
+--
+-- update public.profiles
+-- set role = 'admin'
+-- where lower(email) = lower('SEU_EMAIL_AQUI');
+--
+-- Verificação:
+-- select id, email, full_name, role, is_afiliado, codigo_afiliado, codigo_cliente
+-- from public.profiles
+-- where lower(email) = lower('SEU_EMAIL_AQUI');
+
+
+-- =============================================================================
+-- 22A. MERCADO PAGO — CONFIGURAÇÃO DO CHECKOUT PIX
+-- =============================================================================
+-- O erro HTTP 400 foi identificado como rejeição de nomes de campos não
+-- reconhecidos pela API do Mercado Pago. Para /v1/payments, use os campos:
+-- transaction_amount, description, external_reference, payment_method_id e payer.
+-- Também é obrigatório enviar X-Idempotency-Key.
+
+update public.app_config
+set valor = 'https://api.mercadopago.com/v1/payments'
+where chave = 'pix_gateway_url'
+  and coalesce(trim(valor), '') = '';
+
+update public.app_config
+set valor =
+  '{"transaction_amount":{{valor_json}},' ||
+  '"description":{{descricao_json}},' ||
+  '"external_reference":{{order_id_json}},' ||
+  '"payment_method_id":"pix",' ||
+  '"payer":{"email":{{email_json}}}}'
+where chave = 'pix_gateway_payload_template';
+
+-- =============================================================================
+-- 23. CUPOM BEMVINDO10 — NÃO É CRIADO AUTOMATICAMENTE
+-- =============================================================================
+-- O index.html apenas mostra "BEMVINDO10" como exemplo de código.
+-- O material enviado NÃO contém um INSERT que crie esse cupom.
+--
+-- Caso esse seja realmente o cupom que você deseja ativar, execute:
+--
+-- insert into public.cupons (
+--   codigo,
+--   tipo_desconto,
+--   valor,
+--   valor_minimo_compra,
+--   limite_uso,
+--   ativo,
+--   expira_em
+-- ) values (
+--   'BEMVINDO10',
+--   'percentual',
+--   10,
+--   0,
+--   null,
+--   true,
+--   null
+-- )
+-- on conflict (codigo) do update
+-- set
+--   tipo_desconto       = excluded.tipo_desconto,
+--   valor               = excluded.valor,
+--   valor_minimo_compra = excluded.valor_minimo_compra,
+--   limite_uso          = excluded.limite_uso,
+--   ativo               = excluded.ativo,
+--   expira_em            = excluded.expira_em,
+--   updated_at          = now();
+
+
+-- =============================================================================
+-- 24. CONFIGURAÇÃO DO GATEWAY — EXEMPLO GENÉRICO
+-- =============================================================================
+-- NÃO cole token verdadeiro no index.html.
+-- O token permanece em app_config, protegido por RLS.
+--
+-- 1) URL:
+-- update public.app_config
+-- set valor = 'https://SEU-GATEWAY.EXEMPLO/pix'
+-- where chave = 'pix_gateway_url';
+--
+-- 2) TOKEN:
+-- update public.app_config
+-- set valor = 'SEU_TOKEN'
+-- where chave = 'pix_gateway_token';
+--
+-- 3) Diagnóstico temporário:
+-- update public.app_config
+-- set valor = 'true'
+-- where chave = 'pix_gateway_debug';
+--
+-- Depois de identificar o erro, desligue:
+-- update public.app_config
+-- set valor = 'false'
+-- where chave = 'pix_gateway_debug';
+--
+-- 4) Corpo atual esperado pelo template genérico:
+-- {
+--   "valor": 6.00,
+--   "descricao": "Pedido NovaStore #UUID",
+--   "referencia_externa": "UUID",
+--   "pagador": {
+--     "nome": "Nome",
+--     "email": "email@exemplo.com"
+--   }
+-- }
+--
+-- O gateway real pode exigir outro corpo.
+-- Nesse caso, altere SOMENTE o template, por exemplo:
+--
+-- update public.app_config
+-- set valor = '{"amount":{{valor_json}},"externalReference":{{order_id_json}}}'
+-- where chave = 'pix_gateway_payload_template';
+--
+-- Para conferir sem expor o token:
+-- select public.diagnostico_pix_novastore();
+
+
+-- =============================================================================
+-- FIM — NOVASTORE SUPREMO
+-- =============================================================================
