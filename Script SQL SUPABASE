@@ -17,6 +17,7 @@
 --   6) Manter public.criar_pix como compatibilidade para chamadas antigas.
 --   7) Melhorar o diagnóstico do HTTP 400 do gateway Pix, sem expor token.
 --   8) Manter RLS, Storage e Realtime usados pelo site.
+--   9) Disponibilizar a lista pública real de participantes do sorteio.
 --
 -- IMPORTANTE SOBRE O HTTP 400:
 --   O banco NÃO consegue adivinhar o contrato da API do gateway de pagamento.
@@ -2520,8 +2521,62 @@ begin
 end;
 $$;
 
+revoke all on function public.sorteio_listar_participantes()
+from public, anon, authenticated;
+
 grant execute on function public.sorteio_listar_participantes()
 to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- Lista pública real de participantes
+-- ---------------------------------------------------------------------------
+-- Regra: somente clientes com pelo menos um pedido PAGO e total > 0.
+-- Privacidade: nunca retorna e-mail, telefone ou nome completo.
+-- O nome é reduzido para "Primeiro N." quando houver sobrenome.
+-- O código do cliente é mantido porque o site o utiliza como código de sorteio.
+
+create or replace function public.sorteio_listar_participantes_publico()
+returns table(
+  nome_exibicao   text,
+  codigo_cliente  text,
+  entrou_em       timestamptz
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    case
+      when p.full_name is null or btrim(p.full_name) = ''
+        then 'Cliente NovaStore'
+      when strpos(btrim(p.full_name), ' ') = 0
+        then btrim(p.full_name)
+      else
+        split_part(btrim(p.full_name), ' ', 1)
+        || ' '
+        || left(split_part(btrim(p.full_name), ' ', 2), 1)
+        || '.'
+    end as nome_exibicao,
+    p.codigo_cliente,
+    max(o.created_at) as entrou_em
+  from public.profiles p
+  join public.orders o
+    on o.customer_id = p.id
+   and o.status = 'PAGO'
+   and o.total > 0
+  where p.codigo_cliente is not null
+  group by p.id, p.full_name, p.codigo_cliente
+  order by entrou_em desc;
+$$;
+
+-- Público somente no sentido necessário para a página do sorteio.
+revoke all on function public.sorteio_listar_participantes_publico()
+from public;
+
+grant execute on function public.sorteio_listar_participantes_publico()
+to anon, authenticated;
 
 
 create or replace function public.sorteio_definir_ganhador(
@@ -2540,16 +2595,23 @@ begin
     raise exception 'Apenas administradores podem definir o ganhador.';
   end if;
 
-  select full_name
+  select p.full_name
   into v_nome
-  from public.profiles
-  where codigo_cliente = p_codigo
+  from public.profiles p
+  where p.codigo_cliente = p_codigo
+    and exists (
+      select 1
+      from public.orders o
+      where o.customer_id = p.id
+        and o.status = 'PAGO'
+        and o.total > 0
+    )
   limit 1;
 
   if v_nome is null then
     return jsonb_build_object(
       'error',
-      'Cliente com esse código não encontrado.'
+      'Cliente com esse código não é um participante elegível do sorteio.'
     );
   end if;
 
@@ -2565,6 +2627,9 @@ begin
   );
 end;
 $$;
+
+revoke all on function public.sorteio_definir_ganhador(uuid, text)
+from public, anon, authenticated;
 
 grant execute on function public.sorteio_definir_ganhador(uuid, text)
 to authenticated;
@@ -2864,6 +2929,7 @@ end $$;
 
 -- =============================================================================
 -- 20. PERMISSÕES FINAIS DAS RPCs
+-- A lista pública do sorteio é acessível a visitantes e clientes logados.
 -- =============================================================================
 
 grant execute on function public.validar_cupom(text, numeric)
@@ -2872,11 +2938,8 @@ to authenticated;
 grant execute on function public.log_admin_activity(text, jsonb)
 to authenticated;
 
-grant execute on function public.sorteio_listar_participantes()
-to authenticated;
-
-grant execute on function public.sorteio_definir_ganhador(uuid, text)
-to authenticated;
+grant execute on function public.sorteio_listar_participantes_publico()
+to anon, authenticated;
 
 
 -- =============================================================================
@@ -3010,5 +3073,17 @@ where chave = 'pix_gateway_payload_template';
 
 
 -- =============================================================================
--- FIM — NOVASTORE SUPREMO
+-- CONSOLIDAÇÃO
+-- =============================================================================
+-- Este arquivo incorpora também o antigo:
+--   patch_sorteio_participantes_publico.sql
+-- A função pública do sorteio já está integrada acima.
+--
+-- O script é idempotente: pode ser executado novamente sem criar funções,
+-- políticas, buckets ou índices duplicados.
+--
+-- Observação: o gateway de pagamento depende de credenciais/configuração válidas
+-- em public.app_config; o SQL não pode inventar um token ou credencial real.
+-- =============================================================================
+-- FIM — NOVASTORE SUPREMO UNIFICADO
 -- =============================================================================
