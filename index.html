@@ -5578,7 +5578,11 @@ async function submitCheckout(e) {
     });
 
     if (error || (data && data.error)) {
-      errEl.textContent = (data && data.error) || error?.message || "Erro ao gerar o Pix.";
+      let msg = (data && data.error) || error?.message || "Erro ao gerar o Pix.";
+      // DEBUG TEMPORÁRIO: mostra o motivo exato que o gateway devolveu (campo "debug"
+      // adicionado no patch SQL). Remova este bloco depois de identificar o problema.
+      if (data && data.debug) msg += ` [debug: ${typeof data.debug === "string" ? data.debug : JSON.stringify(data.debug)}]`;
+      errEl.textContent = msg;
       errEl.classList.remove("hidden");
       btn.disabled = false;
       btn.textContent = originalBtnLabel;
