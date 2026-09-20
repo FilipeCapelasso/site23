@@ -1132,7 +1132,9 @@
         <nav class="admin-tabs-scroll flex flex-nowrap gap-1 overflow-x-auto border-b border-border pb-0 lg:sticky lg:top-[88px] lg:w-60 lg:shrink-0 lg:flex-col lg:gap-1 lg:overflow-visible lg:border-b-0 lg:pb-0">
           <button id="admin-tab-btn-dashboard" onclick="switchAdminTab('dashboard')" class="admin-tab-btn flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-primary bg-primary/10 px-3 py-3 text-sm font-bold text-white transition-colors sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5">🏠 <span>Visão Geral</span></button>
           <button id="admin-tab-btn-products" onclick="switchAdminTab('products')" class="admin-tab-btn flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5 lg:hover:bg-white/5">📦 <span>Produtos</span></button>
-          <button id="admin-tab-btn-conversas" onclick="switchAdminTab('conversas')" class="admin-tab-btn flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5 lg:hover:bg-white/5">🚚 <span>Entregas</span></button>
+          <button id="admin-tab-btn-conversas" onclick="switchAdminTab('conversas')" class="admin-tab-btn relative flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5 lg:hover:bg-white/5">🚚 <span>Entregas</span>
+            <span id="admin-conversas-unread-badge" class="hidden absolute right-2 top-2 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white lg:right-3"></span>
+          </button>
           <button id="admin-tab-btn-suporte" onclick="switchAdminTab('suporte')" class="admin-tab-btn relative flex shrink-0 items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-bold text-muted transition-colors hover:text-white sm:px-4 lg:border-b-0 lg:border-l-2 lg:px-4 lg:py-2.5 lg:hover:bg-white/5">💬 <span>Suporte</span>
             <span id="admin-suporte-unread-badge" class="hidden absolute right-2 top-2 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white lg:right-3"></span>
           </button>
@@ -1207,7 +1209,7 @@
 
       <section id="admin-tab-conversas" class="hidden">
         <h1 class="mb-6 font-display text-2xl font-bold uppercase">Entregas</h1>
-        <p class="mb-6 text-sm text-muted">Pedidos com pagamento confirmado. Envie aqui a entrega do produto (chave, login, acesso etc.) diretamente para o cliente.</p>
+        <p class="mb-6 text-sm text-muted">Pedidos com pagamento confirmado. Cada pedido é um chat com o cliente: envie a entrega do produto (chave, login, acesso etc.), veja as respostas dele e exclua o chat quando não precisar mais.</p>
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
           <div class="overflow-hidden rounded-2xl border border-border bg-surface">
             <div id="admin-conversas-list" class="max-h-[65vh] overflow-y-auto"></div>
@@ -2306,14 +2308,27 @@
 <div id="entrega-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-2 sm:p-4 modal-overlay" onclick="if(event.target===this) closeEntregaModal()">
   <div class="tg-modal flex flex-col overflow-hidden rounded-2xl border border-border">
     <div class="tg-header flex items-center gap-3 px-5 py-3.5">
+      <button id="entrega-back-btn" onclick="showEntregaList()" class="hidden shrink-0 text-xl text-muted hover:text-white" aria-label="Voltar para a lista de pedidos">←</button>
       <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-lg">📦</span>
       <div class="flex-1 truncate">
-        <p class="font-display text-lg font-bold uppercase leading-tight">Entrega</p>
-        <p class="text-[11px] text-muted">Seus produtos, chaves e avisos da loja</p>
+        <p id="entrega-header-title" class="truncate font-display text-lg font-bold uppercase leading-tight">Entrega</p>
+        <p id="entrega-header-sub" class="truncate text-[11px] text-muted">Seus pedidos e conversas com a loja</p>
       </div>
-      <button onclick="closeEntregaModal()" class="shrink-0 text-xl leading-none text-muted hover:text-white">✕</button>
+      <button onclick="closeEntregaModal()" class="shrink-0 text-xl leading-none text-muted hover:text-white" aria-label="Fechar">✕</button>
     </div>
-    <div id="entrega-body" class="tg-body flex-1 space-y-3 overflow-y-auto p-4"></div>
+
+    <div id="entrega-list-view" class="tg-body flex flex-1 flex-col overflow-hidden">
+      <div id="entrega-list-body" class="flex-1 space-y-2.5 overflow-y-auto p-4"></div>
+    </div>
+
+    <div id="entrega-thread-view" class="hidden flex-1 flex-col overflow-hidden">
+      <div id="entrega-thread-messages" class="tg-body flex-1 space-y-2.5 overflow-y-auto p-4"></div>
+      <p id="entrega-thread-error" class="hidden bg-black px-4 pt-2 text-xs text-red-400"></p>
+      <form id="entrega-thread-form" class="tg-inputbar flex items-end gap-2 p-3">
+        <input id="entrega-thread-input" type="text" autocomplete="off" maxlength="1000" placeholder="Responder à loja..." class="flex-1 rounded-full px-4 py-2.5 text-sm outline-none" />
+        <button type="submit" class="tg-send-btn" aria-label="Enviar">➤</button>
+      </form>
+    </div>
   </div>
 </div>
 
@@ -3707,17 +3722,42 @@ async function sendFriendMessage(imageFile) {
 }
 
 /* =========================================================================
-   ENTREGA — caixa de entrada do cliente (ícone 📦 no header).
-   Só recebe: entregas de produto (chave, login, acesso), avisos de pagamento
-   e recados da loja. Lê a tabela `messages` (receiver_id = cliente logado),
-   a mesma onde o admin grava pela aba "Entregas". O cliente não responde aqui.
+   ENTREGA — caixa do cliente (ícone 📦 no header), em formato de chat.
+   Cada PEDIDO com mensagens vira uma conversa: "Pedido #XXXX + nome do produto".
+   Ao tocar, abre o chat com o que a loja enviou (chave, login, avisos) e o
+   cliente pode responder. Lê/grava na tabela `messages` (uma linha por
+   mensagem, agrupadas por order_id). Resposta do cliente = receiver_id nulo.
+   O admin exclui o chat inteiro pela aba "Entregas" do painel.
    ========================================================================= */
-let entregaChannel = null;       // canal enquanto o modal está aberto
-let entregaBadgeChannel = null;  // canal em segundo plano pro contador
-let ENTREGA_CACHE = [];
+let entregaBadgeChannel = null;     // canal em segundo plano (contador + tempo real)
+let ENTREGA_CHATS = [];             // [{ orderId, shortId, produto, produtoCompleto, msgs, last, unread }]
+let currentEntregaOrderId = null;   // null = lista de pedidos; senão, chat aberto
+let entregaRefreshTimer = null;
+let entregaBadgeTimer = null;
 
 function entregaModalAberto() {
   return !document.getElementById("entrega-modal").classList.contains("hidden");
+}
+
+/* mensagem do próprio cliente = ele enviou e não é destinada a ele mesmo
+   (mensagens da loja sempre têm receiver_id = cliente, mesmo se o admin testar com a própria conta) */
+const entregaMsgMinha = (m) => m.sender_id === CURRENT_USER?.id && m.receiver_id !== CURRENT_USER?.id;
+const entregaHora = (iso) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+const entregaMesmoDia = (a, b) => a.toDateString() === b.toDateString();
+
+function entregaTempoLista(iso) {
+  const d = new Date(iso);
+  return entregaMesmoDia(d, new Date()) ? entregaHora(iso) : d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
+function entregaRotuloDia(iso) {
+  const d = new Date(iso);
+  const hoje = new Date();
+  const ontem = new Date();
+  ontem.setDate(hoje.getDate() - 1);
+  if (entregaMesmoDia(d, hoje)) return "Hoje";
+  if (entregaMesmoDia(d, ontem)) return "Ontem";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 window.openEntregaModal = async () => {
@@ -3725,88 +3765,290 @@ window.openEntregaModal = async () => {
   const modal = document.getElementById("entrega-modal");
   modal.classList.remove("hidden");
   modal.classList.add("flex");
-  document.getElementById("entrega-body").innerHTML = `<p class="py-10 text-center text-sm text-muted">Carregando suas entregas...</p>`;
-  await loadEntregaMessages();
 
-  if (entregaChannel) supabase.removeChannel(entregaChannel);
-  entregaChannel = supabase
-    .channel(`entrega-${CURRENT_USER.id}`)
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `receiver_id=eq.${CURRENT_USER.id}` }, () => loadEntregaMessages())
-    .subscribe();
+  document.getElementById("entrega-thread-form").onsubmit = (e) => { e.preventDefault(); sendEntregaReply(); };
+  document.getElementById("entrega-thread-messages").onclick = (e) => {
+    const btn = e.target.closest("[data-copy-id]");
+    if (btn) copyEntregaMsg(btn.dataset.copyId, btn);
+  };
+
+  currentEntregaOrderId = null;
+  applyEntregaView();
+  document.getElementById("entrega-list-body").innerHTML = `<p class="py-10 text-center text-sm text-muted">Carregando seus pedidos...</p>`;
+  const ok = await loadEntregaData();
+  if (!ok) {
+    document.getElementById("entrega-list-body").innerHTML = `<p class="py-10 text-center text-sm text-red-400">Não foi possível carregar suas entregas agora.</p>`;
+    return;
+  }
+  renderEntregaList();
+  updateEntregaBadge();
 };
 
 window.closeEntregaModal = () => {
   const modal = document.getElementById("entrega-modal");
   modal.classList.add("hidden");
   modal.classList.remove("flex");
-  if (entregaChannel) { supabase.removeChannel(entregaChannel); entregaChannel = null; }
+  currentEntregaOrderId = null;
 };
 
-async function loadEntregaMessages() {
-  const body = document.getElementById("entrega-body");
-  if (!CURRENT_USER || !body) return;
+/* busca os pedidos do cliente + todas as mensagens desses pedidos e agrupa por pedido */
+async function loadEntregaData() {
+  if (!CURRENT_USER) return false;
 
-  const { data: msgs, error } = await supabase
+  const { data: orders, error: oErr } = await supabase
+    .from("orders")
+    .select("id, items, created_at")
+    .eq("customer_id", CURRENT_USER.id)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (oErr) return false;
+
+  const orderIds = (orders || []).map((o) => o.id);
+  if (!orderIds.length) { ENTREGA_CHATS = []; return true; }
+
+  const { data: msgs, error: mErr } = await supabase
     .from("messages")
     .select("*")
-    .eq("receiver_id", CURRENT_USER.id)
-    .order("created_at", { ascending: false })
-    .limit(100);
+    .in("order_id", orderIds)
+    .order("created_at", { ascending: true })
+    .limit(1000);
+  if (mErr) return false;
 
-  if (error) {
-    body.innerHTML = `<p class="py-10 text-center text-sm text-red-400">Não foi possível carregar suas entregas agora.</p>`;
-    return;
+  const byOrder = new Map();
+  for (const m of msgs || []) {
+    if (!byOrder.has(m.order_id)) byOrder.set(m.order_id, []);
+    byOrder.get(m.order_id).push(m);
   }
 
-  ENTREGA_CACHE = msgs || [];
-  if (!ENTREGA_CACHE.length) {
+  ENTREGA_CHATS = (orders || [])
+    .filter((o) => byOrder.has(o.id))
+    .map((o) => {
+      const chatMsgs = byOrder.get(o.id);
+      const nomes = (o.items || []).map((it) => it.name).filter(Boolean);
+      return {
+        orderId: o.id,
+        shortId: String(o.id).slice(0, 8).toUpperCase(),
+        produto: nomes.length ? nomes[0] + (nomes.length > 1 ? ` +${nomes.length - 1}` : "") : "Pedido",
+        produtoCompleto: nomes.join(", "),
+        msgs: chatMsgs,
+        last: chatMsgs[chatMsgs.length - 1],
+        unread: chatMsgs.filter((m) => m.receiver_id === CURRENT_USER.id && !m.read_at).length,
+      };
+    })
+    .sort((a, b) => new Date(b.last.created_at) - new Date(a.last.created_at));
+
+  return true;
+}
+
+/* alterna entre lista e chat (e ajusta o cabeçalho) */
+function applyEntregaView() {
+  const emChat = !!currentEntregaOrderId;
+  const chat = emChat ? ENTREGA_CHATS.find((c) => c.orderId === currentEntregaOrderId) : null;
+
+  document.getElementById("entrega-list-view").classList.toggle("hidden", emChat);
+  document.getElementById("entrega-list-view").classList.toggle("flex", !emChat);
+  document.getElementById("entrega-thread-view").classList.toggle("hidden", !emChat);
+  document.getElementById("entrega-thread-view").classList.toggle("flex", emChat);
+  document.getElementById("entrega-back-btn").classList.toggle("hidden", !emChat);
+
+  document.getElementById("entrega-header-title").textContent = chat ? `Pedido #${chat.shortId}` : "Entrega";
+  document.getElementById("entrega-header-sub").textContent = chat ? (chat.produtoCompleto || "Conversa com a loja") : "Seus pedidos e conversas com a loja";
+}
+
+window.showEntregaList = () => {
+  currentEntregaOrderId = null;
+  document.getElementById("entrega-thread-error").classList.add("hidden");
+  applyEntregaView();
+  renderEntregaList();
+};
+
+function renderEntregaList() {
+  const body = document.getElementById("entrega-list-body");
+  if (!body) return;
+
+  if (!ENTREGA_CHATS.length) {
     body.innerHTML = `
       <div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted">
         <span class="text-4xl">📦</span>
         <p class="font-bold text-white">Nenhuma entrega por aqui ainda</p>
-        <p>Quando o seu pagamento for confirmado, o seu produto (chave, login ou acesso) e os avisos da loja chegam nesta caixa.</p>
+        <p>Quando o seu pagamento for confirmado, cada pedido vira uma conversa com a loja aqui — é nela que chegam o seu produto (chave, login ou acesso) e os avisos.</p>
       </div>`;
     return;
   }
 
-  // nome dos produtos de cada pedido (o cliente só enxerga os próprios pedidos)
-  const orderIds = [...new Set(ENTREGA_CACHE.map((m) => m.order_id))];
-  const { data: orders } = await supabase.from("orders").select("id, items").in("id", orderIds);
-  const orderMap = new Map((orders || []).map((o) => [o.id, o]));
-
-  body.innerHTML = ENTREGA_CACHE.map((m, i) => {
-    const o = orderMap.get(m.order_id);
-    const produtos = (o?.items || []).map((it) => it.name).filter(Boolean).join(", ");
-    const novo = !m.read_at;
+  body.innerHTML = ENTREGA_CHATS.map((c) => {
+    const preview = String(c.last.message_text || "").replace(/\s+/g, " ").trim();
+    const prefixo = entregaMsgMinha(c.last) ? "Você: " : "";
     return `
-      <div class="rounded-2xl border ${novo ? "border-primary/60 bg-primary/10" : "border-border bg-surface2/60"} p-4">
-        <div class="mb-2 flex items-center justify-between gap-2">
-          <p class="text-[11px] font-bold uppercase tracking-wide text-accent">📦 Pedido #${escapeHTML(String(m.order_id).slice(0, 8).toUpperCase())}</p>
-          ${novo ? `<span class="rounded bg-primary/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">Novo</span>` : ""}
-        </div>
-        ${produtos ? `<p class="mb-2 text-xs font-semibold text-white">${escapeHTML(produtos)}</p>` : ""}
-        <p class="whitespace-pre-wrap break-words text-sm text-white">${escapeHTML(m.message_text)}</p>
-        <div class="mt-3 flex items-center justify-between gap-2">
-          <span class="text-[11px] text-muted">${new Date(m.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span>
-          <button onclick="copyEntrega(${i}, this)" class="btn-press rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-muted hover:border-primary/60 hover:text-white">📋 Copiar</button>
-        </div>
-      </div>`;
+      <button onclick='openEntregaChat(${JSON.stringify(c.orderId)})' class="btn-press flex w-full items-center gap-3 rounded-2xl border ${c.unread ? "border-primary/60 bg-primary/10" : "border-border bg-surface2/60"} p-3.5 text-left transition-colors hover:border-primary/60">
+        <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-xl">📦</span>
+        <span class="min-w-0 flex-1">
+          <span class="flex items-center justify-between gap-2">
+            <span class="truncate text-[11px] font-bold uppercase tracking-wide text-accent">Pedido #${escapeHTML(c.shortId)}</span>
+            <span class="shrink-0 text-[10px] text-muted">${entregaTempoLista(c.last.created_at)}</span>
+          </span>
+          <span class="block truncate text-sm font-bold text-white">${escapeHTML(c.produto)}</span>
+          <span class="mt-0.5 flex items-center justify-between gap-2">
+            <span class="truncate text-xs text-muted">${prefixo}${escapeHTML(preview)}</span>
+            ${c.unread ? `<span class="shrink-0 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">${c.unread > 9 ? "9+" : c.unread}</span>` : ""}
+          </span>
+        </span>
+      </button>`;
+  }).join("");
+}
+
+window.openEntregaChat = async (orderId) => {
+  currentEntregaOrderId = orderId;
+  document.getElementById("entrega-thread-error").classList.add("hidden");
+  document.getElementById("entrega-thread-input").value = "";
+  applyEntregaView();
+  renderEntregaThread(true);
+  await markEntregaChatRead(orderId);
+};
+
+function entregaBubbleHTML(m) {
+  const mine = entregaMsgMinha(m);
+  const pending = !!m._pending;
+  const hora = entregaHora(m.created_at);
+  const texto = `<span class="whitespace-pre-wrap break-words">${escapeHTML(m.message_text)}</span>`;
+
+  if (mine) {
+    return `<div class="flex">
+      <div class="tg-bubble tg-bubble-mine ${pending ? "tg-pending" : ""}">
+        ${texto}
+        <div class="tg-bubble-time">${pending ? '<span class="tg-spin">⏱️</span>' : ""}${hora}</div>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="flex">
+    <div class="tg-bubble tg-bubble-other">
+      <p class="mb-0.5 text-[10px] font-extrabold uppercase tracking-wide text-accent">Loja</p>
+      ${texto}
+      <div class="mt-1.5 flex items-center justify-between gap-3">
+        <button type="button" data-copy-id="${escapeHTML(String(m.id))}" class="btn-press rounded-md border border-[#c3ccd8] px-2 py-0.5 text-[10px] font-bold text-[#3b4452] hover:bg-black/5">📋 Copiar</button>
+        <span class="tg-bubble-time" style="margin-top:0">${hora}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderEntregaThread(forceBottom = false) {
+  const el = document.getElementById("entrega-thread-messages");
+  const chat = ENTREGA_CHATS.find((c) => c.orderId === currentEntregaOrderId);
+  if (!el || !chat) return;
+
+  const prevTop = el.scrollTop;
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+
+  let ultimoDia = "";
+  el.innerHTML = chat.msgs.map((m) => {
+    const dia = new Date(m.created_at).toDateString();
+    const sep = dia !== ultimoDia
+      ? `<div class="flex justify-center py-1"><span class="rounded-full bg-black/40 px-3 py-1 text-[10px] font-bold text-[#9fb0c3]">${entregaRotuloDia(m.created_at)}</span></div>`
+      : "";
+    ultimoDia = dia;
+    return sep + entregaBubbleHTML(m);
   }).join("");
 
-  // abrir a caixa = marcar como lidas
-  if (entregaModalAberto() && ENTREGA_CACHE.some((m) => !m.read_at)) {
-    await supabase.rpc("entrega_marcar_lidas");
-  }
+  el.scrollTop = (forceBottom || nearBottom) ? el.scrollHeight : prevTop;
+}
+
+/* abrir o chat = marcar como lidas só as mensagens desse pedido */
+async function markEntregaChatRead(orderId) {
+  const chat = ENTREGA_CHATS.find((c) => c.orderId === orderId);
+  if (!chat || !chat.unread) return;
+
+  let { error } = await supabase.rpc("entrega_marcar_lidas_pedido", { p_order_id: orderId });
+  if (error) ({ error } = await supabase.rpc("entrega_marcar_lidas")); // banco ainda sem a migração nova
+  if (error) return;
+
+  const agora = new Date().toISOString();
+  chat.msgs.forEach((m) => { if (m.receiver_id === CURRENT_USER.id && !m.read_at) m.read_at = agora; });
+  chat.unread = 0;
   updateEntregaBadge();
 }
 
-window.copyEntrega = (i, btn) => {
-  const m = ENTREGA_CACHE[i];
+function showEntregaError(msg) {
+  const el = document.getElementById("entrega-thread-error");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+
+async function sendEntregaReply() {
+  if (!CURRENT_USER || !currentEntregaOrderId) return;
+  const input = document.getElementById("entrega-thread-input");
+  const text = input.value.trim();
+  if (!text) return;
+
+  const orderId = currentEntregaOrderId;
+  const chat = ENTREGA_CHATS.find((c) => c.orderId === orderId);
+  if (!chat) return;
+
+  input.value = "";
+  document.getElementById("entrega-thread-error").classList.add("hidden");
+
+  // bolha otimista (aparece na hora, com o relógio, até o servidor confirmar)
+  const localId = `local-${crypto.randomUUID()}`;
+  const tmp = { id: localId, order_id: orderId, sender_id: CURRENT_USER.id, receiver_id: null, message_text: text, read_at: null, created_at: new Date().toISOString(), _pending: true };
+  chat.msgs.push(tmp);
+  chat.last = tmp;
+  renderEntregaThread(true);
+
+  const { data, error } = await supabase
+    .from("messages")
+    .insert({ order_id: orderId, sender_id: CURRENT_USER.id, receiver_id: null, message_text: text })
+    .select()
+    .single();
+
+  const idx = chat.msgs.findIndex((m) => m.id === localId);
+  if (error || !data) {
+    if (idx >= 0) chat.msgs.splice(idx, 1);
+    chat.last = chat.msgs[chat.msgs.length - 1];
+    if (currentEntregaOrderId === orderId) {
+      renderEntregaThread(true);
+      input.value = text;
+      showEntregaError("Não foi possível enviar sua mensagem. Tente de novo.");
+    }
+    dwarn("Erro ao responder na entrega:", error?.message || error);
+    return;
+  }
+
+  if (idx >= 0) chat.msgs[idx] = data;
+  chat.last = chat.msgs[chat.msgs.length - 1];
+  if (currentEntregaOrderId === orderId) renderEntregaThread(true);
+}
+
+window.copyEntregaMsg = (id, btn) => {
+  const chat = ENTREGA_CHATS.find((c) => c.orderId === currentEntregaOrderId);
+  const m = chat?.msgs.find((x) => String(x.id) === String(id));
   if (!m) return;
   navigator.clipboard.writeText(m.message_text || "");
   btn.textContent = "✓ Copiado!";
   setTimeout(() => (btn.textContent = "📋 Copiar"), 2000);
 };
+
+/* recarrega os dados com o modal aberto (mensagem nova da loja ou chat excluído pelo admin) */
+function scheduleEntregaRefresh() {
+  clearTimeout(entregaRefreshTimer);
+  entregaRefreshTimer = setTimeout(async () => {
+    if (!entregaModalAberto()) return;
+    const ok = await loadEntregaData();
+    if (!ok) return;
+    if (currentEntregaOrderId) {
+      if (ENTREGA_CHATS.some((c) => c.orderId === currentEntregaOrderId)) {
+        applyEntregaView();
+        renderEntregaThread();
+        await markEntregaChatRead(currentEntregaOrderId);
+      } else {
+        showEntregaList(); // o admin excluiu esse chat
+      }
+    } else {
+      renderEntregaList();
+    }
+    updateEntregaBadge();
+  }, 200);
+}
 
 async function updateEntregaBadge() {
   const badge = document.getElementById("entrega-unread-badge");
@@ -3817,14 +4059,29 @@ async function updateEntregaBadge() {
   if (count) badge.textContent = count > 9 ? "9+" : String(count);
 }
 
+function scheduleEntregaBadge() {
+  clearTimeout(entregaBadgeTimer);
+  entregaBadgeTimer = setTimeout(updateEntregaBadge, 300);
+}
+
 function subscribeToEntregaBadge() {
   if (entregaBadgeChannel) { supabase.removeChannel(entregaBadgeChannel); entregaBadgeChannel = null; }
   if (!CURRENT_USER) { updateEntregaBadge(); return; }
+  const filtro = `receiver_id=eq.${CURRENT_USER.id}`;
   entregaBadgeChannel = supabase
     .channel(`entrega-badge-${CURRENT_USER.id}`)
-    .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `receiver_id=eq.${CURRENT_USER.id}` }, () => {
-      updateEntregaBadge();
-      if (entregaModalAberto()) loadEntregaMessages();
+    // mensagem nova da loja
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: filtro }, () => {
+      scheduleEntregaBadge();
+      if (entregaModalAberto()) scheduleEntregaRefresh();
+    })
+    // lida em outro aparelho/aba
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages", filter: filtro }, () => scheduleEntregaBadge())
+    // chat excluído pelo admin (o Realtime não filtra DELETE por coluna; só recarrega se a mensagem era do cliente)
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "messages" }, (payload) => {
+      scheduleEntregaBadge();
+      const id = payload.old?.id;
+      if (entregaModalAberto() && (!id || ENTREGA_CHATS.some((c) => c.msgs.some((m) => m.id === id)))) scheduleEntregaRefresh();
     })
     .subscribe();
   updateEntregaBadge();
@@ -5949,6 +6206,7 @@ async function checkAdminSession() {
 }
 
 function showAdminLogin(errorMsg) {
+  stopAdminConversasRealtime();
   document.getElementById("admin-login-screen").classList.remove("hidden");
   document.getElementById("admin-panel-screen").classList.add("hidden");
   const errEl = document.getElementById("login-error");
@@ -5966,6 +6224,7 @@ function showAdminPanel() {
   loadAdminDashboard();
   initAdminNotifications();
   initContasAutoRefresh();
+  initAdminConversasRealtime();
 }
 
 document.getElementById("login-form").onsubmit = async (e) => {
@@ -5996,36 +6255,125 @@ window.logoutAdmin = async () => { await supabase.auth.signOut(); showAdminLogin
    ========================================================================= */
 
 let ADMIN_ORDERS = [];
+let ADMIN_CONVERSAS_META = new Map(); // orderId -> { last, count, unread } (unread = respostas do cliente ainda não lidas)
 let currentAdminOrder = null;
-let adminChatRealtimeChannel = null;
+let adminConversasChannel = null;
+let adminConversasTimer = null;
 
-async function loadAdminConversas() {
-  const list = document.getElementById("admin-conversas-list");
-  list.innerHTML = `<div class="p-4 text-sm text-muted">Carregando pedidos pagos...</div>`;
+/* mensagem do cliente = quem enviou foi o próprio cliente do pedido e não é destinada a ele
+   (mensagens da equipe sempre têm receiver_id = cliente, mesmo se o admin testar com a própria conta) */
+const isClientMsg = (m, customerId) => m.sender_id === customerId && m.receiver_id !== customerId;
 
+/* pedidos pagos + resumo do chat de cada um (última mensagem, total, respostas não lidas) */
+async function fetchAdminConversas() {
   const { data: orders, error } = await supabase
     .from("orders")
     .select("*")
     .eq("status", "PAGO")
     .order("created_at", { ascending: false });
+  if (error) throw error;
 
-  if (error) { list.innerHTML = `<div class="p-4 text-sm text-red-400">Erro: ${error.message}</div>`; return; }
+  const { data: msgs, error: mErr } = await supabase
+    .from("messages")
+    .select("order_id, sender_id, receiver_id, message_text, read_at, created_at")
+    .order("created_at", { ascending: false })
+    .limit(3000);
+  if (mErr) throw mErr;
 
-  ADMIN_ORDERS = orders || [];
+  const byId = new Map((orders || []).map((o) => [o.id, o]));
+  const meta = new Map();
+  for (const m of msgs || []) { // vem da mais nova pra mais antiga
+    const o = byId.get(m.order_id);
+    if (!o) continue;
+    if (!meta.has(m.order_id)) meta.set(m.order_id, { last: m, count: 0, unread: 0 });
+    const info = meta.get(m.order_id);
+    info.count++;
+    if (isClientMsg(m, o.customer_id) && !m.read_at) info.unread++;
+  }
+
+  const atividade = (o) => new Date(meta.get(o.id)?.last.created_at || o.created_at).getTime();
+  ADMIN_ORDERS = (orders || []).slice().sort((a, b) => atividade(b) - atividade(a));
+  ADMIN_CONVERSAS_META = meta;
+  updateAdminConversasBadge();
+}
+
+function updateAdminConversasBadge() {
+  const badge = document.getElementById("admin-conversas-unread-badge");
+  if (!badge) return;
+  let total = 0;
+  ADMIN_CONVERSAS_META.forEach((info) => { total += info.unread; });
+  badge.classList.toggle("hidden", !total);
+  if (total) badge.textContent = total > 9 ? "9+" : String(total);
+}
+
+function renderAdminConversasList() {
+  const list = document.getElementById("admin-conversas-list");
   if (!ADMIN_ORDERS.length) { list.innerHTML = `<div class="p-4 text-sm text-muted">Nenhum pedido pago ainda.</div>`; return; }
 
   list.innerHTML = ADMIN_ORDERS.map((o) => {
     const productName = (o.items && o.items[0] && o.items[0].name) || "Pedido";
     const extra = (o.items && o.items.length > 1) ? ` +${o.items.length - 1}` : "";
+    const info = ADMIN_CONVERSAS_META.get(o.id);
+    const preview = info ? String(info.last.message_text || "").replace(/\s+/g, " ").trim() : "";
+    const previewPrefix = info ? (isClientMsg(info.last, o.customer_id) ? "Cliente: " : "Você: ") : "";
+    const ativo = currentAdminOrder?.id === o.id;
     return `
-    <button onclick='openAdminConversa(${JSON.stringify(o.id)})' data-order-id="${o.id}" class="admin-conversa-item block w-full border-b border-border/60 px-4 py-3.5 text-left hover:bg-white/5">
-      <div class="flex items-center justify-between gap-2">
-        <span class="truncate text-sm font-bold text-white">${escapeHTML(o.customer_name || "Cliente")}</span>
-        <span class="shrink-0 text-[11px] text-muted">${fmt(o.total)}</span>
-      </div>
-      <p class="truncate text-xs text-muted">${escapeHTML(productName)}${extra}</p>
-    </button>`;
+    <div class="relative border-b border-border/60">
+      <button onclick='openAdminConversa(${JSON.stringify(o.id)})' data-order-id="${o.id}" class="admin-conversa-item block w-full px-4 py-3.5 text-left hover:bg-white/5 ${ativo ? "bg-white/5" : ""}">
+        <div class="flex items-center justify-between gap-2">
+          <span class="truncate text-sm font-bold text-white">${escapeHTML(o.customer_name || "Cliente")}</span>
+          <span class="flex shrink-0 items-center gap-2">
+            ${info?.unread ? `<span class="min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">${info.unread > 9 ? "9+" : info.unread}</span>` : ""}
+            <span class="text-[11px] text-muted">${fmt(o.total)}</span>
+          </span>
+        </div>
+        <p class="truncate text-xs text-muted">${escapeHTML(productName)}${extra}</p>
+        ${info ? `<p class="mt-0.5 truncate pr-9 text-xs ${info.unread ? "font-semibold text-white" : "text-muted"}">${previewPrefix}${escapeHTML(preview)}</p>` : ""}
+      </button>
+      ${info ? `<button onclick='deleteAdminChat(${JSON.stringify(o.id)})' title="Excluir chat" aria-label="Excluir chat" class="absolute bottom-2.5 right-3 flex h-7 w-7 items-center justify-center rounded-lg text-sm text-muted hover:bg-red-500/15 hover:text-red-400">🗑️</button>` : ""}
+    </div>`;
   }).join("");
+}
+
+async function loadAdminConversas() {
+  const list = document.getElementById("admin-conversas-list");
+  if (!list.children.length) list.innerHTML = `<div class="p-4 text-sm text-muted">Carregando pedidos pagos...</div>`;
+  try {
+    await fetchAdminConversas();
+  } catch (error) {
+    list.innerHTML = `<div class="p-4 text-sm text-red-400">Erro: ${escapeHTML(error.message || String(error))}</div>`;
+    return;
+  }
+  renderAdminConversasList();
+}
+
+/* tempo real: mensagem nova (resposta do cliente) ou chat excluído em outra janela */
+function initAdminConversasRealtime() {
+  if (adminConversasChannel) supabase.removeChannel(adminConversasChannel);
+  fetchAdminConversas().catch(() => {}); // já deixa o contador da aba correto ao entrar no painel
+  adminConversasChannel = supabase
+    .channel("admin-conversas-all")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+      scheduleAdminConversasRefresh();
+      if (currentAdminOrder && payload.new.order_id === currentAdminOrder.id) loadAdminChatMessages(currentAdminOrder.id);
+    })
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "messages" }, () => {
+      scheduleAdminConversasRefresh();
+      if (currentAdminOrder) loadAdminChatMessages(currentAdminOrder.id);
+    })
+    .subscribe();
+}
+
+function stopAdminConversasRealtime() {
+  if (adminConversasChannel) { supabase.removeChannel(adminConversasChannel); adminConversasChannel = null; }
+}
+
+function scheduleAdminConversasRefresh() {
+  clearTimeout(adminConversasTimer);
+  adminConversasTimer = setTimeout(async () => {
+    try { await fetchAdminConversas(); } catch { return; }
+    if (!document.getElementById("admin-tab-conversas").classList.contains("hidden")) renderAdminConversasList();
+  }, 400);
 }
 
 window.openAdminConversa = async (orderId) => {
@@ -6039,11 +6387,14 @@ window.openAdminConversa = async (orderId) => {
     .join(", ");
 
   detail.innerHTML = `
-    <div class="border-b border-border p-4">
-      <p class="text-sm font-bold text-white">${escapeHTML(currentAdminOrder.customer_name || "Cliente")}</p>
-      <p class="text-xs text-muted">${escapeHTML(currentAdminOrder.customer_email || "")}</p>
-      <p class="mt-2 text-xs text-muted"><span class="font-semibold text-white">Produto(s):</span> ${escapeHTML(productsList)}</p>
-      <p class="text-xs text-muted"><span class="font-semibold text-white">Valor:</span> ${fmt(currentAdminOrder.total)}</p>
+    <div class="flex items-start justify-between gap-3 border-b border-border p-4">
+      <div class="min-w-0">
+        <p class="text-sm font-bold text-white">${escapeHTML(currentAdminOrder.customer_name || "Cliente")}</p>
+        <p class="text-xs text-muted">${escapeHTML(currentAdminOrder.customer_email || "")}</p>
+        <p class="mt-2 text-xs text-muted"><span class="font-semibold text-white">Produto(s):</span> ${escapeHTML(productsList)}</p>
+        <p class="text-xs text-muted"><span class="font-semibold text-white">Valor:</span> ${fmt(currentAdminOrder.total)}</p>
+      </div>
+      <button id="admin-chat-delete-btn" onclick='deleteAdminChat(${JSON.stringify(orderId)})' class="hidden shrink-0 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-bold text-red-400 hover:bg-red-500/10">🗑️ Excluir chat</button>
     </div>
     <div id="admin-chat-messages" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
     <form id="admin-chat-form" class="flex items-center gap-2 border-t border-border p-3">
@@ -6053,27 +6404,38 @@ window.openAdminConversa = async (orderId) => {
   `;
   document.getElementById("admin-chat-form").onsubmit = (e) => { e.preventDefault(); sendAdminChatMessage(orderId); };
   await loadAdminChatMessages(orderId);
-  subscribeAdminChat(orderId);
 };
 
 async function loadAdminChatMessages(orderId) {
   const { data: msgs } = await supabase.from("messages").select("*").eq("order_id", orderId).order("created_at", { ascending: true });
+  if (!currentAdminOrder || currentAdminOrder.id !== orderId) return; // admin já abriu outro pedido
   renderAdminChatMessages(msgs || []);
+
+  // abrir o chat = marcar as respostas do cliente como lidas
+  const temNaoLida = (msgs || []).some((m) => isClientMsg(m, currentAdminOrder.customer_id) && !m.read_at);
+  if (temNaoLida) {
+    const { error } = await supabase.rpc("entrega_admin_marcar_lidas", { p_order_id: orderId });
+    if (!error) {
+      const info = ADMIN_CONVERSAS_META.get(orderId);
+      if (info) info.unread = 0;
+      updateAdminConversasBadge();
+      renderAdminConversasList();
+    }
+  }
 }
 
 function renderAdminChatMessages(msgs) {
   const el = document.getElementById("admin-chat-messages");
   if (!el) return;
+  document.getElementById("admin-chat-delete-btn")?.classList.toggle("hidden", !msgs.length);
   if (!msgs.length) {
-    el.innerHTML = `<div class="flex h-full items-center justify-center p-6 text-center text-sm text-muted">Nenhuma mensagem ainda. Envie a entrega do produto abaixo — ela chega na caixa 📦 Entrega do cliente.</div>`;
+    el.innerHTML = `<div class="flex h-full items-center justify-center p-6 text-center text-sm text-muted">Nenhuma mensagem ainda. Envie a entrega do produto abaixo — ela chega no chat do pedido, na caixa 📦 Entrega do cliente.</div>`;
     return;
   }
   el.innerHTML = msgs.map((m) => {
-    // se quem enviou não foi o próprio cliente do pedido, a mensagem é da equipe (admin)
-    // (a mensagem com receiver_id = cliente sempre é da equipe, mesmo se o admin testar com a própria conta)
-    const fromTeam = m.sender_id !== currentAdminOrder.customer_id || m.receiver_id === currentAdminOrder.customer_id;
+    const fromTeam = !isClientMsg(m, currentAdminOrder.customer_id);
     return `<div class="flex ${fromTeam ? "justify-end" : "justify-start"}">
-      <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${fromTeam ? "bg-primary text-white" : "bg-surface2 text-white"}">
+      <div class="max-w-[75%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2.5 text-sm ${fromTeam ? "bg-primary text-white" : "bg-surface2 text-white"}">
         ${escapeHTML(m.message_text)}
       </div>
     </div>`;
@@ -6094,16 +6456,28 @@ async function sendAdminChatMessage(orderId) {
     receiver_id: currentAdminOrder.customer_id,
     message_text: text,
   });
-  if (error) alert("Erro ao enviar mensagem: " + error.message);
+  if (error) { input.value = text; alert("Erro ao enviar mensagem: " + error.message); }
 }
 
-function subscribeAdminChat(orderId) {
-  if (adminChatRealtimeChannel) supabase.removeChannel(adminChatRealtimeChannel);
-  adminChatRealtimeChannel = supabase
-    .channel(`admin-chat-${orderId}`)
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `order_id=eq.${orderId}` }, () => loadAdminChatMessages(orderId))
-    .subscribe();
-}
+/* exclui TODO o chat de um pedido (as mensagens somem também para o cliente) */
+window.deleteAdminChat = async (orderId) => {
+  const o = ADMIN_ORDERS.find((x) => x.id === orderId);
+  if (!o) return;
+  const curto = String(orderId).slice(0, 8).toUpperCase();
+  if (!confirm(`Excluir todo o chat do pedido #${curto} (${o.customer_name || "cliente"})?\n\nAs mensagens também somem para o cliente e não podem ser recuperadas. O pedido em si não é afetado.`)) return;
+
+  const { data, error } = await supabase.from("messages").delete().eq("order_id", orderId).select("id");
+  if (error) { alert("Erro ao excluir o chat: " + error.message); return; }
+  // sem a policy de DELETE o Supabase não dá erro: só devolve 0 linhas
+  if ((ADMIN_CONVERSAS_META.get(orderId)?.count || 0) > 0 && !(data || []).length) {
+    alert("Nada foi excluído. A exclusão ainda não está liberada no Supabase — rode o arquivo migracao_chat_entrega.sql no SQL Editor.");
+    return;
+  }
+
+  logAdminActivity("Excluiu chat de entrega", `Pedido #${curto} — ${o.customer_name || "Cliente"}`);
+  if (currentAdminOrder?.id === orderId) renderAdminChatMessages([]);
+  await loadAdminConversas();
+};
 
 /* =========================================================================
    PAINEL ADMIN — ABA "MENSAGENS": chat privado 1-para-1 com cada cliente
