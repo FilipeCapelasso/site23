@@ -3093,3 +3093,62 @@ where chave = 'pix_gateway_payload_template';
 -- =============================================================================
 -- FIM — NOVASTORE SUPREMO UNIFICADO
 -- =============================================================================
+
+-- 1) Nova coluna para descrição personalizável de cada sorteio
+alter table public.sorteios add column if not exists descricao text;
+
+-- 2) Precisa apagar a função antiga primeiro, porque o tipo de retorno
+--    mudou (ela ganhou a coluna "total_gasto") e o Postgres não permite
+--    trocar OUT parameters com "create or replace".
+drop function if exists public.sorteio_listar_participantes_publico();
+
+create function public.sorteio_listar_participantes_publico()
+returns table(
+  nome_exibicao   text,
+  codigo_cliente  text,
+  entrou_em       timestamptz,
+  total_gasto     numeric
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    case
+      when p.full_name is null or btrim(p.full_name) = ''
+        then 'Cliente NovaStore'
+      when strpos(btrim(p.full_name), ' ') = 0
+        then btrim(p.full_name)
+      else
+        split_part(btrim(p.full_name), ' ', 1)
+        || ' '
+        || left(split_part(btrim(p.full_name), ' ', 2), 1)
+        || '.'
+    end as nome_exibicao,
+    p.codigo_cliente,
+    max(o.created_at) as entrou_em,
+    coalesce(sum(o.total), 0) as total_gasto
+  from public.profiles p
+  join public.orders o
+    on o.customer_id = p.id
+   and o.status = 'PAGO'
+   and o.total > 0
+  where p.codigo_cliente is not null
+  group by p.id, p.full_name, p.codigo_cliente
+  order by entrou_em desc;
+$$;
+
+revoke all on function public.sorteio_listar_participantes_publico()
+from public;
+
+grant execute on function public.sorteio_listar_participantes_publico()
+to anon, authenticated;
+
+
+-- Adiciona a coluna que está faltando na tabela "sorteios"
+alter table public.sorteios add column if not exists imagem_url text;
+
+-- Força o PostgREST a recarregar o cache do schema (às vezes ele demora
+-- alguns segundos pra perceber sozinho que uma coluna nova apareceu)
+notify pgrst, 'reload schema';
