@@ -770,10 +770,11 @@
         </button>
         <button onclick="openGlobalChatModal()" title="Chat Global" class="relative hidden h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60 sm:flex">
           🌐
+          <span id="friends-unread-dot" class="hidden absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-accent ring-2 ring-surface"></span>
         </button>
-        <button onclick="openFriendsModal()" title="Amigos" class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60">
-          👥
-          <span id="friends-unread-badge" class="hidden absolute -right-1 -top-1 min-w-[16px] rounded-full bg-accent px-1 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
+        <button onclick="openEntregaModal()" title="Entrega" class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60">
+          📦
+          <span id="entrega-unread-badge" class="hidden absolute -right-1 -top-1 min-w-[16px] rounded-full bg-accent px-1 py-0.5 text-center text-[10px] font-bold leading-none text-white pulse-glow"></span>
         </button>
         <div class="relative">
           <button id="btn-login" onclick="openAuthModal('login')" class="whitespace-nowrap rounded-full bg-primary px-3.5 py-2 text-sm font-bold text-white hover:bg-primaryhover sm:px-5">Login</button>
@@ -797,6 +798,7 @@
       <a href="#" onclick="event.preventDefault(); toggleMobileMenu(true); openChatModal();" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white">Suporte</a>
       <a href="#sorteio" onclick="toggleMobileMenu(true);" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white">🎁 Sorteio</a>
       <a href="#" onclick="event.preventDefault(); toggleMobileMenu(true); openGlobalChatModal();" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white sm:hidden">🌐 Chat global</a>
+      <a href="#" onclick="event.preventDefault(); toggleMobileMenu(true); openFriendsModal();" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white">👥 Amigos</a>
       <a href="#painel" onclick="toggleMobileMenu(true); goToPainel();" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white">👤 Meu painel</a>
     </div>
   </header>
@@ -2281,6 +2283,10 @@
         <p class="font-display text-lg font-bold uppercase leading-tight">Chat Global</p>
         <p class="text-[11px] text-muted">Comunidade NovaStore · tempo real</p>
       </div>
+      <button onclick="closeGlobalChatModal(); openFriendsModal();" title="Amigos" class="relative shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-bold text-muted hover:border-primary/60 hover:text-white">
+        👥 Amigos
+        <span id="friends-unread-badge" class="hidden absolute -right-1 -top-1 min-w-[16px] rounded-full bg-accent px-1 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
+      </button>
       <button onclick="closeGlobalChatModal()" class="shrink-0 text-xl leading-none text-muted hover:text-white">✕</button>
     </div>
     <div id="global-chat-messages" class="tg-body flex-1 space-y-2.5 overflow-y-auto p-4"></div>
@@ -2294,6 +2300,20 @@
       <input id="global-chat-input" type="text" autocomplete="off" maxlength="500" placeholder="Digite sua mensagem para a comunidade..." class="flex-1 rounded-full px-4 py-2.5 text-sm outline-none" />
       <button type="submit" class="tg-send-btn">➤</button>
     </form>
+  </div>
+</div>
+
+<div id="entrega-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-2 sm:p-4 modal-overlay" onclick="if(event.target===this) closeEntregaModal()">
+  <div class="tg-modal flex flex-col overflow-hidden rounded-2xl border border-border">
+    <div class="tg-header flex items-center gap-3 px-5 py-3.5">
+      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-accent text-lg">📦</span>
+      <div class="flex-1 truncate">
+        <p class="font-display text-lg font-bold uppercase leading-tight">Entrega</p>
+        <p class="text-[11px] text-muted">Seus produtos, chaves e avisos da loja</p>
+      </div>
+      <button onclick="closeEntregaModal()" class="shrink-0 text-xl leading-none text-muted hover:text-white">✕</button>
+    </div>
+    <div id="entrega-body" class="tg-body flex-1 space-y-3 overflow-y-auto p-4"></div>
   </div>
 </div>
 
@@ -3328,7 +3348,7 @@ function subscribeToGlobalChat() {
     .subscribe();
 }
 
-supabase.auth.onAuthStateChange((_event, session) => { handleAuthChange(session); subscribeToPrivateBadge(); subscribeToFriendsUnread(); loadFriendStatusCache(); });
+supabase.auth.onAuthStateChange((_event, session) => { handleAuthChange(session); subscribeToPrivateBadge(); subscribeToFriendsUnread(); subscribeToEntregaBadge(); loadFriendStatusCache(); });
 
 /* =========================================================================
    BALÃO DE PERFIL — abre ao clicar em nome/avatar de alguém no chat global
@@ -3686,15 +3706,140 @@ async function sendFriendMessage(imageFile) {
   }
 }
 
+/* =========================================================================
+   ENTREGA — caixa de entrada do cliente (ícone 📦 no header).
+   Só recebe: entregas de produto (chave, login, acesso), avisos de pagamento
+   e recados da loja. Lê a tabela `messages` (receiver_id = cliente logado),
+   a mesma onde o admin grava pela aba "Entregas". O cliente não responde aqui.
+   ========================================================================= */
+let entregaChannel = null;       // canal enquanto o modal está aberto
+let entregaBadgeChannel = null;  // canal em segundo plano pro contador
+let ENTREGA_CACHE = [];
+
+function entregaModalAberto() {
+  return !document.getElementById("entrega-modal").classList.contains("hidden");
+}
+
+window.openEntregaModal = async () => {
+  if (!CURRENT_USER) { openAuthModal("login"); return; }
+  const modal = document.getElementById("entrega-modal");
+  modal.classList.remove("hidden");
+  modal.classList.add("flex");
+  document.getElementById("entrega-body").innerHTML = `<p class="py-10 text-center text-sm text-muted">Carregando suas entregas...</p>`;
+  await loadEntregaMessages();
+
+  if (entregaChannel) supabase.removeChannel(entregaChannel);
+  entregaChannel = supabase
+    .channel(`entrega-${CURRENT_USER.id}`)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `receiver_id=eq.${CURRENT_USER.id}` }, () => loadEntregaMessages())
+    .subscribe();
+};
+
+window.closeEntregaModal = () => {
+  const modal = document.getElementById("entrega-modal");
+  modal.classList.add("hidden");
+  modal.classList.remove("flex");
+  if (entregaChannel) { supabase.removeChannel(entregaChannel); entregaChannel = null; }
+};
+
+async function loadEntregaMessages() {
+  const body = document.getElementById("entrega-body");
+  if (!CURRENT_USER || !body) return;
+
+  const { data: msgs, error } = await supabase
+    .from("messages")
+    .select("*")
+    .eq("receiver_id", CURRENT_USER.id)
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (error) {
+    body.innerHTML = `<p class="py-10 text-center text-sm text-red-400">Não foi possível carregar suas entregas agora.</p>`;
+    return;
+  }
+
+  ENTREGA_CACHE = msgs || [];
+  if (!ENTREGA_CACHE.length) {
+    body.innerHTML = `
+      <div class="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted">
+        <span class="text-4xl">📦</span>
+        <p class="font-bold text-white">Nenhuma entrega por aqui ainda</p>
+        <p>Quando o seu pagamento for confirmado, o seu produto (chave, login ou acesso) e os avisos da loja chegam nesta caixa.</p>
+      </div>`;
+    return;
+  }
+
+  // nome dos produtos de cada pedido (o cliente só enxerga os próprios pedidos)
+  const orderIds = [...new Set(ENTREGA_CACHE.map((m) => m.order_id))];
+  const { data: orders } = await supabase.from("orders").select("id, items").in("id", orderIds);
+  const orderMap = new Map((orders || []).map((o) => [o.id, o]));
+
+  body.innerHTML = ENTREGA_CACHE.map((m, i) => {
+    const o = orderMap.get(m.order_id);
+    const produtos = (o?.items || []).map((it) => it.name).filter(Boolean).join(", ");
+    const novo = !m.read_at;
+    return `
+      <div class="rounded-2xl border ${novo ? "border-primary/60 bg-primary/10" : "border-border bg-surface2/60"} p-4">
+        <div class="mb-2 flex items-center justify-between gap-2">
+          <p class="text-[11px] font-bold uppercase tracking-wide text-accent">📦 Pedido #${escapeHTML(String(m.order_id).slice(0, 8).toUpperCase())}</p>
+          ${novo ? `<span class="rounded bg-primary/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">Novo</span>` : ""}
+        </div>
+        ${produtos ? `<p class="mb-2 text-xs font-semibold text-white">${escapeHTML(produtos)}</p>` : ""}
+        <p class="whitespace-pre-wrap break-words text-sm text-white">${escapeHTML(m.message_text)}</p>
+        <div class="mt-3 flex items-center justify-between gap-2">
+          <span class="text-[11px] text-muted">${new Date(m.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span>
+          <button onclick="copyEntrega(${i}, this)" class="btn-press rounded-lg border border-border px-3 py-1.5 text-[11px] font-bold text-muted hover:border-primary/60 hover:text-white">📋 Copiar</button>
+        </div>
+      </div>`;
+  }).join("");
+
+  // abrir a caixa = marcar como lidas
+  if (entregaModalAberto() && ENTREGA_CACHE.some((m) => !m.read_at)) {
+    await supabase.rpc("entrega_marcar_lidas");
+  }
+  updateEntregaBadge();
+}
+
+window.copyEntrega = (i, btn) => {
+  const m = ENTREGA_CACHE[i];
+  if (!m) return;
+  navigator.clipboard.writeText(m.message_text || "");
+  btn.textContent = "✓ Copiado!";
+  setTimeout(() => (btn.textContent = "📋 Copiar"), 2000);
+};
+
+async function updateEntregaBadge() {
+  const badge = document.getElementById("entrega-unread-badge");
+  if (!badge) return;
+  if (!CURRENT_USER) { badge.classList.add("hidden"); return; }
+  const { count } = await supabase.from("messages").select("id", { count: "exact", head: true }).eq("receiver_id", CURRENT_USER.id).is("read_at", null);
+  badge.classList.toggle("hidden", !count);
+  if (count) badge.textContent = count > 9 ? "9+" : String(count);
+}
+
+function subscribeToEntregaBadge() {
+  if (entregaBadgeChannel) { supabase.removeChannel(entregaBadgeChannel); entregaBadgeChannel = null; }
+  if (!CURRENT_USER) { updateEntregaBadge(); return; }
+  entregaBadgeChannel = supabase
+    .channel(`entrega-badge-${CURRENT_USER.id}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `receiver_id=eq.${CURRENT_USER.id}` }, () => {
+      updateEntregaBadge();
+      if (entregaModalAberto()) loadEntregaMessages();
+    })
+    .subscribe();
+  updateEntregaBadge();
+}
+
 /* badge de não lidas no ícone 👥 do header, atualizado em segundo plano mesmo
    com o modal de amigos fechado */
 async function updateFriendsUnreadBadge() {
   const badge = document.getElementById("friends-unread-badge");
-  if (!badge) return;
-  if (!CURRENT_USER) { badge.classList.add("hidden"); return; }
+  const dot = document.getElementById("friends-unread-dot");
+  if (!CURRENT_USER) { badge?.classList.add("hidden"); dot?.classList.add("hidden"); return; }
   const { count } = await supabase.from("mensagens_privadas").select("id", { count: "exact", head: true }).eq("receiver_id", CURRENT_USER.id).is("read_at", null);
-  badge.classList.toggle("hidden", !count);
-  if (count) badge.textContent = count > 9 ? "9+" : String(count);
+  badge?.classList.toggle("hidden", !count);
+  dot?.classList.toggle("hidden", !count);
+  if (badge && count) badge.textContent = count > 9 ? "9+" : String(count);
 }
 
 function subscribeToFriendsUnread() {
@@ -3706,7 +3851,7 @@ function subscribeToFriendsUnread() {
     .subscribe();
   updateFriendsUnreadBadge();
 }
-supabase.auth.getSession().then(({ data: { session } }) => { handleAuthChange(session); subscribeToPrivateBadge(); subscribeToFriendsUnread(); loadFriendStatusCache(); });
+supabase.auth.getSession().then(({ data: { session } }) => { handleAuthChange(session); subscribeToPrivateBadge(); subscribeToFriendsUnread(); subscribeToEntregaBadge(); loadFriendStatusCache(); });
 
 /* ---------------- Game categories (used for filter bar, card tags, and admin select) ---------------- */
 
@@ -5919,12 +6064,13 @@ function renderAdminChatMessages(msgs) {
   const el = document.getElementById("admin-chat-messages");
   if (!el) return;
   if (!msgs.length) {
-    el.innerHTML = `<div class="flex h-full items-center justify-center p-6 text-center text-sm text-muted">Nenhuma mensagem ainda. Envie a entrega do produto abaixo.</div>`;
+    el.innerHTML = `<div class="flex h-full items-center justify-center p-6 text-center text-sm text-muted">Nenhuma mensagem ainda. Envie a entrega do produto abaixo — ela chega na caixa 📦 Entrega do cliente.</div>`;
     return;
   }
   el.innerHTML = msgs.map((m) => {
     // se quem enviou não foi o próprio cliente do pedido, a mensagem é da equipe (admin)
-    const fromTeam = m.sender_id !== currentAdminOrder.customer_id;
+    // (a mensagem com receiver_id = cliente sempre é da equipe, mesmo se o admin testar com a própria conta)
+    const fromTeam = m.sender_id !== currentAdminOrder.customer_id || m.receiver_id === currentAdminOrder.customer_id;
     return `<div class="flex ${fromTeam ? "justify-end" : "justify-start"}">
       <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${fromTeam ? "bg-primary text-white" : "bg-surface2 text-white"}">
         ${escapeHTML(m.message_text)}
@@ -7819,26 +7965,30 @@ async function loadAdminContas() {
   const { data: profiles, error } = await supabase
     .from("profiles")
     .select("id, full_name, email, avatar_url, role, created_at, is_afiliado, codigo_afiliado")
-    .eq("role", "client")
     .order("created_at", { ascending: false });
 
   if (error) { tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-red-400">Erro: ${error.message}</td></tr>`; return; }
 
-  const { data: orders } = await supabase.from("orders").select("customer_id, total, status").not("customer_id", "is", null);
+  const { data: orders } = await supabase.from("orders").select("customer_id, customer_email, total, status");
 
+  // pedido ligado à conta pelo id; pedidos feitos sem login entram pelo e-mail
   const statsMap = new Map();
-  (orders || []).forEach((o) => {
-    if (!statsMap.has(o.customer_id)) statsMap.set(o.customer_id, { pedidos: 0, gasto: 0 });
-    const s = statsMap.get(o.customer_id);
+  const addStat = (key, o) => {
+    if (!statsMap.has(key)) statsMap.set(key, { pedidos: 0, gasto: 0 });
+    const s = statsMap.get(key);
     s.pedidos++;
     if (o.status === "PAGO") s.gasto += Number(o.total || 0);
+  };
+  (orders || []).forEach((o) => {
+    if (o.customer_id) addStat(o.customer_id, o);
+    else if (o.customer_email) addStat("email:" + String(o.customer_email).toLowerCase(), o);
   });
 
-  ADMIN_CONTAS = (profiles || []).map((p) => ({
-    ...p,
-    pedidos: statsMap.get(p.id)?.pedidos || 0,
-    gasto: statsMap.get(p.id)?.gasto || 0,
-  }));
+  ADMIN_CONTAS = (profiles || []).map((p) => {
+    const a = statsMap.get(p.id);
+    const b = statsMap.get("email:" + String(p.email || "").toLowerCase());
+    return { ...p, pedidos: (a?.pedidos || 0) + (b?.pedidos || 0), gasto: (a?.gasto || 0) + (b?.gasto || 0) };
+  });
 
   document.getElementById("contas-total-count").textContent = `${ADMIN_CONTAS.length} conta${ADMIN_CONTAS.length === 1 ? "" : "s"}`;
   renderContasTable();
@@ -7860,6 +8010,7 @@ window.renderContasTable = () => {
         <div class="flex items-center gap-3">
           <span class="avatar-circle">${escapeHTML((c.full_name || "C").trim().charAt(0).toUpperCase())}</span>
           <span>${escapeHTML(c.full_name || "Cliente")}</span>
+          ${c.role === "admin" ? `<span class="rounded bg-primary/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">Admin</span>` : ""}
         </div>
       </td>
       <td class="px-4 py-3 text-muted">${escapeHTML(c.email || "—")}</td>
@@ -7881,11 +8032,19 @@ window.openContaDetalhe = async (clienteId) => {
 
   const conta = ADMIN_CONTAS.find((c) => c.id === clienteId);
 
-  const [{ data: orders }, { data: views, error: viewsError }] = await Promise.all([
-    supabase.from("orders").select("*").eq("customer_id", clienteId).order("created_at", { ascending: false }),
+  // pedidos da conta: por id e também pelo e-mail (compras feitas sem login)
+  const emailConta = String(conta?.email || "").toLowerCase().replace(/"/g, "");
+  let ordersQuery = supabase.from("orders").select("*").order("created_at", { ascending: false });
+  ordersQuery = emailConta
+    ? ordersQuery.or(`customer_id.eq.${clienteId},and(customer_id.is.null,customer_email.eq."${emailConta}")`)
+    : ordersQuery.eq("customer_id", clienteId);
+
+  const [{ data: orders, error: ordersError }, { data: views, error: viewsError }] = await Promise.all([
+    ordersQuery,
     supabase.from("product_views").select("*").eq("cliente_id", clienteId).order("created_at", { ascending: false }),
   ]);
 
+  if (ordersError) console.error("Erro ao carregar pedidos da conta:", ordersError.message, ordersError);
   if (viewsError) console.error("Erro ao carregar visualizações de produto:", viewsError.message, viewsError);
 
   const allOrders = orders || [];
@@ -7913,7 +8072,10 @@ window.openContaDetalhe = async (clienteId) => {
           <p class="text-xs text-muted">Cadastrado em ${conta?.created_at ? new Date(conta.created_at).toLocaleDateString("pt-BR") : "—"}</p>
         </div>
       </div>
-      <button onclick="closeContaDetalhe()" class="shrink-0 text-muted hover:text-white">✕</button>
+      <div class="flex shrink-0 items-center gap-3">
+        <button onclick="openContaDetalhe('${clienteId}')" title="Atualizar" class="text-xs font-bold hover:underline lilac">↻ Atualizar</button>
+        <button onclick="closeContaDetalhe()" class="text-muted hover:text-white">✕</button>
+      </div>
     </div>
 
     <div class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -7925,7 +8087,7 @@ window.openContaDetalhe = async (clienteId) => {
 
     <div class="mb-5">
       <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Pedidos recentes</h3>
-      ${allOrders.length ? `
+      ${ordersError ? `<p class="text-sm text-red-400">Erro ao carregar: ${escapeHTML(ordersError.message)}</p>` : allOrders.length ? `
       <div class="overflow-x-auto rounded-xl border border-border">
         <table class="w-full text-left text-sm">
           <thead class="border-b border-border bg-surface2 text-muted"><tr><th class="px-3 py-2">Produto</th><th class="px-3 py-2">Data</th><th class="px-3 py-2">Valor</th><th class="px-3 py-2">Status</th></tr></thead>
