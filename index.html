@@ -7359,6 +7359,134 @@ let PUBLIC_SORTEIOS_FINALIZADOS = [];
 let PUBLIC_SORTEIOS_ABERTOS = [];
 let PUBLIC_SORTEIO_PARTICIPANTES = [];
 
+/* =========================================================================
+   PRÉVIA VISUAL DA LISTA DE PARTICIPANTES
+   -------------------------------------------------------------------------
+   Participantes de EXEMPLO (nomes de avaliação, nicks gamer e nomes normais)
+   gerados só no navegador pra você ver como a lista fica cheia. Eles:
+     • NÃO existem no banco (nenhuma conta, e-mail ou pedido é criado);
+     • NÃO entram em sorteio_listar_participantes (a função que o admin usa
+       pra girar) e NÃO passam em sorteio_definir_ganhador — o banco só aceita
+       cliente real, cadastrado e com pagamento confirmado;
+     • somem sozinhos quando você põe  ativo: false.
+   Clientes reais aparecem na mesma lista com o código de sorteio verdadeiro
+   (o codigo_cliente do perfil) assim que o pagamento é confirmado.
+   ========================================================================= */
+const SORTEIO_PREVIEW = {
+  ativo: true,          // false = mostra só clientes reais (use isso ao lançar)
+  marcarExemplo: true,  // true = cada linha de exemplo leva a etiqueta "EXEMPLO"
+};
+
+const SORTEIO_DEMO_EXTRAS = [
+  "Mateus Ribeiro", "Bianca Moraes", "Thiago Lima", "Camila Torres", "Leo_FPS", "Nathy_gg",
+  "drakzin", "Pedro Henrique", "Isabela Rocha", "Ghost_BR", "zKaue", "Marcos Vinicius",
+  "Amanda Ferreira", "sn1per_cx", "Gustavo Melo", "Yasmin Alves", "rafaelzin", "toxic_pix",
+  "Diego Martins", "Luana Costa", "w1nter", "HeadshotBR", "Beatriz Souza", "Vinicius Prado",
+  "kaiquezz", "Leticia Ramos", "Matheus_7", "ShadowKing", "Clara Nogueira", "Ryan_Lopes",
+];
+const _sorteioDemoCache = new Map();
+
+/* gerador pseudo-aleatório com semente: o mesmo sorteio sempre mostra a mesma
+   lista (não muda a cada F5), mas cada sorteio tem uma lista diferente. */
+function sorteioSeededRng(seedStr) {
+  let h = 1779033703 ^ seedStr.length;
+  for (let i = 0; i < seedStr.length; i++) {
+    h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  let a = h >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* mesmo formato que o banco usa pros clientes reais: "Primeiro N." */
+function sorteioNomeCurto(nome) {
+  const partes = String(nome || "").trim().split(/\s+/).filter(Boolean);
+  if (partes.length < 2) return partes[0] || "Cliente NovaStore";
+  return `${partes[0]} ${partes[1].charAt(0).toUpperCase()}.`;
+}
+
+function sorteioGerarDemo(s, codigosEmUso) {
+  if (_sorteioDemoCache.has(s.id)) return _sorteioDemoCache.get(s.id);
+  const rng = sorteioSeededRng(String(s.id));
+  let pool = [];
+  try { pool = TESTIMONIALS_SEED.map((t) => t.name); } catch (e) { /* seed indisponível: usa só os extras */ }
+  pool = [...new Set([...pool, ...SORTEIO_DEMO_EXTRAS])];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const total = Math.min(pool.length, 14 + Math.floor(rng() * 22));
+  const usados = new Set(codigosEmUso || []);
+  const agora = Date.now();
+  const lista = pool.slice(0, total).map((nome) => {
+    let codigo;
+    do { codigo = "#" + (1000 + Math.floor(rng() * 9000)); } while (usados.has(codigo));
+    usados.add(codigo);
+    const r = rng();
+    const gasto = r < 0.68 ? 20 + rng() * 170 : r < 0.88 ? 200 + rng() * 290 : r < 0.97 ? 500 + rng() * 990 : 1500 + rng() * 900;
+    return {
+      nome_exibicao: sorteioNomeCurto(nome),
+      codigo_cliente: codigo,
+      total_gasto: Math.round(gasto),
+      entrou_em: new Date(agora - (0.5 + rng() * 9) * 86400000).toISOString(),
+      exemplo: true,
+    };
+  });
+  _sorteioDemoCache.set(s.id, lista);
+  return lista;
+}
+
+/* Lista final de um sorteio = clientes reais (+ ganhador, se já finalizado)
+   + exemplos da prévia. Sempre do mais recente pro mais antigo. */
+function sorteioParticipantesDe(s) {
+  const finalizado = s.status === "finalizado";
+  const reais = finalizado ? [] : PUBLIC_SORTEIO_PARTICIPANTES;
+  const vencedor = finalizado && s.ganhador_codigo
+    ? [{ nome_exibicao: s.ganhador_nome || "Vencedor", codigo_cliente: s.ganhador_codigo, entrou_em: s.data_sorteio, total_gasto: 0, vencedor: true }]
+    : [];
+  const demo = SORTEIO_PREVIEW.ativo ? sorteioGerarDemo(s, [...reais, ...vencedor].map((p) => p.codigo_cliente)) : [];
+  const resto = [...reais, ...demo].sort((a, b) => new Date(b.entrou_em) - new Date(a.entrou_em));
+  return [...vencedor, ...resto];
+}
+
+function sorteioAvatarsResumoHTML(s) {
+  const lista = sorteioParticipantesDe(s);
+  return lista.length
+    ? sorteioAvatarStackHTML(lista)
+    : `<p class="text-xs text-muted">Ainda ninguém confirmou pagamento pra esse sorteio.</p>`;
+}
+
+function sorteioListaHTML(lista) {
+  const meu = (typeof CURRENT_PROFILE !== "undefined" && CURRENT_PROFILE?.codigo_cliente) || null;
+  const temExemplo = SORTEIO_PREVIEW.marcarExemplo && lista.some((p) => p.exemplo);
+  const aviso = temExemplo
+    ? `<p class="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">👀 Prévia visual: as linhas com a etiqueta <b>EXEMPLO</b> são só ilustração e não concorrem. Só clientes reais, cadastrados e com pagamento confirmado participam do sorteio.</p>`
+    : "";
+  const linhas = lista.map((p) => {
+    const eu = !!meu && !p.exemplo && p.codigo_cliente === meu;
+    const nome = escapeHTML(p.nome_exibicao || "Cliente NovaStore");
+    const etiqueta = p.exemplo && SORTEIO_PREVIEW.marcarExemplo
+      ? `<span class="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-muted">Exemplo</span>`
+      : eu ? `<span class="rounded bg-primary/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">Você</span>` : "";
+    const nivel = p.vencedor ? `<span class="text-[11px] font-bold text-amber-400">🏆 Ganhador</span>` : sorteioTierBadgeHTML(p.total_gasto);
+    return `
+      <div class="flex items-center gap-3 rounded-xl border ${eu || p.vencedor ? "border-primary/60 bg-primary/10" : "border-border bg-surface2/60"} p-3">
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black uppercase text-white">${escapeHTML((p.nome_exibicao || "?").trim().charAt(0))}</span>
+        <div class="min-w-0 flex-1">
+          <p class="flex items-center gap-1.5 text-sm font-bold text-white"><span class="truncate">${nome}</span>${etiqueta}</p>
+          ${nivel}
+        </div>
+        <span class="shrink-0 font-mono text-xs lilac" title="Código de sorteio">${escapeHTML(p.codigo_cliente || "")}</span>
+      </div>`;
+  }).join("");
+  return `${aviso}<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">${linhas}</div>`;
+}
+
 async function loadSorteioPage() {
   const abertoWrap = document.getElementById("sorteio-aberto-wrap");
   const grid = document.getElementById("sorteios-finalizados-grid");
@@ -7446,9 +7574,9 @@ function renderSorteiosAbertos(list, participantes) {
 
         <div class="mb-4 flex items-center justify-between">
           <p class="text-[11px] font-bold uppercase tracking-wide text-muted">Participantes</p>
-          <span class="text-xs font-bold text-white">${participantes.length}</span>
+          <span class="text-xs font-bold text-white">${sorteioParticipantesDe(s).length}</span>
         </div>
-        ${participantes.length ? sorteioAvatarStackHTML(participantes) : `<p class="text-xs text-muted">Ainda ninguém confirmou pagamento pra esse sorteio.</p>`}
+        ${sorteioAvatarsResumoHTML(s)}
 
         <div class="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
           <span class="text-xs font-semibold uppercase tracking-wide text-muted">1 ganhador</span>
@@ -7508,6 +7636,12 @@ function renderSorteiosFinalizados(list) {
           </div>
         </div>
 
+        <div class="mt-4 flex items-center justify-between">
+          <p class="text-[11px] font-bold uppercase tracking-wide text-muted">Participantes</p>
+          <span class="text-xs font-bold text-white">${sorteioParticipantesDe(s).length}</span>
+        </div>
+        <div class="mt-2">${sorteioAvatarsResumoHTML(s)}</div>
+
         <div class="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
           <span class="text-xs font-semibold uppercase tracking-wide text-muted">1 ganhador</span>
           <button onclick="showSorteioResultado('${s.id}')" class="btn-press rounded-xl border border-primary/50 px-5 py-2.5 text-sm font-bold text-primary hover:bg-primary/10">Ver resultado →</button>
@@ -7529,7 +7663,9 @@ window.showSorteioResultado = (id) => {
         <p class="truncate text-sm font-bold text-white">${escapeHTML(s.ganhador_nome || "Vencedor")}</p>
         <p class="font-mono text-xs lilac">${escapeHTML(s.ganhador_codigo || "")}</p>
       </div>
-    </div>`;
+    </div>
+    <p class="mb-3 mt-6 text-[11px] font-bold uppercase tracking-wide text-muted">Participantes · ${sorteioParticipantesDe(s).length}</p>
+    <div class="max-h-72 overflow-y-auto pr-1">${sorteioListaHTML(sorteioParticipantesDe(s)).replace("sm:grid-cols-2 lg:grid-cols-3", "")}</div>`;
   document.getElementById("sorteio-resultado-modal").classList.remove("hidden");
   document.getElementById("sorteio-resultado-modal").classList.add("flex");
 };
@@ -7552,8 +7688,7 @@ function sorteioTierBadgeHTML(totalGasto) {
 window.openSorteioDetalhe = (id) => {
   const s = PUBLIC_SORTEIOS_ABERTOS.find((x) => x.id === id);
   if (!s) return;
-  const participantes = PUBLIC_SORTEIO_PARTICIPANTES;
-  const numerados = [...participantes].sort((a, b) => new Date(a.entrou_em) - new Date(b.entrou_em));
+  const numerados = sorteioParticipantesDe(s);
 
   document.getElementById("sorteio-detalhe-body").innerHTML = `
     <div class="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_1.1fr]">
@@ -7591,18 +7726,7 @@ window.openSorteioDetalhe = (id) => {
         <h3 class="font-display text-xl font-bold uppercase text-white sm:text-2xl">Participantes</h3>
         <span class="text-sm font-semibold text-muted">${numerados.length} entrada${numerados.length === 1 ? "" : "s"}</span>
       </div>
-      ${numerados.length ? `
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          ${numerados.map((p, i) => `
-            <div class="flex items-center gap-3 rounded-xl border border-border bg-surface2/60 p-3">
-              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black uppercase text-white">${escapeHTML((p.nome_exibicao || "?").trim().charAt(0))}</span>
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-sm font-bold text-white">${escapeHTML(p.nome_exibicao || "Cliente NovaStore")}</p>
-                ${sorteioTierBadgeHTML(p.total_gasto)}
-              </div>
-              <span class="shrink-0 font-mono text-xs text-muted">#${String(i + 1).padStart(3, "0")}</span>
-            </div>`).join("")}
-        </div>` : `<p class="text-sm text-muted">Ainda ninguém confirmou pagamento pra esse sorteio. Compre qualquer produto pra ser o primeiro a entrar! 👀</p>`}
+      ${numerados.length ? sorteioListaHTML(numerados) : `<p class="text-sm text-muted">Ainda ninguém confirmou pagamento pra esse sorteio. Compre qualquer produto pra ser o primeiro a entrar! 👀</p>`}
     </div>`;
 
   document.getElementById("sorteio-detalhe-modal").classList.remove("hidden");
