@@ -5638,7 +5638,7 @@ async function submitCheckout(e) {
       // pedido gratuito: liberado na hora pelo banco, sem Pix e SEM concorrer ao
       // sorteio (pedidos com total = 0 não contam pra lista de participantes)
       refreshCurrentProfile();
-      renderPaymentSuccess(data.orderId, null);
+      renderPaymentSuccess(data.orderId, null, true);
     } else {
       // IMPORTANTE: nenhuma menção ao sorteio aqui ainda — o pagamento está
       // PENDENTE. O cliente só passa a concorrer de verdade depois que o Pix
@@ -5659,8 +5659,19 @@ async function submitCheckout(e) {
    (assim que o polling detecta status PAGO) quanto pra pedidos gratuitos
    (liberados na hora pela criar_pix_v2, sem gerar Pix nenhum). Se o produto
    tiver um link de redirecionamento configurado, abre ele automaticamente. */
-function renderPaymentSuccess(orderId, ticket) {
+function renderPaymentSuccess(orderId, ticket, isFree = false) {
   const redirectUrl = getRedirectForOrder(orderId);
+  const orderNum = String(orderId).slice(0, 8).toUpperCase();
+
+  // mensagens extras só para pedidos pagos (pedido grátis não concorre ao sorteio)
+  const extras = isFree ? "" : `
+    <p class="mb-1 text-xs font-semibold text-white">Pedido #${orderNum} pago com sucesso 💜</p>
+    ${ticket
+      ? `<p class="mb-5 text-xs text-muted">Você já está participando do sorteio. Boa sorte! 🍀 Fique de olho — a entrega do seu produto chega pelo chat do pedido.</p>`
+      : `<p class="mb-5 text-xs text-muted">Faça login na próxima compra para concorrer ao sorteio com o seu código da sorte. A entrega do seu produto chega pelo chat do pedido.</p>`}`;
+
+  const title = isFree ? "Pedido liberado!" : "Parabéns! Pagamento confirmado!";
+  const bigIcon = isFree ? "✅" : "🎉";
 
   if (redirectUrl) {
     // tenta abrir automaticamente numa nova aba; se o navegador bloquear o
@@ -5668,27 +5679,28 @@ function renderPaymentSuccess(orderId, ticket) {
     const opened = window.open(redirectUrl, "_blank");
     document.getElementById("checkout-content").innerHTML = `
       <div class="text-center">
-        <div class="mb-4 text-5xl flash-pop">✅</div>
-        <h2 class="mb-2 font-display text-2xl font-bold uppercase text-accent">Pagamento confirmado!</h2>
-        <p class="mb-6 text-sm text-muted">${opened ? "Abrimos o link de download em uma nova aba." : "Clique no botão abaixo pra acessar o link de download."}</p>
+        <div class="mb-4 text-5xl flash-pop">${bigIcon}</div>
+        <h2 class="mb-2 font-display text-2xl font-bold uppercase text-accent">${title}</h2>
+        <p class="mb-4 text-sm text-muted">${opened ? "Abrimos o link de download em uma nova aba." : "Clique no botão abaixo pra acessar o link de download."}</p>
         ${ticketBadgeHTML(ticket)}
+        ${extras}
         <a href="${escapeHTML(redirectUrl)}" target="_blank" rel="noopener" class="mb-3 block w-full rounded-xl bg-accent py-3 text-center font-bold text-black hover:opacity-90">🔗 Abrir link do produto</a>
         <button onclick="closeCheckout()" class="w-full rounded-xl border border-border py-3 font-bold text-muted hover:text-white">Fechar</button>
       </div>`;
   } else {
     document.getElementById("checkout-content").innerHTML = `
       <div class="text-center">
-        <div class="mb-4 text-5xl flash-pop">✅</div>
-        <h2 class="mb-2 font-display text-2xl font-bold uppercase text-accent">Pagamento confirmado!</h2>
-        <p class="mb-6 text-sm text-muted">Seu pedido foi liberado automaticamente. Obrigado pela compra!</p>
+        <div class="mb-4 text-5xl flash-pop">${bigIcon}</div>
+        <h2 class="mb-2 font-display text-2xl font-bold uppercase text-accent">${title}</h2>
+        <p class="mb-4 text-sm text-muted">Seu pedido foi liberado automaticamente. Obrigado pela compra!</p>
         ${ticketBadgeHTML(ticket)}
+        ${extras}
         <button onclick="closeCheckout()" class="w-full rounded-xl bg-primary py-3 font-bold text-white hover:bg-primaryhover">Fechar</button>
       </div>`;
   }
-  if (ticket) {
-    const badge = document.querySelector("#checkout-content .ticket-reveal");
-    setTimeout(() => fireConfetti(badge, 42), 200);
-  }
+  // confete em todo pagamento confirmado (no badge do ticket, se houver; senão no ícone)
+  const anchor = document.querySelector("#checkout-content .ticket-reveal") || document.querySelector("#checkout-content .flash-pop");
+  setTimeout(() => fireConfetti(anchor, ticket ? 42 : 30), 200);
 }
 
 function renderPixScreen(data) {
@@ -5740,7 +5752,9 @@ function startPaymentPolling(orderId) {
   if (paymentPollTimer) clearInterval(paymentPollTimer);
   paymentPollTimer = setInterval(async () => {
     try {
-      const { data: status, error } = await supabase.rpc("get_order_status", { order_id: orderId });
+      // verificar_pagamento_pix consulta o Mercado Pago e, se o Pix caiu, já marca o pedido como PAGO
+      const { data: res, error } = await supabase.rpc("verificar_pagamento_pix", { p_order_id: orderId });
+      const status = res?.status;
       if (error || !status) return;
       if (status === "PAGO") {
         clearInterval(paymentPollTimer);
@@ -5759,7 +5773,7 @@ function startPaymentPolling(orderId) {
         if (statusEl) statusEl.innerHTML = `<span class="text-red-400 font-semibold">Pagamento não confirmado (${status.toLowerCase()}).</span>`;
       }
     } catch (e) { /* tenta de novo no próximo ciclo */ }
-  }, 4000);
+  }, 3000);
 }
 
 window.copyPixCode = (btn, code) => {
