@@ -5965,6 +5965,7 @@ function showAdminPanel() {
   document.getElementById("admin-panel-screen").classList.remove("hidden");
   loadAdminDashboard();
   initAdminNotifications();
+  initContasAutoRefresh();
 }
 
 document.getElementById("login-form").onsubmit = async (e) => {
@@ -7957,41 +7958,54 @@ async function loadAdminSorteios() {
    ========================================================================= */
 
 let ADMIN_CONTAS = [];
+let contasCarregandoAgora = false;
 
-async function loadAdminContas() {
+// silent=true → refresh "invisível" (usado pelo tempo real e pelo timer):
+// não apaga a tabela, não mostra "Carregando...", só troca os números quando
+// a resposta chega. silent=false → carregamento inicial (mostra "Carregando...").
+async function loadAdminContas(silent = false) {
   const tbody = document.getElementById("contas-table");
-  tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-muted">Carregando contas...</td></tr>`;
+  if (!silent) tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-muted">Carregando contas...</td></tr>`;
+  if (contasCarregandoAgora) return; // evita corridas se duas atualizações caírem juntas
+  contasCarregandoAgora = true;
 
-  const { data: profiles, error } = await supabase
-    .from("profiles")
-    .select("id, full_name, email, avatar_url, role, created_at, is_afiliado, codigo_afiliado")
-    .order("created_at", { ascending: false });
+  try {
+    const { data: profiles, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, avatar_url, role, created_at, is_afiliado, codigo_afiliado")
+      .order("created_at", { ascending: false });
 
-  if (error) { tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-red-400">Erro: ${error.message}</td></tr>`; return; }
+    if (error) {
+      if (!silent) tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-red-400">Erro: ${error.message}</td></tr>`;
+      return;
+    }
 
-  const { data: orders } = await supabase.from("orders").select("customer_id, customer_email, total, status");
+    const { data: orders } = await supabase.from("orders").select("customer_id, customer_email, total, status");
 
-  // pedido ligado à conta pelo id; pedidos feitos sem login entram pelo e-mail
-  const statsMap = new Map();
-  const addStat = (key, o) => {
-    if (!statsMap.has(key)) statsMap.set(key, { pedidos: 0, gasto: 0 });
-    const s = statsMap.get(key);
-    s.pedidos++;
-    if (o.status === "PAGO") s.gasto += Number(o.total || 0);
-  };
-  (orders || []).forEach((o) => {
-    if (o.customer_id) addStat(o.customer_id, o);
-    else if (o.customer_email) addStat("email:" + String(o.customer_email).toLowerCase(), o);
-  });
+    // pedido ligado à conta pelo id; pedidos feitos sem login entram pelo e-mail
+    const statsMap = new Map();
+    const addStat = (key, o) => {
+      if (!statsMap.has(key)) statsMap.set(key, { pedidos: 0, gasto: 0 });
+      const s = statsMap.get(key);
+      s.pedidos++;
+      if (o.status === "PAGO") s.gasto += Number(o.total || 0);
+    };
+    (orders || []).forEach((o) => {
+      if (o.customer_id) addStat(o.customer_id, o);
+      else if (o.customer_email) addStat("email:" + String(o.customer_email).toLowerCase(), o);
+    });
 
-  ADMIN_CONTAS = (profiles || []).map((p) => {
-    const a = statsMap.get(p.id);
-    const b = statsMap.get("email:" + String(p.email || "").toLowerCase());
-    return { ...p, pedidos: (a?.pedidos || 0) + (b?.pedidos || 0), gasto: (a?.gasto || 0) + (b?.gasto || 0) };
-  });
+    ADMIN_CONTAS = (profiles || []).map((p) => {
+      const a = statsMap.get(p.id);
+      const b = statsMap.get("email:" + String(p.email || "").toLowerCase());
+      return { ...p, pedidos: (a?.pedidos || 0) + (b?.pedidos || 0), gasto: (a?.gasto || 0) + (b?.gasto || 0) };
+    });
 
-  document.getElementById("contas-total-count").textContent = `${ADMIN_CONTAS.length} conta${ADMIN_CONTAS.length === 1 ? "" : "s"}`;
-  renderContasTable();
+    document.getElementById("contas-total-count").textContent = `${ADMIN_CONTAS.length} conta${ADMIN_CONTAS.length === 1 ? "" : "s"} · atualiza sozinho`;
+    renderContasTable();
+  } finally {
+    contasCarregandoAgora = false;
+  }
 }
 
 window.renderContasTable = () => {
@@ -8023,12 +8037,22 @@ window.renderContasTable = () => {
     </tr>`).join("");
 };
 
-window.openContaDetalhe = async (clienteId) => {
+let contasDetalheAbertoId = null;   // id da conta cujo modal está aberto agora (ou null)
+let contasDetalheCarregandoAgora = false;
+
+window.openContaDetalhe = async (clienteId, silent = false) => {
   const modal = document.getElementById("admin-conta-detail-modal");
   const body = document.getElementById("admin-conta-detail-body");
-  body.innerHTML = `<p class="py-10 text-center text-sm text-muted">Carregando conta...</p>`;
-  modal.classList.remove("hidden");
-  modal.classList.add("flex");
+  contasDetalheAbertoId = clienteId;
+  if (!silent) {
+    body.innerHTML = `<p class="py-10 text-center text-sm text-muted">Carregando conta...</p>`;
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+  }
+  if (contasDetalheCarregandoAgora) return;
+  contasDetalheCarregandoAgora = true;
+
+  try {
 
   const conta = ADMIN_CONTAS.find((c) => c.id === clienteId);
 
@@ -8060,6 +8084,10 @@ window.openContaDetalhe = async (clienteId) => {
   });
   const viewList = [...viewMap.values()];
 
+  // Se, enquanto isto carregava, o admin fechou o modal ou abriu outra conta,
+  // não sobrescreve a tela com dados da conta errada.
+  if (contasDetalheAbertoId !== clienteId) return;
+
   body.innerHTML = `
     <div class="mb-5 flex items-start justify-between gap-3">
       <div class="flex items-center gap-3">
@@ -8073,7 +8101,7 @@ window.openContaDetalhe = async (clienteId) => {
         </div>
       </div>
       <div class="flex shrink-0 items-center gap-3">
-        <button onclick="openContaDetalhe('${clienteId}')" title="Atualizar" class="text-xs font-bold hover:underline lilac">↻ Atualizar</button>
+        <span class="text-[11px] font-semibold text-muted" title="Esta tela se atualiza sozinha quando algo muda">🔄 Ao vivo</span>
         <button onclick="closeContaDetalhe()" class="text-muted hover:text-white">✕</button>
       </div>
     </div>
@@ -8124,9 +8152,13 @@ window.openContaDetalhe = async (clienteId) => {
       ${!conta?.is_afiliado ? `<button onclick="afiliarConta('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}')" class="flex-1 rounded-xl border border-accent/50 py-3 text-sm font-bold text-accent hover:bg-accent/10">🤝 Afiliar conta</button>` : ""}
     </div>
   `;
+  } finally {
+    contasDetalheCarregandoAgora = false;
+  }
 };
 
 window.closeContaDetalhe = () => {
+  contasDetalheAbertoId = null;
   document.getElementById("admin-conta-detail-modal").classList.add("hidden");
   document.getElementById("admin-conta-detail-modal").classList.remove("flex");
 };
@@ -9158,6 +9190,47 @@ function initAdminNotifications() {
       if (payload.new.sender_role === "client") pushAdminNotif("💬", "Nova mensagem de um cliente", "", "conversas");
     })
     .subscribe();
+}
+
+/* ------------------- CONTAS — atualização automática (sem clicar em nada) -------------------
+   A aba "Contas" e o modal de detalhe de cada cliente se mantêm sozinhos:
+   1) Tempo real: qualquer INSERT/UPDATE em profiles, orders ou product_views
+      dispara uma atualização silenciosa (sem piscar "Carregando...").
+   2) Rede de segurança: mesmo se a conexão de tempo real cair, um timer
+      atualiza de qualquer jeito a cada 20s enquanto a aba/modal estiverem
+      abertos — assim nunca depende só de uma coisa pra funcionar sozinho. */
+let contasAutoRefreshDebounce = null;
+
+function contasTabEstaVisivel() {
+  const el = document.getElementById("admin-tab-contas");
+  return !!el && !el.classList.contains("hidden");
+}
+
+function contasDetalheModalEstaAberto() {
+  const modal = document.getElementById("admin-conta-detail-modal");
+  return !!contasDetalheAbertoId && !!modal && !modal.classList.contains("hidden");
+}
+
+function refreshContasSeVisivel() {
+  // debounce: várias mudanças chegando juntas (ex: vários pedidos de uma vez)
+  // viram só UMA atualização, ~600ms depois da última.
+  clearTimeout(contasAutoRefreshDebounce);
+  contasAutoRefreshDebounce = setTimeout(() => {
+    if (contasTabEstaVisivel()) loadAdminContas(true);
+    if (contasDetalheModalEstaAberto()) openContaDetalhe(contasDetalheAbertoId, true);
+  }, 600);
+}
+
+function initContasAutoRefresh() {
+  supabase
+    .channel("admin-contas-autorefresh")
+    .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, refreshContasSeVisivel)
+    .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, refreshContasSeVisivel)
+    .on("postgres_changes", { event: "*", schema: "public", table: "product_views" }, refreshContasSeVisivel)
+    .subscribe();
+
+  // Fallback por tempo, caso o tempo real do Supabase esteja fora do ar.
+  setInterval(refreshContasSeVisivel, 20000);
 }
 
 function pushAdminNotif(icon, titulo, sub, tab) {
