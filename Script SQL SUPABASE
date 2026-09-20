@@ -255,6 +255,7 @@ create table if not exists public.sorteios (
   titulo          text not null,
   premio          text not null,
   dias            integer,
+  imagem_url      text,
   data_sorteio    date not null,
   status          text not null default 'aberto'
                    check (status in ('aberto','finalizado')),
@@ -263,6 +264,11 @@ create table if not exists public.sorteios (
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
+
+-- Se a tabela "sorteios" já existir no seu projeto (banco já criado antes),
+-- rode esta linha uma única vez no SQL Editor do Supabase para adicionar a
+-- coluna de imagem sem perder nenhum dado:
+-- alter table public.sorteios add column if not exists imagem_url text;
 
 create table if not exists public.app_config (
   chave       text primary key,
