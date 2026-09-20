@@ -1793,7 +1793,7 @@
           <span id="painel-perfil-verificado" class="hidden shrink-0 self-start rounded-full bg-accent/15 px-3 py-1.5 text-xs font-bold text-accent sm:self-center">✓ E-mail verificado</span>
         </div>
 
-        <div class="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-[1.6fr_1fr]">
+        <div class="mb-6 grid grid-cols-1 gap-4">
           <div class="flex flex-col gap-5">
             <!-- ranking -->
             <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
@@ -1817,8 +1817,9 @@
             <form id="painel-profile-form" class="rounded-2xl border border-white/10 bg-white/[0.03] p-5" onsubmit="event.preventDefault(); savePainelProfile();">
               <h2 class="mb-4 font-display text-sm font-bold uppercase tracking-wide text-white">Dados pessoais</h2>
               <div class="mb-3">
-                <label class="mb-1 block text-xs font-semibold text-muted">Nome de usuário</label>
-                <input id="painel-profile-name-input" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+                <label class="mb-1 block text-xs font-semibold text-muted">Nome completo</label>
+                <input id="painel-profile-name-input" disabled class="w-full cursor-not-allowed rounded-lg border border-border bg-surface2/50 px-3 py-2.5 text-sm text-muted outline-none" />
+                <p class="mt-1 text-[11px] text-muted">Este é o nome cadastrado na criação da sua conta. Ele é usado automaticamente no checkout.</p>
               </div>
               <div class="mb-3">
                 <label class="mb-1 block text-xs font-semibold text-muted">E-mail</label>
@@ -1834,18 +1835,6 @@
               <div id="painel-profile-msg" class="hidden mb-3 rounded-lg px-3 py-2 text-xs"></div>
               <button id="painel-profile-save-btn" class="rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white hover:bg-primaryhover">Salvar alterações</button>
             </form>
-          </div>
-
-          <!-- benefícios -->
-          <div class="h-fit rounded-2xl border border-accent/25 bg-accent/[0.06] p-5">
-            <p class="mb-3 flex items-center gap-2 font-display text-sm font-bold uppercase tracking-wide text-accent">✓ Cliente verificado</p>
-            <ul class="mb-4 flex flex-col gap-2.5 text-sm text-muted">
-              <li class="flex items-start gap-2"><span class="text-accent">✓</span> Compras liberadas com entrega imediata</li>
-              <li class="flex items-start gap-2"><span class="text-accent">✓</span> Participação nos sorteios</li>
-              <li class="flex items-start gap-2"><span class="text-accent">✓</span> Prioridade no suporte</li>
-            </ul>
-            <p id="painel-perfil-codigo" class="hidden mb-4 rounded-lg bg-surface2/60 px-3 py-2 text-[11px] text-muted"></p>
-            <p class="text-[11px] leading-relaxed text-muted">🔒 Seus dados são usados apenas para identificação de pedidos e suporte. Nunca compartilhamos suas informações com terceiros.</p>
           </div>
         </div>
       </section>
@@ -5409,13 +5398,7 @@ window.openCheckout = () => {
     return;
   }
   closeCart();
-  const prefName = CURRENT_PROFILE?.full_name || "";
-  if (!prefName.trim()) {
-    alert("Antes de finalizar a compra, complete seu nome no painel — ele é usado automaticamente no checkout.");
-    goToPainel();
-    setTimeout(() => switchPainelTab("perfil"), 50);
-    return;
-  }
+  const prefName = CURRENT_PROFILE?.full_name || CURRENT_USER.email.split("@")[0];
   appliedAnuncianteCode = null;
   appliedAfiliadoId = null;
   appliedCupom = null;
@@ -8370,14 +8353,6 @@ function renderPainelPerfil() {
   document.getElementById("painel-perfil-membro-desde").textContent = `Membro desde ${memberSince}`;
   document.getElementById("painel-perfil-verificado").classList.toggle("hidden", !CURRENT_USER.email_confirmed_at);
 
-  const codeEl = document.getElementById("painel-perfil-codigo");
-  if (CURRENT_PROFILE?.codigo_cliente) {
-    codeEl.textContent = `Seu código de sorteio: ${CURRENT_PROFILE.codigo_cliente}`;
-    codeEl.classList.remove("hidden");
-  } else {
-    codeEl.classList.add("hidden");
-  }
-
   const totalGasto = PAINEL_ORDERS.filter((o) => o.status === "PAGO").reduce((s, o) => s + Number(o.total || 0), 0);
   const tier = painelRankTier(totalGasto);
   document.getElementById("painel-rank-atual").textContent = tier.name;
@@ -8396,14 +8371,13 @@ function renderPainelPerfil() {
 window.savePainelProfile = async () => {
   const btn = document.getElementById("painel-profile-save-btn");
   const msgEl = document.getElementById("painel-profile-msg");
-  const full_name = document.getElementById("painel-profile-name-input").value.trim();
   const phone = document.getElementById("painel-profile-phone-input").value.trim();
 
   btn.disabled = true;
   btn.textContent = "Salvando...";
   msgEl.classList.add("hidden");
 
-  const { error } = await supabase.from("profiles").update({ full_name, phone }).eq("id", CURRENT_USER.id);
+  const { error } = await supabase.from("profiles").update({ phone }).eq("id", CURRENT_USER.id);
 
   btn.disabled = false;
   btn.textContent = "Salvar alterações";
