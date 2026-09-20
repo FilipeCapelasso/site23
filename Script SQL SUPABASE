@@ -1,37 +1,50 @@
 -- =============================================================================
--- NOVASTORE — SUPABASE SUPREMO / UNIFICADO
+-- NOVASTORE — SUPABASE SUPREMO / UNIFICADO (VERSÃO ORGANIZADA)
 -- =============================================================================
--- Objetivo:
---   1) Consolidar o schema usado pelo index.html em UM único script.
---   2) Corrigir os scripts fracionados que estavam se sobrescrevendo.
---   3) Fazer migrações aditivas para bancos já existentes.
---   4) Corrigir as colunas ausentes usadas pelo site:
---        - products.images
---        - products.redirect_url
---        - orders.cupom_codigo_usado
---        - site_settings.estoque_baixo_limite
---        - site_settings.estoque_minimo
---        - site_settings.meta_vendas_mensal
---        - cupons.* (modelo novo + compatibilidade com o modelo antigo)
---   5) Centralizar o checkout em public.criar_pix_v2.
---   6) Manter public.criar_pix como compatibilidade para chamadas antigas.
---   7) Melhorar o diagnóstico do HTTP 400 do gateway Pix, sem expor token.
---   8) Manter RLS, Storage e Realtime usados pelo site.
---   9) Disponibilizar a lista pública real de participantes do sorteio.
+-- USO
+--   Cole ESTE ARQUIVO INTEIRO no SQL Editor do Supabase e clique em Run.
+--   É idempotente: pode rodar de novo a qualquer momento sem duplicar nada
+--   e sem apagar dados. A última consulta (seção 22) mostra OK/FALTANDO.
 --
--- IMPORTANTE SOBRE O HTTP 400:
---   O banco NÃO consegue adivinhar o contrato da API do gateway de pagamento.
---   Este script deixa o corpo da requisição configurável por template em
---   app_config.pix_gateway_payload_template e registra a resposta do gateway.
---   Assim, um 400 deixa de ser um erro "cego": o corpo retornado pelo gateway
---   pode ser consultado pelo admin na tabela pix_gateway_logs ou retornado
---   temporariamente com pix_gateway_debug = true.
+-- O QUE ESTE ARQUIVO CONTÉM
+--    0  Extensão http
+--    1  Tabelas
+--    2  Migrações aditivas (bancos já existentes)
+--    3  Compatibilidade do admin_activity_log
+--    4  Configuração do gateway Pix (Mercado Pago) e do app
+--   4A  Limpeza de RPCs antigas (evita erro 42P13)
+--    5  Funções auxiliares (is_admin, código de cliente)
+--    6  Triggers
+--    7  Índices
+--    8  Row Level Security (políticas)
+--    9  Cupons (validar_cupom)
+--   10  Log do gateway
+--   11  Confirmação de pagamento
+--   12  Checkout Pix (criar_pix_v2)
+--   13  criar_pix (compatibilidade)
+--   14  Status do pedido
+--   15  Sorteio (lista pública, lista do admin, ganhador)
+--   16  Log de atividade do admin
+--   17  Diagnóstico do Pix
+--   18  Storage (buckets e políticas)
+--   19  Realtime
+--   20  Permissões finais das RPCs
+--   21  Dados iniciais
+--   22  Verificação final (rode e confira: tudo deve dizer OK)
+--   A/B/C  Anexos opcionais (admin, token do gateway, cupom) — comentados
 --
--- USO:
---   Cole ESTE ARQUIVO INTEIRO no SQL Editor do Supabase e execute.
---   O script é pensado para ser idempotente e para preservar dados existentes.
+-- DEPOIS DE RODAR, FAÇA SÓ ISTO (uma vez):
+--   1) Anexo A: torne seu e-mail admin.
+--   2) Anexo B: cole o token do Mercado Pago (app_config.pix_gateway_token).
+--
+-- SOBRE O SORTEIO
+--   Só entra no sorteio quem tem conta cadastrada (profiles, com e-mail e
+--   nome) e ao menos um pedido PAGO com total > 0. O admin gira apenas
+--   sobre essa lista (sorteio_listar_participantes) e o ganhador só é aceito
+--   se passar na mesma regra (sorteio_definir_ganhador). Participantes de
+--   "exemplo" exibidos no site são só visuais, vivem no index.html e não
+--   existem no banco.
 -- =============================================================================
-
 
 -- =============================================================================
 -- 0. EXTENSÃO HTTP
@@ -255,6 +268,7 @@ create table if not exists public.sorteios (
   titulo          text not null,
   premio          text not null,
   dias            integer,
+  descricao       text,
   imagem_url      text,
   data_sorteio    date not null,
   status          text not null default 'aberto'
@@ -265,10 +279,8 @@ create table if not exists public.sorteios (
   updated_at      timestamptz not null default now()
 );
 
--- Se a tabela "sorteios" já existir no seu projeto (banco já criado antes),
--- rode esta linha uma única vez no SQL Editor do Supabase para adicionar a
--- coluna de imagem sem perder nenhum dado:
--- alter table public.sorteios add column if not exists imagem_url text;
+-- Bancos antigos: as colunas descricao e imagem_url são adicionadas
+-- automaticamente na seção 2 (não precisa rodar nada à mão).
 
 create table if not exists public.app_config (
   chave       text primary key,
@@ -374,6 +386,12 @@ insert into public.site_settings (id)
 values (1)
 on conflict (id) do nothing;
 
+-- O admin grava "descricao" e "imagem_url" ao criar/editar sorteios. Sem estas
+-- colunas o salvamento falhava com "Could not find the 'descricao' column".
+alter table public.sorteios
+  add column if not exists descricao text,
+  add column if not exists imagem_url text;
+
 
 -- =============================================================================
 -- 3. COMPATIBILIDADE DE admin_activity_log
@@ -406,21 +424,69 @@ end $$;
 
 
 -- =============================================================================
--- 4. CONFIGURAÇÃO DO GATEWAY / APP
--- =============================================================================
--- NÃO sobrescreve valores que já existam.
+-- 4. CONFIGURAÇÃO DO GATEWAY PIX (MERCADO PAGO) / APP
+-- Valores padrão já no formato do Mercado Pago (/v1/payments):
+--   transaction_amount, description, external_reference, payment_method_id e payer.
+-- O cabeçalho X-Idempotency-Key é enviado pelo criar_pix_v2 (seção 12).
+-- NÃO sobrescreve configuração que você já personalizou.
 -- O token jamais é exposto por política RLS.
+-- =============================================================================
 
 insert into public.app_config (chave, valor) values
-  ('pix_gateway_url', ''),
+  ('pix_gateway_url', 'https://api.mercadopago.com/v1/payments'),
   ('pix_gateway_token', ''),
   ('afiliado_comissao_percentual', '10'),
   ('pix_gateway_auth_header', 'Authorization'),
   ('pix_gateway_auth_prefix', 'Bearer '),
   ('pix_gateway_debug', 'false'),
   ('pix_gateway_payload_template',
-   '{"valor":{{valor_json}},"descricao":{{descricao_json}},"referencia_externa":{{order_id_json}},"pagador":{"nome":{{nome_json}},"email":{{email_json}}}}')
+  '{"transaction_amount":{{valor_json}},' ||
+  '"description":{{descricao_json}},' ||
+  '"external_reference":{{order_id_json}},' ||
+  '"payment_method_id":"pix",' ||
+  '"payer":{"email":{{email_json}}}}')
 on conflict (chave) do nothing;
+
+-- Migração segura: só troca se a URL estiver vazia...
+update public.app_config
+set valor = 'https://api.mercadopago.com/v1/payments'
+where chave = 'pix_gateway_url'
+  and coalesce(trim(valor), '') = '';
+
+-- ...ou se o template ainda for o modelo genérico antigo (nunca personalizado).
+-- Um template que você tenha editado por conta própria NÃO é alterado.
+update public.app_config
+set valor =
+  '{"transaction_amount":{{valor_json}},' ||
+  '"description":{{descricao_json}},' ||
+  '"external_reference":{{order_id_json}},' ||
+  '"payment_method_id":"pix",' ||
+  '"payer":{"email":{{email_json}}}}'
+where chave = 'pix_gateway_payload_template'
+  and (
+    coalesce(trim(valor), '') = ''
+    or valor = '{"valor":{{valor_json}},"descricao":{{descricao_json}},"referencia_externa":{{order_id_json}},"pagador":{"nome":{{nome_json}},"email":{{email_json}}}}'
+  );
+
+
+-- =============================================================================
+-- 4A. LIMPEZA DE RPCs ANTIGAS (evita o erro 42P13 "cannot change return type")
+-- =============================================================================
+-- Se o seu banco já tinha versões antigas destas funções com outro tipo de
+-- retorno, o "create or replace" falha. Apagamos só estas assinaturas exatas;
+-- todas são recriadas com seus GRANTs nas seções 9 a 17. Nenhum dado é apagado.
+
+drop function if exists public.validar_cupom(text, numeric);
+drop function if exists public.registrar_pix_gateway_log(uuid, jsonb, integer, text);
+drop function if exists public.confirmar_pagamento_pix(uuid, text);
+drop function if exists public.criar_pix_v2(text, text, jsonb, uuid, text, uuid, text);
+drop function if exists public.criar_pix(text, text, jsonb, uuid, text, uuid);
+drop function if exists public.get_order_status(uuid);
+drop function if exists public.sorteio_listar_participantes();
+drop function if exists public.sorteio_listar_participantes_publico();
+drop function if exists public.sorteio_definir_ganhador(uuid, text);
+drop function if exists public.log_admin_activity(text, jsonb);
+drop function if exists public.diagnostico_pix_novastore();
 
 
 -- =============================================================================
@@ -2498,6 +2564,17 @@ to authenticated;
 -- =============================================================================
 -- 15. SORTEIO
 -- =============================================================================
+-- Regras (todas garantidas aqui no banco, nunca no navegador):
+--   • Elegível = cliente REAL (profiles, com e-mail/nome/código) com ao menos
+--     um pedido PAGO e total > 0.
+--   • sorteio_listar_participantes()         -> só admin; usada pra girar.
+--   • sorteio_listar_participantes_publico() -> lista pública (nome abreviado
+--     + código de sorteio); nunca devolve e-mail nem telefone.
+--   • sorteio_definir_ganhador()             -> só admin; recusa qualquer
+--     código que não seja de um cliente real elegível.
+--   • Participantes de "exemplo" mostrados no site NÃO existem no banco e,
+--     portanto, jamais podem ser sorteados nem definidos como ganhador.
+-- =============================================================================
 
 create or replace function public.sorteio_listar_participantes()
 returns table(
@@ -2546,7 +2623,8 @@ create or replace function public.sorteio_listar_participantes_publico()
 returns table(
   nome_exibicao   text,
   codigo_cliente  text,
-  entrou_em       timestamptz
+  entrou_em       timestamptz,
+  total_gasto     numeric
 )
 language sql
 stable
@@ -2566,7 +2644,15 @@ as $$
         || '.'
     end as nome_exibicao,
     p.codigo_cliente,
-    max(o.created_at) as entrou_em
+    max(o.created_at) as entrou_em,
+    -- Só o degrau do nível (0/200/500/1500), usado pelo selo Bronze/Silver/
+    -- Gold/Diamond. O valor gasto exato nunca é exposto publicamente.
+    (case
+       when sum(o.total) >= 1500 then 1500
+       when sum(o.total) >= 500  then 500
+       when sum(o.total) >= 200  then 200
+       else 0
+     end)::numeric as total_gasto
   from public.profiles p
   join public.orders o
     on o.customer_id = p.id
@@ -2949,7 +3035,7 @@ to anon, authenticated;
 
 
 -- =============================================================================
--- 21. CHECAGEM / DADOS INICIAIS
+-- 21. DADOS INICIAIS
 -- =============================================================================
 
 insert into public.site_settings (id)
@@ -2958,7 +3044,41 @@ on conflict (id) do nothing;
 
 
 -- =============================================================================
--- 22. TORNAR USUÁRIO ADMIN
+-- 22. VERIFICAÇÃO FINAL
+-- Rode e confira a coluna "status": tudo deve ser OK.
+-- Se algo aparecer FALTANDO, rode este arquivo inteiro de novo.
+-- =============================================================================
+
+select item, case when ok then 'OK' else 'FALTANDO' end as status
+from (
+  values
+    ('tabela profiles',                    to_regclass('public.profiles') is not null),
+    ('tabela products',                    to_regclass('public.products') is not null),
+    ('tabela orders',                      to_regclass('public.orders') is not null),
+    ('tabela sorteios',                    to_regclass('public.sorteios') is not null),
+    ('coluna sorteios.descricao',          exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'sorteios' and column_name = 'descricao')),
+    ('coluna sorteios.imagem_url',         exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'sorteios' and column_name = 'imagem_url')),
+    ('tabela cupons',                      to_regclass('public.cupons') is not null),
+    ('tabela app_config',                  to_regclass('public.app_config') is not null),
+    ('função criar_pix_v2',                to_regprocedure('public.criar_pix_v2(text,text,jsonb,uuid,text,uuid,text)') is not null),
+    ('função get_order_status',            to_regprocedure('public.get_order_status(uuid)') is not null),
+    ('função validar_cupom',               to_regprocedure('public.validar_cupom(text,numeric)') is not null),
+    ('função sorteio (lista admin)',       to_regprocedure('public.sorteio_listar_participantes()') is not null),
+    ('função sorteio (lista pública)',     to_regprocedure('public.sorteio_listar_participantes_publico()') is not null),
+    ('função sorteio (definir ganhador)',  to_regprocedure('public.sorteio_definir_ganhador(uuid,text)') is not null),
+    ('função log_admin_activity',          to_regprocedure('public.log_admin_activity(text,jsonb)') is not null),
+    ('bucket product-images',              exists (select 1 from storage.buckets where id = 'product-images')),
+    ('bucket site-assets',                 exists (select 1 from storage.buckets where id = 'site-assets')),
+    ('bucket chat-uploads',                exists (select 1 from storage.buckets where id = 'chat-uploads')),
+    ('gateway: URL preenchida',            exists (select 1 from public.app_config where chave = 'pix_gateway_url' and coalesce(trim(valor), '') <> '')),
+    ('gateway: TOKEN preenchido (Anexo B)', exists (select 1 from public.app_config where chave = 'pix_gateway_token' and coalesce(trim(valor), '') <> '')),
+    ('pelo menos 1 admin (Anexo A)',       exists (select 1 from public.profiles where role = 'admin'))
+) as t(item, ok);
+
+
+-- =============================================================================
+-- ANEXO A — TORNAR USUÁRIO ADMIN (executar 1 vez)
+-- Descomente, troque o e-mail e rode. Só funciona depois que a conta existir.
 -- =============================================================================
 -- Execute SOMENTE trocando pelo e-mail correto:
 --
@@ -2973,65 +3093,9 @@ on conflict (id) do nothing;
 
 
 -- =============================================================================
--- 22A. MERCADO PAGO — CONFIGURAÇÃO DO CHECKOUT PIX
--- =============================================================================
--- O erro HTTP 400 foi identificado como rejeição de nomes de campos não
--- reconhecidos pela API do Mercado Pago. Para /v1/payments, use os campos:
--- transaction_amount, description, external_reference, payment_method_id e payer.
--- Também é obrigatório enviar X-Idempotency-Key.
-
-update public.app_config
-set valor = 'https://api.mercadopago.com/v1/payments'
-where chave = 'pix_gateway_url'
-  and coalesce(trim(valor), '') = '';
-
-update public.app_config
-set valor =
-  '{"transaction_amount":{{valor_json}},' ||
-  '"description":{{descricao_json}},' ||
-  '"external_reference":{{order_id_json}},' ||
-  '"payment_method_id":"pix",' ||
-  '"payer":{"email":{{email_json}}}}'
-where chave = 'pix_gateway_payload_template';
-
--- =============================================================================
--- 23. CUPOM BEMVINDO10 — NÃO É CRIADO AUTOMATICAMENTE
--- =============================================================================
--- O index.html apenas mostra "BEMVINDO10" como exemplo de código.
--- O material enviado NÃO contém um INSERT que crie esse cupom.
---
--- Caso esse seja realmente o cupom que você deseja ativar, execute:
---
--- insert into public.cupons (
---   codigo,
---   tipo_desconto,
---   valor,
---   valor_minimo_compra,
---   limite_uso,
---   ativo,
---   expira_em
--- ) values (
---   'BEMVINDO10',
---   'percentual',
---   10,
---   0,
---   null,
---   true,
---   null
--- )
--- on conflict (codigo) do update
--- set
---   tipo_desconto       = excluded.tipo_desconto,
---   valor               = excluded.valor,
---   valor_minimo_compra = excluded.valor_minimo_compra,
---   limite_uso          = excluded.limite_uso,
---   ativo               = excluded.ativo,
---   expira_em            = excluded.expira_em,
---   updated_at          = now();
-
-
--- =============================================================================
--- 24. CONFIGURAÇÃO DO GATEWAY — EXEMPLO GENÉRICO
+-- ANEXO B — TOKEN E DIAGNÓSTICO DO GATEWAY PIX
+-- NÃO cole token verdadeiro no index.html: ele fica em app_config, protegido por RLS.
+-- O Mercado Pago já está configurado na seção 4; falta só o token.
 -- =============================================================================
 -- NÃO cole token verdadeiro no index.html.
 -- O token permanece em app_config, protegido por RLS.
@@ -3079,76 +3143,42 @@ where chave = 'pix_gateway_payload_template';
 
 
 -- =============================================================================
--- CONSOLIDAÇÃO
+-- ANEXO C — CUPOM BEMVINDO10 (opcional)
+-- O index.html só mostra "BEMVINDO10" como exemplo; o cupom NÃO é criado sozinho.
 -- =============================================================================
--- Este arquivo incorpora também o antigo:
---   patch_sorteio_participantes_publico.sql
--- A função pública do sorteio já está integrada acima.
+-- O index.html apenas mostra "BEMVINDO10" como exemplo de código.
+-- O material enviado NÃO contém um INSERT que crie esse cupom.
 --
--- O script é idempotente: pode ser executado novamente sem criar funções,
--- políticas, buckets ou índices duplicados.
+-- Caso esse seja realmente o cupom que você deseja ativar, execute:
 --
--- Observação: o gateway de pagamento depende de credenciais/configuração válidas
--- em public.app_config; o SQL não pode inventar um token ou credencial real.
+-- insert into public.cupons (
+--   codigo,
+--   tipo_desconto,
+--   valor,
+--   valor_minimo_compra,
+--   limite_uso,
+--   ativo,
+--   expira_em
+-- ) values (
+--   'BEMVINDO10',
+--   'percentual',
+--   10,
+--   0,
+--   null,
+--   true,
+--   null
+-- )
+-- on conflict (codigo) do update
+-- set
+--   tipo_desconto       = excluded.tipo_desconto,
+--   valor               = excluded.valor,
+--   valor_minimo_compra = excluded.valor_minimo_compra,
+--   limite_uso          = excluded.limite_uso,
+--   ativo               = excluded.ativo,
+--   expira_em            = excluded.expira_em,
+--   updated_at          = now();
+
+
 -- =============================================================================
 -- FIM — NOVASTORE SUPREMO UNIFICADO
 -- =============================================================================
-
--- 1) Nova coluna para descrição personalizável de cada sorteio
-alter table public.sorteios add column if not exists descricao text;
-
--- 2) Precisa apagar a função antiga primeiro, porque o tipo de retorno
---    mudou (ela ganhou a coluna "total_gasto") e o Postgres não permite
---    trocar OUT parameters com "create or replace".
-drop function if exists public.sorteio_listar_participantes_publico();
-
-create function public.sorteio_listar_participantes_publico()
-returns table(
-  nome_exibicao   text,
-  codigo_cliente  text,
-  entrou_em       timestamptz,
-  total_gasto     numeric
-)
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select
-    case
-      when p.full_name is null or btrim(p.full_name) = ''
-        then 'Cliente NovaStore'
-      when strpos(btrim(p.full_name), ' ') = 0
-        then btrim(p.full_name)
-      else
-        split_part(btrim(p.full_name), ' ', 1)
-        || ' '
-        || left(split_part(btrim(p.full_name), ' ', 2), 1)
-        || '.'
-    end as nome_exibicao,
-    p.codigo_cliente,
-    max(o.created_at) as entrou_em,
-    coalesce(sum(o.total), 0) as total_gasto
-  from public.profiles p
-  join public.orders o
-    on o.customer_id = p.id
-   and o.status = 'PAGO'
-   and o.total > 0
-  where p.codigo_cliente is not null
-  group by p.id, p.full_name, p.codigo_cliente
-  order by entrou_em desc;
-$$;
-
-revoke all on function public.sorteio_listar_participantes_publico()
-from public;
-
-grant execute on function public.sorteio_listar_participantes_publico()
-to anon, authenticated;
-
-
--- Adiciona a coluna que está faltando na tabela "sorteios"
-alter table public.sorteios add column if not exists imagem_url text;
-
--- Força o PostgREST a recarregar o cache do schema (às vezes ele demora
--- alguns segundos pra perceber sozinho que uma coluna nova apareceu)
-notify pgrst, 'reload schema';
