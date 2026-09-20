@@ -2052,11 +2052,10 @@
       </div>
 
       <div>
-        <label class="mb-2 block text-xs font-semibold text-muted">Imagem principal</label>
-        <div class="flex items-center gap-4">
-          <div id="image-preview" class="h-24 w-24 overflow-hidden rounded-lg border border-border bg-surface2"></div>
-          <input type="file" id="f-image" accept="image/*" class="text-sm text-muted" />
-        </div>
+        <label class="mb-2 block text-xs font-semibold text-muted">Imagens do produto</label>
+        <div id="images-preview" class="mb-3 flex flex-wrap gap-3"></div>
+        <input type="file" id="f-image" accept="image/*" multiple class="text-sm text-muted" />
+        <p class="mt-1 text-[11px] text-muted">A primeira imagem (com a estrela ★) é a principal e aparece nos cards. Envie quantas quiser, use "Tornar principal" pra reordenar e ✕ pra remover.</p>
         <p id="upload-status" class="mt-1 text-xs text-muted"></p>
       </div>
 
@@ -4049,7 +4048,7 @@ let ALL_PRODUCTS = [];
 let currentCategory = null;
 let searchQuery = "";
 let cart = JSON.parse(localStorage.getItem("cart") || "[]");
-let currentImageUrl = "";
+let currentImages = [];
 let editingId = null;
 let paymentPollTimer = null;
 
@@ -4777,7 +4776,28 @@ function relatedProducts(p) {
   return list.slice(0, 6);
 }
 
+/* devolve a lista de imagens de um produto: usa o array `images` quando existe,
+   senão cai pro `image_url` único (produtos antigos, cadastrados antes da galeria) */
+function productGalleryImages(p) {
+  if (Array.isArray(p.images) && p.images.length) return p.images.filter((u) => safeMediaSrc(u));
+  return p.image_url && safeMediaSrc(p.image_url) ? [p.image_url] : [];
+}
+
+let CURRENT_PRODUCT_GALLERY = [];
+
+window.setProductGalleryImage = (i) => {
+  const url = CURRENT_PRODUCT_GALLERY[i];
+  if (!url) return;
+  const mainImg = document.getElementById("product-gallery-main");
+  if (mainImg) mainImg.src = safeMediaSrc(url);
+  document.querySelectorAll(".product-gallery-thumb").forEach((btn, idx) => {
+    btn.classList.toggle("border-primary", idx === i);
+    btn.classList.toggle("border-border", idx !== i);
+  });
+};
+
 function renderProductPage(p) {
+  CURRENT_PRODUCT_GALLERY = productGalleryImages(p);
   const cat = categoryMeta(p.category);
   const tags = parseTags(p);
   const features = parseFeatures(p);
@@ -4868,10 +4888,17 @@ function renderProductPage(p) {
 
         <div>
           <div class="product-page-box modal-image-frame mx-auto max-w-md overflow-hidden rounded-2xl border border-border bg-surface2 p-5 sm:max-w-lg">
-            ${safeMediaSrc(p.image_url)
-              ? `<img src="${safeMediaSrc(p.image_url)}" class="aspect-[4/5] w-full rounded-xl object-cover" />`
-              : `<div class="flex aspect-[4/5] items-center justify-center rounded-xl text-muted">Sem imagem</div>`}
+            <img id="product-gallery-main" src="${safeMediaSrc(productGalleryImages(p)[0]) || ""}" class="aspect-[4/5] w-full rounded-xl object-cover ${productGalleryImages(p)[0] ? "" : "hidden"}" />
+            ${productGalleryImages(p)[0] ? "" : `<div class="flex aspect-[4/5] items-center justify-center rounded-xl text-muted">Sem imagem</div>`}
           </div>
+          ${productGalleryImages(p).length > 1 ? `
+          <div class="mx-auto mt-4 flex max-w-md flex-wrap justify-center gap-2 sm:max-w-lg">
+            ${productGalleryImages(p).map((url, i) => `
+              <button type="button" onclick="setProductGalleryImage(${i})"
+                class="product-gallery-thumb h-16 w-16 shrink-0 overflow-hidden rounded-lg border ${i === 0 ? "border-primary" : "border-border"} bg-surface2 hover:border-primary/60">
+                <img src="${safeMediaSrc(url)}" class="h-full w-full object-cover" />
+              </button>`).join("")}
+          </div>` : ""}
           <div class="purchase-badge mx-auto mt-5 flex w-fit items-center justify-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-5 py-2.5 text-sm font-bold text-accent">
             🔥 ${purchaseCount(p.id)} pessoas compraram recentemente
           </div>
@@ -6830,11 +6857,11 @@ function parseCommaList(str) {
 
 window.openForm = () => {
   editingId = null;
-  currentImageUrl = "";
+  currentImages = [];
   document.getElementById("form-title").textContent = "Novo produto";
   document.getElementById("product-form").reset();
   document.getElementById("plans-list").innerHTML = "";
-  document.getElementById("image-preview").innerHTML = "";
+  renderImagesPreview();
   document.getElementById("upload-status").textContent = "";
   document.getElementById("f-type").dispatchEvent(new Event("change"));
   document.getElementById("form-error").classList.add("hidden");
@@ -6846,7 +6873,7 @@ window.closeForm = () => { document.getElementById("form-modal").classList.add("
 
 window.editProduct = (p) => {
   editingId = p.id;
-  currentImageUrl = p.image_url || "";
+  currentImages = Array.isArray(p.images) && p.images.length ? [...p.images] : (p.image_url ? [p.image_url] : []);
   document.getElementById("form-title").textContent = "Editar produto";
   document.getElementById("f-name").value = p.name;
   document.getElementById("f-category").value = p.category || "";
@@ -6859,7 +6886,7 @@ window.editProduct = (p) => {
   document.getElementById("f-redirect-url").value = p.redirect_url || "";
   document.getElementById("f-featured").checked = !!p.featured;
   document.getElementById("f-active").checked = !!p.active;
-  document.getElementById("image-preview").innerHTML = safeMediaSrc(p.image_url) ? `<img src="${safeMediaSrc(p.image_url)}" class="h-full w-full object-cover" />` : "";
+  renderImagesPreview();
   document.getElementById("f-type").dispatchEvent(new Event("change"));
   document.getElementById("plans-list").innerHTML = "";
   (p.plans || []).forEach((plan) => addPlanRow(plan));
@@ -6868,20 +6895,46 @@ window.editProduct = (p) => {
   document.getElementById("form-modal").classList.add("flex");
 };
 
+function renderImagesPreview() {
+  const wrap = document.getElementById("images-preview");
+  if (!currentImages.length) { wrap.innerHTML = `<p class="text-xs text-muted">Nenhuma imagem adicionada ainda.</p>`; return; }
+  wrap.innerHTML = currentImages.map((url, i) => `
+    <div class="relative h-24 w-24 overflow-hidden rounded-lg border ${i === 0 ? "border-primary" : "border-border"} bg-surface2">
+      <img src="${safeMediaSrc(url)}" class="h-full w-full object-cover" />
+      ${i === 0 ? `<span class="absolute left-1 top-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-white">★</span>` : ""}
+      <button type="button" onclick="removeProductImage(${i})" title="Remover"
+        class="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-xs font-bold text-white hover:bg-red-500">✕</button>
+      ${i !== 0 ? `<button type="button" onclick="setMainProductImage(${i})" title="Tornar principal"
+        class="absolute bottom-0 left-0 right-0 bg-black/70 py-0.5 text-[9px] font-bold text-white hover:bg-primary">Tornar principal</button>` : ""}
+    </div>`).join("");
+}
+
+window.removeProductImage = (i) => { currentImages.splice(i, 1); renderImagesPreview(); };
+
+window.setMainProductImage = (i) => {
+  const [chosen] = currentImages.splice(i, 1);
+  currentImages.unshift(chosen);
+  renderImagesPreview();
+};
+
 document.getElementById("f-image").onchange = async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+  const files = [...e.target.files];
+  if (!files.length) return;
   const statusEl = document.getElementById("upload-status");
-  statusEl.textContent = "Enviando imagem...";
 
-  const path = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "")}`;
-  const { error } = await supabase.storage.from("product-images").upload(path, file, { upsert: true });
-  if (error) { statusEl.textContent = "Erro no upload: " + error.message; return; }
+  for (let idx = 0; idx < files.length; idx++) {
+    const file = files[idx];
+    statusEl.textContent = `Enviando imagem ${idx + 1} de ${files.length}...`;
+    const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name.replace(/[^a-zA-Z0-9.\-_]/g, "")}`;
+    const { error } = await supabase.storage.from("product-images").upload(path, file, { upsert: true });
+    if (error) { statusEl.textContent = "Erro no upload: " + error.message; continue; }
+    const { data } = supabase.storage.from("product-images").getPublicUrl(path);
+    currentImages.push(data.publicUrl);
+    renderImagesPreview();
+  }
 
-  const { data } = supabase.storage.from("product-images").getPublicUrl(path);
-  currentImageUrl = data.publicUrl;
-  document.getElementById("image-preview").innerHTML = `<img src="${safeMediaSrc(currentImageUrl)}" class="h-full w-full object-cover" />`;
-  statusEl.textContent = "Imagem enviada ✓";
+  statusEl.textContent = "Imagens enviadas ✓";
+  e.target.value = "";
 };
 
 function slugify(text) {
@@ -6906,7 +6959,8 @@ document.getElementById("product-form").onsubmit = async (e) => {
     type,
     price: type === "UNICO" ? Number(document.getElementById("f-price").value) || 0 : null,
     stock: type === "UNICO" && document.getElementById("f-stock").value !== "" ? Number(document.getElementById("f-stock").value) : null,
-    image_url: currentImageUrl || null,
+    image_url: currentImages[0] || null,
+    images: currentImages,
     redirect_url: document.getElementById("f-redirect-url").value.trim() || null,
     plans: type === "ASSINATURA" ? collectPlans() : [],
     featured: document.getElementById("f-featured").checked,
