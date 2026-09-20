@@ -1072,6 +1072,16 @@
   </div>
 </div>
 
+<div id="sorteio-detalhe-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeSorteioDetalhe()">
+  <div class="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-border bg-surface">
+    <div class="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-surface/95 px-5 py-4 backdrop-blur">
+      <span class="text-xs font-bold uppercase tracking-wide text-muted">Detalhes do sorteio</span>
+      <button onclick="closeSorteioDetalhe()" class="rounded-full border border-border px-3 py-1.5 text-xs font-bold text-muted hover:text-white">Fechar ✕</button>
+    </div>
+    <div id="sorteio-detalhe-body" class="p-5 sm:p-8"></div>
+  </div>
+</div>
+
 <div id="view-admin" class="hidden">
 
   <div id="admin-login-screen" class="flex min-h-screen items-center justify-center px-4 bg-grid-fade">
@@ -2037,8 +2047,8 @@
 </div>
 
 <div id="sorteio-form-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeSorteioForm()">
-  <div class="w-full max-w-sm rounded-2xl border border-border bg-surface p-6">
-    <h2 class="mb-5 font-display text-xl font-bold uppercase">Novo Sorteio</h2>
+  <div class="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-6">
+    <h2 id="sorteio-form-title" class="mb-5 font-display text-xl font-bold uppercase">Novo Sorteio</h2>
     <div id="sorteio-form-error" class="hidden mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-400"></div>
     <form id="sorteio-form" class="flex flex-col gap-4">
       <div>
@@ -2054,9 +2064,15 @@
         <input type="number" min="1" id="so-dias" placeholder="Ex: 31" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
       </div>
       <div>
-        <label class="mb-1 block text-xs font-semibold text-muted">Link da imagem do prêmio (opcional)</label>
-        <input type="url" id="so-imagem" placeholder="https://..." class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
-        <p class="mt-1 text-[11px] text-muted">Aparece no card do sorteio na aba pública. Se deixar em branco, mostramos um ícone padrão.</p>
+        <label class="mb-1 block text-xs font-semibold text-muted">Descrição (opcional)</label>
+        <textarea id="so-descricao" rows="3" placeholder="Se deixar em branco, geramos um texto padrão automaticamente." class="w-full resize-none rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary"></textarea>
+      </div>
+      <div>
+        <label class="mb-1 block text-xs font-semibold text-muted">Imagem do prêmio</label>
+        <div id="so-imagem-preview" class="mb-2 hidden h-32 w-full overflow-hidden rounded-lg border border-border bg-surface2"></div>
+        <input type="file" id="so-imagem-file" accept="image/*" class="mb-2 w-full text-xs text-muted" />
+        <input type="url" id="so-imagem" placeholder="ou cole o link direto de uma imagem" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary" />
+        <p id="so-imagem-status" class="mt-1 text-[11px] text-muted">Aparece no card do sorteio e na tela de detalhes. Se deixar em branco, mostramos um ícone padrão.</p>
       </div>
       <div>
         <label class="mb-1 block text-xs font-semibold text-muted">Data do sorteio</label>
@@ -7340,6 +7356,8 @@ function fireConfetti(targetEl, pieces = 28) {
 
 let sorteioCountdownInterval = null;
 let PUBLIC_SORTEIOS_FINALIZADOS = [];
+let PUBLIC_SORTEIOS_ABERTOS = [];
+let PUBLIC_SORTEIO_PARTICIPANTES = [];
 
 async function loadSorteioPage() {
   const abertoWrap = document.getElementById("sorteio-aberto-wrap");
@@ -7362,6 +7380,8 @@ async function loadSorteioPage() {
 
   const abertos = (data || []).filter((s) => s.status === "aberto");
   const finalizados = (data || []).filter((s) => s.status === "finalizado");
+  PUBLIC_SORTEIOS_ABERTOS = abertos;
+  PUBLIC_SORTEIO_PARTICIPANTES = participantes || [];
 
   document.getElementById("sorteio-stat-ativos").textContent = abertos.length;
   document.getElementById("sorteio-stat-finalizados").textContent = finalizados.length;
@@ -7421,7 +7441,7 @@ function renderSorteiosAbertos(list, participantes) {
 
         <div class="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-3">
           <p class="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-white">🧾 Como participar</p>
-          <p class="text-xs text-muted">Compre qualquer produto na loja e tenha o pagamento confirmado — sem inscrição extra.</p>
+          <p class="text-xs text-muted">Apenas compre qualquer produto da loja.</p>
         </div>
 
         <div class="mb-4 flex items-center justify-between">
@@ -7432,7 +7452,7 @@ function renderSorteiosAbertos(list, participantes) {
 
         <div class="mt-5 flex items-center justify-between gap-3 border-t border-border pt-4">
           <span class="text-xs font-semibold uppercase tracking-wide text-muted">1 ganhador</span>
-          <button onclick="goToStore()" class="magnetic-btn rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-glow hover:bg-primaryhover"><span>Participar agora →</span></button>
+          <button onclick="openSorteioDetalhe('${s.id}')" class="magnetic-btn rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-glow hover:bg-primaryhover"><span>Participar agora →</span></button>
         </div>
       </div>
     </div>`).join("");
@@ -7514,6 +7534,99 @@ window.showSorteioResultado = (id) => {
   document.getElementById("sorteio-resultado-modal").classList.add("flex");
 };
 
+/* Badge de nível (mesmos degraus usados no ranking do painel) — calculado a
+   partir do total real já gasto pelo cliente, então reflete o rank de
+   verdade que ele já tem no site. */
+function sorteioTierBadgeHTML(totalGasto) {
+  const tier = painelRankTier(Number(totalGasto || 0));
+  const map = {
+    Bronze: { emoji: "🥉", cls: "text-muted" },
+    Silver: { emoji: "🥈", cls: "text-slate-300" },
+    Gold: { emoji: "🥇", cls: "text-amber-400" },
+    Diamond: { emoji: "💎", cls: "lilac" },
+  };
+  const t = map[tier.name] || map.Bronze;
+  return `<span class="text-[11px] font-bold ${t.cls}">${t.emoji} ${tier.name}</span>`;
+}
+
+window.openSorteioDetalhe = (id) => {
+  const s = PUBLIC_SORTEIOS_ABERTOS.find((x) => x.id === id);
+  if (!s) return;
+  const participantes = PUBLIC_SORTEIO_PARTICIPANTES;
+  const numerados = [...participantes].sort((a, b) => new Date(a.entrou_em) - new Date(b.entrou_em));
+
+  document.getElementById("sorteio-detalhe-body").innerHTML = `
+    <div class="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_1.1fr]">
+      <div class="overflow-hidden rounded-2xl border border-border">
+        ${sorteioImagemBannerHTML(s).replace("h-48", "h-72 lg:h-full")}
+      </div>
+      <div>
+        <p class="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide lilac"><span class="h-1.5 w-1.5 rounded-full bg-accent"></span> Sorteio ativo</p>
+        <h2 class="mb-3 font-display text-2xl font-bold uppercase leading-tight text-white sm:text-3xl">${escapeHTML(s.titulo)}</h2>
+        <p class="mb-5 text-sm text-muted">${escapeHTML(s.descricao || `O vencedor recebe ${s.premio}${s.dias ? ` por ${s.dias} dias` : ""}. Toda compra confirmada garante sua entrada automática — o código usado é o mesmo do seu perfil.`)}</p>
+
+        <div class="mb-5 divide-y divide-border rounded-xl border border-border">
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-[11px] font-bold uppercase tracking-wide text-muted">Prêmio</span>
+            <span class="text-sm font-bold text-white">${escapeHTML(s.premio)}${s.dias ? ` · ${s.dias} dias` : ""}</span>
+          </div>
+          <div class="flex items-center justify-between px-4 py-3">
+            <span class="text-[11px] font-bold uppercase tracking-wide text-muted">Encerra em</span>
+            <span data-sorteio-cd="${s.id}" data-sorteio-target="${new Date(s.data_sorteio + "T20:00:00").getTime()}" class="text-sm font-bold text-white">--</span>
+          </div>
+        </div>
+
+        <div class="mb-5 rounded-xl border border-primary/30 bg-primary/5 p-4">
+          <p class="mb-1 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-white">🧾 Como participar</p>
+          <p class="text-xs text-muted">Apenas compre qualquer produto da loja.</p>
+        </div>
+
+        <button onclick="closeSorteioDetalhe(); goToStore();" class="magnetic-btn w-full rounded-xl bg-primary py-3.5 text-sm font-bold text-white shadow-glow hover:bg-primaryhover"><span>Comprar agora →</span></button>
+      </div>
+    </div>
+
+    <div class="mt-10 border-t border-border pt-8">
+      <p class="mb-1 text-[11px] font-bold uppercase tracking-wide lilac">— Lista completa</p>
+      <div class="mb-5 flex items-center justify-between">
+        <h3 class="font-display text-xl font-bold uppercase text-white sm:text-2xl">Participantes</h3>
+        <span class="text-sm font-semibold text-muted">${numerados.length} entrada${numerados.length === 1 ? "" : "s"}</span>
+      </div>
+      ${numerados.length ? `
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          ${numerados.map((p, i) => `
+            <div class="flex items-center gap-3 rounded-xl border border-border bg-surface2/60 p-3">
+              <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black uppercase text-white">${escapeHTML((p.nome_exibicao || "?").trim().charAt(0))}</span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-bold text-white">${escapeHTML(p.nome_exibicao || "Cliente NovaStore")}</p>
+                ${sorteioTierBadgeHTML(p.total_gasto)}
+              </div>
+              <span class="shrink-0 font-mono text-xs text-muted">#${String(i + 1).padStart(3, "0")}</span>
+            </div>`).join("")}
+        </div>` : `<p class="text-sm text-muted">Ainda ninguém confirmou pagamento pra esse sorteio. Compre qualquer produto pra ser o primeiro a entrar! 👀</p>`}
+    </div>`;
+
+  document.getElementById("sorteio-detalhe-modal").classList.remove("hidden");
+  document.getElementById("sorteio-detalhe-modal").classList.add("flex");
+
+  const cdEl = document.querySelector(`#sorteio-detalhe-body [data-sorteio-cd]`);
+  if (cdEl) {
+    const tick = () => {
+      const diff = Number(cdEl.dataset.sorteioTarget) - Date.now();
+      if (diff <= 0) { cdEl.textContent = "Em breve 🎉"; return; }
+      const d = Math.floor(diff / 86400000);
+      const h = Math.floor((diff % 86400000) / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      cdEl.textContent = d > 0 ? `${d}d ${String(h).padStart(2, "0")}h` : `${h}h ${String(m).padStart(2, "0")}m`;
+    };
+    tick();
+  }
+};
+
+window.closeSorteioDetalhe = () => {
+  document.getElementById("sorteio-detalhe-modal").classList.add("hidden");
+  document.getElementById("sorteio-detalhe-modal").classList.remove("flex");
+};
+
 window.closeSorteioResultado = () => {
   document.getElementById("sorteio-resultado-modal").classList.add("hidden");
   document.getElementById("sorteio-resultado-modal").classList.remove("flex");
@@ -7540,12 +7653,18 @@ async function loadAdminSorteios() {
 
   tbody.innerHTML = ADMIN_SORTEIOS.map((s) => `
     <tr class="border-b border-border/60 last:border-0">
-      <td class="px-4 py-3 font-semibold text-white">${escapeHTML(s.premio)}${s.dias ? ` <span class="font-normal text-muted">(${s.dias}d)</span>` : ""}</td>
+      <td class="px-4 py-3 font-semibold text-white">
+        <div class="flex items-center gap-3">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface2 text-base">${safeMediaSrc(s.imagem_url) ? `<img src="${safeMediaSrc(s.imagem_url)}" class="h-full w-full object-cover" alt="" loading="lazy" decoding="async" />` : "🎁"}</span>
+          <span>${escapeHTML(s.premio)}${s.dias ? ` <span class="font-normal text-muted">(${s.dias}d)</span>` : ""}</span>
+        </div>
+      </td>
       <td class="px-4 py-3 text-muted">${new Date(s.data_sorteio).toLocaleDateString("pt-BR")}</td>
       <td class="px-4 py-3"><span class="rounded-full px-2.5 py-1 text-xs font-bold ${s.status === "aberto" ? "bg-accent/15 text-accent" : "bg-white/10 text-muted"}">${s.status === "aberto" ? "Aberto" : "Finalizado"}</span></td>
       <td class="px-4 py-3 text-muted">${s.ganhador_nome ? `${escapeHTML(s.ganhador_nome)} <span class="font-mono lilac">${escapeHTML(s.ganhador_codigo || "")}</span>` : "—"}</td>
       <td class="px-4 py-3 text-right whitespace-nowrap">
-        ${s.status === "aberto" ? `<button onclick="openSpinModal('${s.id}')" class="mr-3 text-xs font-bold hover:underline lilac">🎰 Girar números</button>` : ""}
+        ${s.status === "aberto" ? `<button onclick="openSpinModal('${s.id}')" class="mr-3 text-xs font-bold hover:underline lilac">🎰 Girar números</button>` : `<button onclick="reabrirSorteio('${s.id}')" class="mr-3 text-xs font-bold hover:underline lilac">↺ Reabrir</button>`}
+        <button onclick="editSorteio('${s.id}')" class="mr-3 text-xs font-bold text-white hover:underline">Editar</button>
         <button onclick="deleteSorteio('${s.id}','${escapeHTML(s.titulo).replace(/'/g,"\\'")}')" class="text-xs font-bold text-red-400 hover:underline">Excluir</button>
       </td>
     </tr>`).join("");
@@ -7900,9 +8019,44 @@ Acompanhe suas indicações e comissões no seu painel, na aba "Afiliado".`
   if (msgError) alert("Ticket criado, mas houve um erro ao salvar a mensagem: " + msgError.message);
 }
 
+let editingSorteioId = null;
+
 window.openSorteioForm = () => {
+  editingSorteioId = null;
   document.getElementById("sorteio-form").reset();
+  document.getElementById("sorteio-form-title").textContent = "Novo Sorteio";
+  document.getElementById("sorteio-form-submit").textContent = "Criar";
+  document.getElementById("so-imagem-preview").classList.add("hidden");
+  document.getElementById("so-imagem-preview").innerHTML = "";
+  document.getElementById("so-imagem-status").textContent = "Aparece no card do sorteio e na tela de detalhes. Se deixar em branco, mostramos um ícone padrão.";
   document.getElementById("sorteio-form-error").classList.add("hidden");
+  document.getElementById("sorteio-form-modal").classList.remove("hidden");
+  document.getElementById("sorteio-form-modal").classList.add("flex");
+};
+
+window.editSorteio = (id) => {
+  const s = ADMIN_SORTEIOS.find((x) => x.id === id);
+  if (!s) return;
+  editingSorteioId = id;
+  document.getElementById("sorteio-form").reset();
+  document.getElementById("sorteio-form-title").textContent = "Editar Sorteio";
+  document.getElementById("sorteio-form-submit").textContent = "Salvar alterações";
+  document.getElementById("sorteio-form-error").classList.add("hidden");
+  document.getElementById("so-titulo").value = s.titulo || "";
+  document.getElementById("so-premio").value = s.premio || "";
+  document.getElementById("so-dias").value = s.dias || "";
+  document.getElementById("so-descricao").value = s.descricao || "";
+  document.getElementById("so-imagem").value = s.imagem_url || "";
+  document.getElementById("so-data").value = s.data_sorteio ? String(s.data_sorteio).slice(0, 10) : "";
+  const previewEl = document.getElementById("so-imagem-preview");
+  if (safeMediaSrc(s.imagem_url)) {
+    previewEl.innerHTML = `<img src="${safeMediaSrc(s.imagem_url)}" class="h-full w-full object-cover" alt="Pré-visualização" decoding="async" />`;
+    previewEl.classList.remove("hidden");
+  } else {
+    previewEl.classList.add("hidden");
+    previewEl.innerHTML = "";
+  }
+  document.getElementById("so-imagem-status").textContent = "Aparece no card do sorteio e na tela de detalhes. Se deixar em branco, mostramos um ícone padrão.";
   document.getElementById("sorteio-form-modal").classList.remove("hidden");
   document.getElementById("sorteio-form-modal").classList.add("flex");
 };
@@ -7910,6 +8064,23 @@ window.openSorteioForm = () => {
 window.closeSorteioForm = () => {
   document.getElementById("sorteio-form-modal").classList.add("hidden");
   document.getElementById("sorteio-form-modal").classList.remove("flex");
+};
+
+document.getElementById("so-imagem-file").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById("so-imagem-status");
+  statusEl.textContent = "Enviando imagem...";
+  try {
+    const url = await uploadSiteAsset(file, "sorteio");
+    document.getElementById("so-imagem").value = url;
+    const previewEl = document.getElementById("so-imagem-preview");
+    previewEl.innerHTML = `<img src="${safeMediaSrc(url)}" class="h-full w-full object-cover" alt="Pré-visualização" decoding="async" />`;
+    previewEl.classList.remove("hidden");
+    statusEl.textContent = "Imagem enviada ✓";
+  } catch (err) {
+    statusEl.textContent = "Erro no upload: " + err.message;
+  }
 };
 
 document.getElementById("sorteio-form").onsubmit = async (e) => {
@@ -7921,21 +8092,34 @@ document.getElementById("sorteio-form").onsubmit = async (e) => {
   const premio = document.getElementById("so-premio").value.trim();
   const diasVal = document.getElementById("so-dias").value;
   const dias = diasVal ? parseInt(diasVal, 10) : null;
+  const descricao = document.getElementById("so-descricao").value.trim() || null;
   const imagem_url = document.getElementById("so-imagem").value.trim() || null;
   const data_sorteio = document.getElementById("so-data").value;
+  const payload = { titulo, premio, dias, descricao, imagem_url, data_sorteio };
 
   btn.disabled = true;
-  btn.textContent = "Criando...";
-  const { error } = await supabase.from("sorteios").insert({ titulo, premio, dias, imagem_url, data_sorteio, status: "aberto" });
+  btn.textContent = editingSorteioId ? "Salvando..." : "Criando...";
+
+  const { error } = editingSorteioId
+    ? await supabase.from("sorteios").update(payload).eq("id", editingSorteioId)
+    : await supabase.from("sorteios").insert({ ...payload, status: "aberto" });
+
   btn.disabled = false;
-  btn.textContent = "Criar";
+  btn.textContent = editingSorteioId ? "Salvar alterações" : "Criar";
 
   if (error) {
-    errEl.textContent = "Erro ao criar: " + error.message;
+    errEl.textContent = "Erro ao salvar: " + error.message;
     errEl.classList.remove("hidden");
     return;
   }
   closeSorteioForm();
+  loadAdminSorteios();
+};
+
+window.reabrirSorteio = async (id) => {
+  if (!confirm("Reabrir esse sorteio? Ele volta a aparecer como ativo na vitrine e o ganhador registrado será apagado.")) return;
+  const { error } = await supabase.from("sorteios").update({ status: "aberto", ganhador_nome: null, ganhador_codigo: null }).eq("id", id);
+  if (error) { alert("Erro ao reabrir: " + error.message); return; }
   loadAdminSorteios();
 };
 
