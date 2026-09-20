@@ -7463,10 +7463,7 @@ function sorteioAvatarsResumoHTML(s) {
 
 function sorteioListaHTML(lista) {
   const meu = (typeof CURRENT_PROFILE !== "undefined" && CURRENT_PROFILE?.codigo_cliente) || null;
-  const temExemplo = SORTEIO_PREVIEW.marcarExemplo && lista.some((p) => p.exemplo);
-  const aviso = temExemplo
-    ? `<p class="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300">👀 Prévia visual: as linhas com a etiqueta <b>EXEMPLO</b> são só ilustração e não concorrem. Só clientes reais, cadastrados e com pagamento confirmado participam do sorteio.</p>`
-    : "";
+  const aviso = "";
   const linhas = lista.map((p) => {
     const eu = !!meu && !p.exemplo && p.codigo_cliente === meu;
     const nome = escapeHTML(p.nome_exibicao || "Cliente NovaStore");
