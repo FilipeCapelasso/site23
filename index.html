@@ -6556,8 +6556,9 @@ window.openAdminMensagem = async (customerId) => {
   const detail = document.getElementById("admin-mensagens-detail");
 
   detail.innerHTML = `
-    <div class="border-b border-border p-4">
+    <div class="flex items-start justify-between gap-3 border-b border-border p-4">
       <p class="text-sm font-bold text-white">${escapeHTML(client?.name || "Cliente")}</p>
+      <button id="admin-mensagem-delete-btn" onclick='deleteAdminMensagem(${JSON.stringify(customerId)})' class="hidden shrink-0 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-bold text-red-400 hover:bg-red-500/10">🗑️ Excluir chat</button>
     </div>
     <div id="admin-mensagem-messages" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
     <form id="admin-mensagem-form" class="flex items-center gap-2 border-t border-border p-3">
@@ -6583,6 +6584,7 @@ async function loadAdminMensagemThread(customerId) {
 function renderAdminMensagemThread(msgs) {
   const el = document.getElementById("admin-mensagem-messages");
   if (!el) return;
+  document.getElementById("admin-mensagem-delete-btn")?.classList.toggle("hidden", !msgs.length);
   if (!msgs.length) {
     el.innerHTML = `<div class="flex h-full items-center justify-center p-6 text-center text-sm text-muted">Nenhuma mensagem ainda. Envie a primeira mensagem abaixo.</div>`;
     return;
@@ -6619,8 +6621,22 @@ function subscribeAdminMensagemThread(customerId) {
   adminMensagemRealtimeChannel = supabase
     .channel(`admin-mensagem-${customerId}`)
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_privado", filter: `customer_id=eq.${customerId}` }, () => loadAdminMensagemThread(customerId))
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_privado" }, () => loadAdminMensagemThread(customerId))
     .subscribe();
 }
+
+/* exclui TODO o chat direto com um cliente (as mensagens somem também para o cliente) */
+window.deleteAdminMensagem = async (customerId) => {
+  const client = ADMIN_MENSAGENS_CLIENTES.find((c) => c.id === customerId);
+  if (!confirm(`Excluir toda a conversa com ${client?.name || "esse cliente"}?\n\nAs mensagens também somem para o cliente e não podem ser recuperadas.`)) return;
+
+  const { error } = await supabase.from("chat_privado").delete().eq("customer_id", customerId);
+  if (error) { alert("Erro ao excluir o chat: " + error.message); return; }
+
+  logAdminActivity("Excluiu chat de suporte (mensagens diretas)", client?.name || "Cliente");
+  if (currentAdminMensagemCustomerId === customerId) renderAdminMensagemThread([]);
+  await loadAdminMensagens();
+};
 
 /* =========================================================================
    PAINEL ADMIN — ABA "🎯 CONVENCER CLIENTE": mesmo sistema de Amigos/Mensagens
@@ -6702,9 +6718,12 @@ window.openAdminConvencer = async (customerId) => {
   const detail = document.getElementById("admin-convencer-detail");
 
   detail.innerHTML = `
-    <div class="border-b border-border p-4">
-      <p class="text-sm font-bold text-white">${escapeHTML(client?.name || "Cliente")}</p>
-      <p class="text-[11px] text-muted">Você aparece pra ele(a) como "ADMIN 👑"</p>
+    <div class="flex items-start justify-between gap-3 border-b border-border p-4">
+      <div class="min-w-0">
+        <p class="text-sm font-bold text-white">${escapeHTML(client?.name || "Cliente")}</p>
+        <p class="text-[11px] text-muted">Você aparece pra ele(a) como "ADMIN 👑"</p>
+      </div>
+      <button id="admin-convencer-delete-btn" onclick='deleteAdminConvencer(${JSON.stringify(customerId)})' class="hidden shrink-0 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-bold text-red-400 hover:bg-red-500/10">🗑️ Excluir chat</button>
     </div>
     <div id="admin-convencer-messages" class="flex-1 space-y-3 overflow-y-auto p-4"></div>
     <form id="admin-convencer-form" class="flex items-center gap-2 border-t border-border p-3">
@@ -6739,6 +6758,7 @@ async function loadAdminConvencerThread(customerId) {
 function renderAdminConvencerThread(msgs, adminId) {
   const el = document.getElementById("admin-convencer-messages");
   if (!el) return;
+  document.getElementById("admin-convencer-delete-btn")?.classList.toggle("hidden", !msgs.length);
   if (!msgs.length) {
     el.innerHTML = `<div class="flex h-full items-center justify-center p-6 text-center text-sm text-muted">Nenhuma mensagem ainda.</div>`;
     return;
@@ -6777,8 +6797,44 @@ function subscribeAdminConvencerThread(customerId) {
       const m = payload.new;
       if (m.sender_id === customerId || m.receiver_id === customerId) loadAdminConvencerThread(customerId);
     })
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "mensagens_privadas" }, () => loadAdminConvencerThread(customerId))
     .subscribe();
 }
+
+/* tempo real da lista de conversas do "Convencer Cliente" (nova conversa chegando
+   ou chat excluído em outra aba/sessão do admin) — antes essa função era chamada
+   mas nunca tinha sido definida, então a lista só atualizava ao trocar de aba. */
+function subscribeAdminConvencerList(adminId) {
+  if (adminConvencerListChannel) { supabase.removeChannel(adminConvencerListChannel); adminConvencerListChannel = null; }
+  adminConvencerListChannel = supabase
+    .channel("admin-convencer-list")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "mensagens_privadas" }, (payload) => {
+      const m = payload.new;
+      if (m.sender_id === adminId || m.receiver_id === adminId) loadAdminConvencer();
+    })
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "mensagens_privadas" }, () => loadAdminConvencer())
+    .subscribe();
+}
+
+/* exclui TODA a conversa do "Convencer Cliente" com esse cliente (as mensagens
+   somem também para o cliente, no chat de Amigos dele, e não podem ser recuperadas) */
+window.deleteAdminConvencer = async (customerId) => {
+  const client = ADMIN_CONVENCER_CLIENTES.find((c) => c.id === customerId);
+  if (!confirm(`Excluir toda a conversa com ${client?.name || "esse cliente"}?\n\nAs mensagens também somem para o cliente e não podem ser recuperadas.`)) return;
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const adminId = session.user.id;
+
+  const { error } = await supabase
+    .from("mensagens_privadas")
+    .delete()
+    .or(`and(sender_id.eq.${adminId},receiver_id.eq.${customerId}),and(sender_id.eq.${customerId},receiver_id.eq.${adminId})`);
+  if (error) { alert("Erro ao excluir o chat: " + error.message); return; }
+
+  logAdminActivity("Excluiu chat de Convencer Cliente", client?.name || "Cliente");
+  if (currentAdminConvencerCustomerId === customerId) renderAdminConvencerThread([], adminId);
+  await loadAdminConvencer();
+};
 
 
 /* versão do reenvio que não depende de ADMIN_CONTAS estar carregado (a aba
@@ -6862,6 +6918,7 @@ function subscribeAdminMensagensList() {
   adminMensagensListChannel = supabase
     .channel("admin-mensagens-list")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_privado" }, () => loadAdminMensagens())
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_privado" }, () => loadAdminMensagens())
     .subscribe();
 }
 
@@ -6957,6 +7014,7 @@ window.openAdminTicket = async (ticketId) => {
           <p class="truncate text-sm font-bold text-white">${escapeHTML(t?.assunto || "")}</p>
           <p class="text-xs text-muted">${escapeHTML(t?.customerName || "")} · ${escapeHTML(t?.categoria || "")}</p>
         </div>
+        <button onclick='deleteAdminTicket(${JSON.stringify(ticketId)})' class="shrink-0 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-bold text-red-400 hover:bg-red-500/10">🗑️ Excluir ticket</button>
       </div>
       <select id="admin-ticket-status-select" class="w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-xs font-bold outline-none focus:border-primary">
         <option value="aberto">Aberto</option>
@@ -7043,6 +7101,27 @@ function subscribeAdminTicketsList() {
     .on("postgres_changes", { event: "*", schema: "public", table: "tickets" }, () => loadAdminTickets())
     .subscribe();
 }
+
+/* exclui o ticket inteiro (o cascade apaga as mensagens dele também, e some para o cliente) */
+window.deleteAdminTicket = async (ticketId) => {
+  const t = ADMIN_TICKETS.find((x) => x.id === ticketId);
+  if (!confirm(`Excluir o ticket "${t?.assunto || ""}" de ${t?.customerName || "esse cliente"}?\n\nO ticket e todas as mensagens somem também para o cliente e não podem ser recuperados.`)) return;
+
+  const { error } = await supabase.from("tickets").delete().eq("id", ticketId);
+  if (error) { alert("Erro ao excluir o ticket: " + error.message); return; }
+
+  logAdminActivity("Excluiu ticket de suporte", t?.assunto || "Ticket");
+  if (currentAdminTicketId === ticketId) {
+    currentAdminTicketId = null;
+    if (adminTicketThreadChannel) { supabase.removeChannel(adminTicketThreadChannel); adminTicketThreadChannel = null; }
+    document.getElementById("admin-ticket-detail").innerHTML = `
+      <div class="flex h-full flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted">
+        <span class="text-3xl">🎫</span>
+        Selecione um ticket à esquerda para ver e responder ao cliente.
+      </div>`;
+  }
+  await loadAdminTickets();
+};
 
 let ADMIN_PRODUCTS_CACHE = [];
 
