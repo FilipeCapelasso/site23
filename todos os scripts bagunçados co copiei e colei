@@ -1029,6 +1029,14 @@ to authenticated
 using (customer_id = auth.uid() or public.is_admin())
 with check (customer_id = auth.uid() or public.is_admin());
 
+-- Admin pode excluir o chat direto com um cliente (aba Suporte > Mensagens diretas).
+drop policy if exists "chat_privado_admin_delete" on public.chat_privado;
+create policy "chat_privado_admin_delete"
+on public.chat_privado
+for delete
+to authenticated
+using (public.is_admin());
+
 
 -- chat_global
 drop policy if exists "chat_global_select_authenticated" on public.chat_global;
@@ -1075,6 +1083,14 @@ for update
 to authenticated
 using (sender_id = auth.uid() or receiver_id = auth.uid())
 with check (sender_id = auth.uid() or receiver_id = auth.uid());
+
+-- Admin pode excluir a conversa da aba "🎯 Convencer Cliente" (também usada em Amigos).
+drop policy if exists "mensagens_privadas_delete_participant_or_admin" on public.mensagens_privadas;
+create policy "mensagens_privadas_delete_participant_or_admin"
+on public.mensagens_privadas
+for delete
+to authenticated
+using (sender_id = auth.uid() or receiver_id = auth.uid() or public.is_admin());
 
 
 -- amigos
@@ -1131,6 +1147,15 @@ to authenticated
 using (customer_id = auth.uid() or public.is_admin())
 with check (customer_id = auth.uid() or public.is_admin());
 
+-- Admin pode excluir um ticket inteiro (aba Suporte > Tickets). O cascade
+-- (on delete cascade em ticket_mensagens.ticket_id) já apaga as mensagens dele.
+drop policy if exists "tickets_admin_delete" on public.tickets;
+create policy "tickets_admin_delete"
+on public.tickets
+for delete
+to authenticated
+using (public.is_admin());
+
 
 -- ticket_mensagens
 drop policy if exists "ticket_mensagens_select" on public.ticket_mensagens;
@@ -1175,6 +1200,13 @@ using (
       and t.customer_id = auth.uid()
   )
 );
+
+drop policy if exists "ticket_mensagens_admin_delete" on public.ticket_mensagens;
+create policy "ticket_mensagens_admin_delete"
+on public.ticket_mensagens
+for delete
+to authenticated
+using (public.is_admin());
 
 
 -- avaliacoes
@@ -3459,6 +3491,10 @@ from (
     ('função entrega_marcar_lidas_pedido', to_regprocedure('public.entrega_marcar_lidas_pedido(uuid)') is not null),
     ('função entrega_admin_marcar_lidas',  to_regprocedure('public.entrega_admin_marcar_lidas(uuid)') is not null),
     ('policy admin exclui chats (messages)', exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'messages' and policyname = 'messages_admin_delete')),
+    ('policy admin exclui chats (chat_privado)', exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'chat_privado' and policyname = 'chat_privado_admin_delete')),
+    ('policy admin exclui chats (mensagens_privadas / Convencer Cliente)', exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'mensagens_privadas' and policyname = 'mensagens_privadas_delete_participant_or_admin')),
+    ('policy admin exclui tickets', exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'tickets' and policyname = 'tickets_admin_delete')),
+    ('policy admin exclui ticket_mensagens', exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'ticket_mensagens' and policyname = 'ticket_mensagens_admin_delete')),
     ('coluna messages.read_at',            exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'messages' and column_name = 'read_at')),
     ('trigger aviso de pedido pago',       exists (select 1 from pg_trigger where tgname = 'trg_notificar_pedido_pago')),
     ('realtime: profiles (painel Contas)', exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'profiles')),
