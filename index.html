@@ -4816,141 +4816,234 @@ function stopLightningEffect() {
 }
 
 /* =========================================================================
-   EFEITO "RAIOS ENTRE OS CARDS" — relâmpagos saltando entre os cards do
-   catálogo, ligados/desligados (e com frequência ajustável) pelo admin.
+   EFEITO "RAIOS ENTRE OS CARDS" — um raio roxo que percorre os cards do
+   catálogo em sequência, ligados/desligados (e com frequência ajustável) pelo admin.
    O canvas fica como irmão de #products-grid (dentro de #catalog-lightning-wrap),
    então ele sobrevive aos re-renders do grid (que reescrevem o innerHTML).
    ========================================================================= */
 let cardLightningTimer = null;
 
+// pausa entre uma "descarga" e a próxima (ms)
 const CARD_LIGHTNING_DELAYS = {
-  rara: [4500, 9000],
-  normal: [1800, 4200],
-  frequente: [700, 2000],
+  rara: [9000, 16000],
+  normal: [4500, 9000],
+  frequente: [2200, 4500],
 };
 
 function startCardLightningEffect(frequency) {
   const canvas = document.getElementById("card-lightning-canvas");
   const wrap = document.getElementById("catalog-lightning-wrap");
   if (!canvas || !wrap) return;
-  canvas.classList.add("is-active");
   canvas._freq = frequency || "normal";
-  if (canvas._stopCardLightning) return; // já rodando — só atualiza a frequência acima
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  canvas.classList.add("is-active");
+  if (canvas._stopCardLightning) return; // já rodando — só atualiza a frequência
   const ctx = canvas.getContext("2d");
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const SPEED = 2.4;   // px/ms — velocidade da ponta do raio
+  const FADE = 650;    // ms até o rastro apagar
+  let raf = null, run = null;
 
-  function resizeCanvas() {
-    canvas.width = wrap.clientWidth;
-    canvas.height = wrap.clientHeight;
-  }
-  resizeCanvas();
-  const ro = new ResizeObserver(resizeCanvas);
+  const resize = () => { canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight; };
+  resize();
+  const ro = new ResizeObserver(resize);
   ro.observe(wrap);
-  window.addEventListener("resize", resizeCanvas);
 
-  /* escolhe um card de partida (visível na tela) e o card mais próximo dele
-     dentre alguns vizinhos, pra o raio parecer que "salta" entre produtos perto */
-  function pickPair() {
-    const cards = Array.from(wrap.querySelectorAll(".product-card"));
-    if (cards.length < 2) return null;
-    const viewportH = window.innerHeight || 800;
-    const visible = cards.filter((c) => {
-      const r = c.getBoundingClientRect();
-      return r.bottom > 0 && r.top < viewportH;
-    });
-    const pool = visible.length >= 2 ? visible : cards;
-    const a = pool[Math.floor(Math.random() * pool.length)];
-    const ra = a.getBoundingClientRect();
-    const acx = ra.left + ra.width / 2, acy = ra.top + ra.height / 2;
-    const candidates = pool
-      .filter((c) => c !== a)
-      .map((c) => {
-        const r = c.getBoundingClientRect();
-        const dist = Math.hypot(r.left + r.width / 2 - acx, r.top + r.height / 2 - acy);
-        return { c, dist };
-      })
-      .sort((x, y) => x.dist - y.dist);
-    if (!candidates.length) return null;
-    const b = candidates[Math.floor(Math.random() * Math.min(3, candidates.length))].c;
-    return [a, b];
+  /* deslocamento de ponto médio: dá o zigue-zague irregular de um raio de verdade */
+  function jag(a, b, amp, depth, out) {
+    if (!depth) { out.push({ x: b.x, y: b.y }); return; }
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const off = (Math.random() - 0.5) * amp;
+    const m = { x: (a.x + b.x) / 2 - (dy / len) * off, y: (a.y + b.y) / 2 + (dx / len) * off };
+    jag(a, m, amp * 0.55, depth - 1, out);
+    jag(m, b, amp * 0.55, depth - 1, out);
   }
 
-  function drawBoltBetween(p1, p2) {
-    const dx = p2.x - p1.x, dy = p2.y - p1.y;
-    const dist = Math.max(1, Math.hypot(dx, dy));
-    const nx = -dy / dist, ny = dx / dist; // perpendicular unitário, pra "tremular" o raio
-    const segments = Math.max(5, Math.min(14, Math.round(dist / 26)));
-    ctx.save();
-    ctx.strokeStyle = "rgba(225,218,255,.95)";
-    ctx.shadowColor = "rgba(160,140,255,.95)";
-    ctx.shadowBlur = 15;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    let x = p1.x, y = p1.y;
-    for (let i = 1; i <= segments; i++) {
-      const t = i / segments;
-      const wobble = i === segments ? 0 : (Math.random() - 0.5) * Math.min(26, dist * 0.22);
-      x = p1.x + dx * t + nx * wobble;
-      y = p1.y + dy * t + ny * wobble;
-      ctx.lineTo(x, y);
-      if (Math.random() > 0.78 && i < segments) {
-        const fx = x + (Math.random() - 0.5) * 26;
-        const fy = y + (Math.random() - 0.5) * 26;
-        ctx.moveTo(x, y);
-        ctx.lineTo(fx, fy);
-        ctx.moveTo(x, y);
+  /* monta o trajeto: 1º card → segue a linha → desce → volta pela linha de baixo (serpente) */
+  function buildRun() {
+    const wr = wrap.getBoundingClientRect();
+    const vh = window.innerHeight || 800;
+    const all = [...wrap.querySelectorAll(".product-card")].map((el) => {
+      const r = el.getBoundingClientRect();
+      return { el, l: r.left - wr.left, r: r.right - wr.left, t: r.top - wr.top, w: r.width, h: r.height, vt: r.top, vb: r.bottom };
+    });
+    if (!all.length) return null;
+    all.sort((a, b) => a.t - b.t || a.l - b.l);
+    const rows = [];
+    all.forEach((c) => {
+      const last = rows[rows.length - 1];
+      if (last && Math.abs(last[0].t - c.t) < 24) last.push(c); else rows.push([c]);
+    });
+    let order = [];
+    rows.forEach((row, i) => {
+      row.sort((a, b) => a.l - b.l);
+      if (i % 2) row.reverse();
+      row.forEach((c) => { c.rtl = i % 2 === 1; order.push(c); });
+    });
+    // começa no primeiro card visível na tela e vai até um pouco abaixo da dobra
+    const first = order.findIndex((c) => c.vb > 0 && c.vt < vh);
+    if (first < 0) return null;
+    let end = first;
+    order.forEach((c, i) => { if (i > end && c.vt < vh + 120) end = i; });
+    order = order.slice(first, end + 1);
+
+    const wp = [];
+    order.forEach((c, i) => {
+      const p = { x: c.l + c.w / 2, y: c.t + c.h * 0.34, c };
+      const a = order[i - 1];
+      if (a && Math.abs(a.t - c.t) >= 24 && Math.abs(a.l - c.l) < 40) {
+        // descida: o raio desce rente à borda externa, sem riscar o texto dos cards
+        const ex = a.rtl ? a.l + 10 : a.r - 10, pa = wp[wp.length - 1];
+        wp.push({ x: ex, y: pa.y }, { x: ex, y: p.y });
       }
+      wp.push(p);
+    });
+
+    const v = [], hits = [];
+    let d = 0;
+    const add = (p) => {
+      const l = v[v.length - 1];
+      if (l) d += Math.hypot(p.x - l.x, p.y - l.y);
+      v.push({ x: p.x, y: p.y, d });
+    };
+    add(wp[0]);
+    hits.push({ d: 0, c: wp[0].c, x: wp[0].x, y: wp[0].y });
+    for (let i = 1; i < wp.length; i++) {
+      const a = wp[i - 1], b = wp[i], len = Math.hypot(b.x - a.x, b.y - a.y);
+      const out = [];
+      jag(a, b, Math.min(64, len * 0.38), len < 60 ? 3 : len < 200 ? 4 : 5, out);
+      out.forEach(add);
+      if (b.c) hits.push({ d, c: b.c, x: b.x, y: b.y });
     }
-    ctx.stroke();
-    ctx.restore();
-    [p1, p2].forEach((p) => {
-      ctx.save();
-      ctx.fillStyle = "rgba(200,188,255,.7)";
-      ctx.shadowColor = "rgba(160,140,255,.95)";
-      ctx.shadowBlur = 22;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    });
+
+    // ramificações que saem do raio principal
+    const br = [];
+    for (let i = 6; i < v.length - 6; i++) {
+      if (Math.random() > 0.035) continue;
+      const p = v[i], q = v[i + 3];
+      const ang = Math.atan2(q.y - p.y, q.x - p.x) + (Math.random() < 0.5 ? -1 : 1) * (0.45 + Math.random() * 0.6);
+      const L = 45 + Math.random() * 90;
+      const pts = [{ x: p.x, y: p.y }];
+      jag(p, { x: p.x + Math.cos(ang) * L, y: p.y + Math.sin(ang) * L }, L * 0.4, 3, pts);
+      let dd = 0;
+      br.push({ d0: p.d, pts: pts.map((o, k) => { if (k) dd += Math.hypot(o.x - pts[k - 1].x, o.y - pts[k - 1].y); return { x: o.x, y: o.y, d: dd }; }) });
+    }
+    const ys = v.map((p) => p.y);
+    return { v, br, hits, total: d, hi: 0, lo: 0, sparks: [], rings: [], y0: Math.max(0, Math.min(...ys) - 160), y1: Math.max(...ys) + 160 };
   }
 
-  function strike() {
-    if (!canvas.isConnected || canvas.width === 0) return;
-    const pair = pickPair();
-    if (!pair) return;
-    const wrapRect = wrap.getBoundingClientRect();
-    const [a, b] = pair;
-    const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
-    const p1 = { x: ra.left + ra.width / 2 - wrapRect.left, y: ra.top + ra.height / 2 - wrapRect.top };
-    const p2 = { x: rb.left + rb.width / 2 - wrapRect.left, y: rb.top + rb.height / 2 - wrapRect.top };
+  function impact(s, h, now) {
+    const el = h.c.el;
+    const g = "0 0 0 0 rgba(150,110,255,0)";
+    el.animate([{ boxShadow: g }, { boxShadow: "0 0 46px 8px rgba(150,110,255,.65), inset 0 0 28px rgba(170,140,255,.35)", offset: 0.18 }, { boxShadow: g }], { duration: 650, easing: "ease-out" });
+    const art = el.querySelector(".aspect-\\[1\\/1\\]");
+    if (art) art.animate([{ filter: "brightness(1)" }, { filter: "brightness(1.5) saturate(1.3)", offset: 0.18 }, { filter: "brightness(1)" }], { duration: 650, easing: "ease-out" });
+    s.rings.push({ x: h.x, y: h.y, t: now });
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 0.06 + Math.random() * 0.3;
+      s.sparks.push({ x: h.x, y: h.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.05, t: now, life: 300 + Math.random() * 350 });
+    }
+  }
+
+  function frame(now) {
+    const s = run;
+    if (!s || !canvas.isConnected) return finish();
+    const el = now - s.t0, head = el * SPEED, v = s.v;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.clearRect(0, s.y0, canvas.width, s.y1 - s.y0);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = ctx.lineJoin = "round";
+    while (s.hi < s.hits.length && s.hits[s.hi].d <= head) impact(s, s.hits[s.hi++], now);
+
+    const flick = 0.8 + Math.random() * 0.35;
+    const alive = (age, fade) => (age < 0 || age > fade ? 0 : Math.pow(1 - age / fade, 1.6) * flick);
+    // trecho vivo do raio principal (tremulação leve a cada frame)
+    while (s.lo < v.length && el - v[s.lo].d / SPEED > FADE) s.lo++;
+    const segs = [];
+    let prev = null;
+    for (let i = s.lo; i < v.length && v[i].d <= head; i++) {
+      const p = v[i];
+      p.jx = p.x + (Math.random() - 0.5) * 1.8; p.jy = p.y + (Math.random() - 0.5) * 1.8;
+      if (prev) segs.push([prev, p, alive(el - p.d / SPEED, FADE), 1]);
+      prev = p;
+    }
+    s.br.forEach((b) => {
+      if (b.d0 > head) return;
+      const t0 = b.d0 / SPEED;
+      for (let i = 1; i < b.pts.length; i++) {
+        const p = b.pts[i], age = el - (t0 + p.d / (SPEED * 0.8));
+        const a = alive(age, FADE * 0.7);
+        if (a > 0) { b.pts[i - 1].jx = b.pts[i - 1].x; b.pts[i - 1].jy = b.pts[i - 1].y; p.jx = p.x; p.jy = p.y; segs.push([b.pts[i - 1], p, a, 0.55]); }
+      }
+    });
+    [[10, "rgba(110,70,255,A)", 0.16], [4, "rgba(170,130,255,A)", 0.5], [1.6, "rgba(248,243,255,A)", 1]].forEach(([w, col, k]) => {
+      ctx.lineWidth = w;
+      segs.forEach(([p, q, a, g]) => {
+        if (a < 0.02) return;
+        ctx.strokeStyle = col.replace("A", Math.min(1, a * k * g).toFixed(3));
+        ctx.beginPath(); ctx.moveTo(p.jx, p.jy); ctx.lineTo(q.jx, q.jy); ctx.stroke();
+      });
+    });
+
+    // ponta do raio: núcleo branco com halo roxo
+    if (head < s.total && prev) {
+      const r = ctx.createRadialGradient(prev.jx, prev.jy, 0, prev.jx, prev.jy, 38);
+      r.addColorStop(0, "rgba(255,255,255,.95)"); r.addColorStop(0.25, "rgba(190,150,255,.6)"); r.addColorStop(1, "rgba(120,80,255,0)");
+      ctx.fillStyle = r;
+      ctx.beginPath(); ctx.arc(prev.jx, prev.jy, 38, 0, Math.PI * 2); ctx.fill();
+    }
+    // onda + clarão nos impactos
+    s.rings = s.rings.filter((o) => now - o.t < 480);
+    s.rings.forEach((o) => {
+      const k = (now - o.t) / 480;
+      ctx.strokeStyle = `rgba(190,160,255,${(0.7 * (1 - k)).toFixed(3)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(o.x, o.y, 8 + k * 84, 0, Math.PI * 2); ctx.stroke();
+      const f = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, 70);
+      f.addColorStop(0, `rgba(210,190,255,${(0.55 * (1 - k) * (1 - k)).toFixed(3)})`); f.addColorStop(1, "rgba(120,80,255,0)");
+      ctx.fillStyle = f;
+      ctx.beginPath(); ctx.arc(o.x, o.y, 70, 0, Math.PI * 2); ctx.fill();
+    });
+    // faíscas
+    s.sparks = s.sparks.filter((p) => now - p.t < p.life);
+    s.sparks.forEach((p) => {
+      const t = now - p.t, x = p.x + p.vx * t, y = p.y + p.vy * t + 0.0004 * t * t;
+      ctx.strokeStyle = `rgba(235,225,255,${(1 - t / p.life).toFixed(3)})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x - p.vx * 14, y - p.vy * 14); ctx.lineTo(x, y); ctx.stroke();
+    });
+
+    if (head > s.total + FADE * SPEED && !s.sparks.length && !s.rings.length) return finish();
+    raf = requestAnimationFrame(frame);
+  }
+
+  function schedule(ms) { cardLightningTimer = setTimeout(launch, ms); }
+
+  function finish() {
+    run = null;
+    ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawBoltBetween(p1, p2);
-    [a, b].forEach((c) => {
-      c.classList.remove("card-zapped");
-      void c.offsetWidth;
-      c.classList.add("card-zapped");
-      setTimeout(() => c.classList.remove("card-zapped"), 500);
-    });
-    setTimeout(() => { if (canvas.isConnected) ctx.clearRect(0, 0, canvas.width, canvas.height); }, 160);
+    const [min, max] = CARD_LIGHTNING_DELAYS[canvas._freq] || CARD_LIGHTNING_DELAYS.normal;
+    schedule(min + Math.random() * (max - min));
   }
 
-  function scheduleNext() {
-    const [min, max] = reduced ? [8000, 14000] : (CARD_LIGHTNING_DELAYS[canvas._freq] || CARD_LIGHTNING_DELAYS.normal);
-    const delay = min + Math.random() * (max - min);
-    cardLightningTimer = setTimeout(() => { strike(); scheduleNext(); }, delay);
+  function launch() {
+    if (!canvas.isConnected) return;
+    const r = document.hidden ? null : buildRun();
+    if (!r) return schedule(3000);
+    run = r;
+    r.t0 = performance.now();
+    raf = requestAnimationFrame(frame);
   }
-  scheduleNext();
 
   canvas._stopCardLightning = () => {
     ro.disconnect();
-    window.removeEventListener("resize", resizeCanvas);
-    if (cardLightningTimer) clearTimeout(cardLightningTimer);
-    cardLightningTimer = null;
+    clearTimeout(cardLightningTimer);
+    cancelAnimationFrame(raf);
+    run = null;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     canvas._stopCardLightning = null;
   };
+  schedule(900);
 }
 
 function stopCardLightningEffect() {
