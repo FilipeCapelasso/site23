@@ -63,12 +63,12 @@
         accent:"var(--color-accent, #00e6a8)", muted:"#8b8fa3",
       },
       boxShadow: { glow: "0 0 40px -10px rgba(124,92,255,0.45)" },
-      fontFamily: { display: ["'Space Grotesk'","system-ui","sans-serif"], sans: ["Inter","system-ui","sans-serif"], mono: ["'JetBrains Mono'","ui-monospace","monospace"] },
+      fontFamily: { display: ["'Rajdhani'","system-ui","sans-serif"], sans: ["Inter","system-ui","sans-serif"] },
     }},
   };
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
     --color-primary:#7c5cff; --color-primaryhover:#6a47ff; --color-accent:#00e6a8;
@@ -116,8 +116,7 @@
   a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,[tabindex]:focus-visible{
     outline:2px solid rgba(124,92,255,.65);outline-offset:2px;border-radius:6px}
   .lilac{color:#a78bfa}
-  .font-display{font-family:'Space Grotesk',Inter,system-ui,sans-serif;letter-spacing:-.01em}
-  .font-mono-tix{font-family:'JetBrains Mono',ui-monospace,monospace}
+  .font-display{font-family:'Rajdhani',Inter,system-ui,sans-serif;letter-spacing:.01em}
   .cat-btn{scroll-snap-align:start}
   .cat-scroll{scroll-snap-type:x proximity}
   .plan-card{transition:.15s ease}
@@ -321,21 +320,6 @@
     .hero-glow-orb-1,.hero-glow-orb-2{width:260px;height:260px}
     .hero-image-frame{aspect-ratio:4/3}
   }
-
-  /* ---------- bilhete flutuante do hero: eco do friso de recibo dos cards ---------- */
-  .hero-ticket-stub{position:absolute;z-index:20;right:1.25rem;bottom:-1.5rem;width:190px;
-    background:linear-gradient(180deg,rgba(20,22,29,.97),rgba(10,11,15,.98));
-    border:1px solid rgba(255,255,255,.1);border-radius:.9rem;padding:.85rem .95rem;
-    box-shadow:0 20px 45px -14px rgba(0,0,0,.65),0 0 0 1px rgba(124,92,255,.08);
-    transform:rotate(-2.5deg);animation:heroTicketFloat 6s ease-in-out infinite}
-  .hero-ticket-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
-    padding:.3rem 0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#8b8fa3}
-  .hero-ticket-row span:last-child{color:#fff;font-size:11.5px;text-transform:none;letter-spacing:0}
-  .hero-ticket-perf{margin:.15rem -.95rem;border-top-color:rgba(255,255,255,.12)}
-  .hero-ticket-perf .tix-notch{background:#08090c}
-  @keyframes heroTicketFloat{0%,100%{transform:rotate(-2.5deg) translateY(0)}50%{transform:rotate(-2.5deg) translateY(-8px)}}
-  @media(prefers-reduced-motion:reduce){.hero-ticket-stub{animation:none}}
-  @media(max-width:639px){.hero-ticket-stub{display:none}}
   #depoimentos{overflow:hidden}
   .depoimentos-fade{-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
   .depoimentos-track{animation:depoimentosScroll 220s linear infinite}
@@ -411,7 +395,7 @@
   .game-tile-count{font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:rgba(255,255,255,.7);text-shadow:0 1px 2px rgba(0,0,0,.8)}
   .game-tile.is-active .game-tile-count{color:rgba(255,255,255,.85)}
   .game-tile-title-row{display:flex;align-items:center;justify-content:space-between;gap:.4rem;margin-top:2px}
-  .game-tile-title{font-family:'Space Grotesk',Inter,system-ui,sans-serif;font-weight:700;font-size:.9rem;line-height:1.15;
+  .game-tile-title{font-family:'Rajdhani',Inter,system-ui,sans-serif;font-weight:700;font-size:.9rem;line-height:1.15;
     text-transform:uppercase;letter-spacing:.01em;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.9);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .game-tile-arrow{flex-shrink:0;font-size:.85rem;color:rgba(255,255,255,.55);transition:transform .25s ease,color .25s ease}
   .game-tile:hover .game-tile-arrow{transform:translateX(3px);color:#fff}
@@ -447,22 +431,6 @@
   .product-card button{box-shadow:0 9px 22px rgba(124,92,255,.16);transition:transform .16s ease,box-shadow .2s ease,background .2s ease}
   .product-card button:hover{box-shadow:0 12px 28px rgba(124,92,255,.28);transform:translateY(-1px)}
   #empty-state{backdrop-filter:blur(10px);box-shadow:0 14px 40px rgba(0,0,0,.14)}
-
-  .trust-item{position:relative;padding:0 1.75rem;font-family:'JetBrains Mono',ui-monospace,monospace;
-    font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#8b8fa3}
-  .trust-item:first-child{padding-left:0}
-  @media(min-width:640px){
-    .trust-item:not(:last-child)::after{content:"";position:absolute;right:-1px;top:50%;height:14px;
-      transform:translateY(-50%);border-right:1px dashed rgba(255,255,255,.16)}
-  }
-
-  /* ---------- friso de vale/recibo: separa a imagem do preço, como um bilhete
-     retirado na hora — reforça a ideia de entrega automática e imediata ---------- */
-  .tix-perf{position:relative;height:0;border-top:2px dashed rgba(255,255,255,.16)}
-  .tix-notch{position:absolute;top:50%;width:16px;height:16px;border-radius:9999px;background:#020203;transform:translateY(-50%);z-index:2}
-  .tix-notch-l{left:-9px}
-  .tix-notch-r{right:-9px}
-  @media(max-width:767px){.tix-notch{width:13px;height:13px}}
   footer{background:linear-gradient(180deg,rgba(0,0,0,.94),rgba(0,0,0,1));box-shadow:0 -20px 50px rgba(0,0,0,.16)}
 
   #form-modal,#checkout-modal{z-index:60}
@@ -483,12 +451,6 @@
   #view-admin input:focus,#view-admin select:focus,#view-admin textarea:focus{box-shadow:0 0 0 3px rgba(124,92,255,.1)}
   #view-admin table tbody tr{transition:background .18s ease}
   #view-admin table tbody tr:hover{background:rgba(124,92,255,.045)}
-
-  /* ---------- lista de Entregas: lixeira sempre presente (também funciona no toque),
-     mas discreta até o hover, pra lista não ficar "gritando" vermelho o tempo todo ---------- */
-  .admin-entrega-delete{opacity:.45;transition:opacity .15s ease,background .15s ease,color .15s ease}
-  .admin-entrega-row:hover .admin-entrega-delete,.admin-entrega-delete:hover,.admin-entrega-delete:focus-visible{opacity:1}
-  @media(hover:none){.admin-entrega-delete{opacity:.65}}
 
   @media(max-width:767px){
     #hero-section{min-height:320px}
@@ -722,6 +684,80 @@
   /* ---------- barra de progresso genérica (meta de vendas) ---------- */
   .goal-progress-track{height:10px;width:100%;border-radius:9999px;background:rgba(255,255,255,.06);overflow:hidden}
   .goal-progress-fill{height:100%;border-radius:9999px;background:linear-gradient(90deg,#7c5cff,#00e6a8);transition:width .5s ease}
+
+  /* =====================================================================
+     SORTEIO — LISTA DE PARTICIPANTES (visual premium)
+     Cartão com entrada em cascata, borda elétrica no hover, anel de cor por
+     nível e destaques especiais para "Você" e o "Ganhador". Reaproveita as
+     keyframes já existentes no site (electricSpin, pulseGlow) pra manter a
+     mesma linguagem visual dos cards de produto.
+     ===================================================================== */
+  @keyframes participantIn{from{opacity:0;transform:translateY(16px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}
+  @keyframes participantRingSpin{to{transform:rotate(360deg)}}
+  @keyframes countPillDot{0%,100%{box-shadow:0 0 0 0 rgba(0,230,168,.55)}50%{box-shadow:0 0 0 5px rgba(0,230,168,0)}}
+
+  .participant-card{position:relative;isolation:isolate;overflow:hidden;cursor:default;
+    opacity:0;animation:participantIn .55s cubic-bezier(.16,.9,.3,1) forwards;
+    animation-delay:calc(var(--i,0) * 40ms);
+    transition:transform .22s cubic-bezier(.16,.9,.3,1),box-shadow .25s ease,border-color .25s ease}
+  .participant-card:hover{transform:translateY(-3px)}
+  .participant-card::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:0;pointer-events:none;
+    padding:1.3px;opacity:0;transition:opacity .3s ease;
+    background:conic-gradient(from var(--angle,0deg),
+      transparent 0deg,transparent 255deg,
+      rgba(124,92,255,0) 265deg,#7c5cff 290deg,#c9b6ff 300deg,#00e6a8 310deg,rgba(0,230,168,0) 330deg,transparent 360deg);
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;mask-composite:exclude;
+    animation:electricSpin 2.4s linear infinite paused}
+  .participant-card:hover::before{opacity:1;animation-play-state:running;box-shadow:0 16px 36px -16px rgba(124,92,255,.55)}
+  .participant-card::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;z-index:0;
+    transition:opacity .35s ease;background:radial-gradient(220px circle at 12% 15%,rgba(124,92,255,.16),transparent 62%)}
+  .participant-card:hover::after{opacity:1}
+  .participant-card > *{position:relative;z-index:1}
+  .participant-card.is-you{animation-name:participantIn,pulseGlow;animation-duration:.55s,2.6s;
+    animation-timing-function:cubic-bezier(.16,.9,.3,1),ease-in-out;animation-iteration-count:1,infinite;
+    animation-delay:calc(var(--i,0) * 40ms),.6s;animation-fill-mode:forwards,none}
+  .participant-card.is-winner::after{background:radial-gradient(220px circle at 12% 15%,rgba(255,176,32,.24),transparent 62%)}
+  .participant-card.is-winner{box-shadow:0 0 0 1px rgba(255,176,32,.18)}
+  @media(prefers-reduced-motion:reduce){
+    .participant-card,.participant-card.is-you{animation:none !important;opacity:1;transform:none}
+    .participant-card::before{animation:none}
+    .participant-avatar-ring{animation:none !important}
+  }
+
+  .participant-avatar{position:relative;flex-shrink:0;transition:transform .25s cubic-bezier(.16,.9,.3,1)}
+  .participant-card:hover .participant-avatar{transform:scale(1.08)}
+  .participant-avatar-ring{position:absolute;inset:-3px;border-radius:9999px;z-index:-1;opacity:.7;
+    background:conic-gradient(from 0deg,var(--tier-c,#7c5cff),transparent 55%,var(--tier-c,#7c5cff));
+    filter:blur(1.5px);animation:participantRingSpin 5s linear infinite}
+
+  .participant-tag{display:inline-flex;align-items:center;gap:3px;border-radius:.35rem;padding:.15rem .4rem;
+    font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+  .participant-tag.tag-you{background:rgba(124,92,255,.28);color:#fff;box-shadow:0 0 0 1px rgba(124,92,255,.55)}
+  .participant-tag.tag-exemplo{background:rgba(255,255,255,.08);color:#8b8fa3}
+
+  .tier-pill{display:inline-flex;align-items:center;gap:4px;border-radius:9999px;padding:.1rem .5rem .1rem .35rem;
+    font-size:11px;font-weight:800;border:1px solid var(--tier-border,rgba(139,143,163,.35));
+    background:var(--tier-bg,rgba(139,143,163,.1));color:var(--tier-c,#8b8fa3)}
+  .tier-pill.tier-winner{animation:badgePulse 2.2s ease-in-out infinite}
+
+  .participant-code{position:relative;transition:color .2s ease}
+  .participant-card:hover .participant-code{color:#c9b6ff}
+
+  /* -- cabeçalho "Lista completa · Participantes · N entradas" -- */
+  .participants-count-pill{display:inline-flex;align-items:center;gap:.45rem;border-radius:9999px;
+    border:1px solid rgba(124,92,255,.35);background:rgba(124,92,255,.1);padding:.35rem .8rem .35rem .65rem;
+    font-size:.8rem;font-weight:800;color:#fff}
+  .participants-count-pill .dot{width:6px;height:6px;border-radius:9999px;background:#00e6a8;animation:countPillDot 2s infinite}
+
+  /* -- avatar empilhado (resumo no card fechado do sorteio) -- */
+  .avatar-stack-item{transition:transform .2s cubic-bezier(.16,.9,.3,1);position:relative}
+  .avatar-stack-item:hover{transform:translateY(-4px) scale(1.15);z-index:5}
+
+  /* -- moldura premium do modal de detalhe do sorteio -- */
+  .sorteio-modal-card{position:relative;overflow:hidden}
+  .sorteio-modal-card::before{content:"";position:absolute;left:0;top:0;width:100%;height:2px;z-index:20;
+    background:linear-gradient(90deg,#7c5cff,#00e6a8,#7c5cff);background-size:200% 100%;animation:badgeShine 3.5s linear infinite}
 </style>
 </head>
 <body class="min-h-screen bg-noise site-locked">
@@ -849,31 +885,24 @@
     <canvas id="lightning-canvas"></canvas>
     <div class="hero-content mx-auto grid max-w-[1600px] grid-cols-1 items-center gap-10 px-4 py-14 sm:px-8 lg:grid-cols-2 lg:gap-16 lg:px-14 lg:py-16 xl:px-20">
       <div>
-        <h1 class="hero-title font-display text-4xl font-bold uppercase leading-[1.05] text-white sm:text-5xl lg:text-[3.4rem]">
-          Pagou no Pix.<br/>
-          Já tá na sua conta.
+        <h1 class="hero-title font-display text-4xl font-black uppercase leading-[1.08] text-white sm:text-5xl lg:text-[3.4rem]">
+          OS MELHORES<br/>
+          PROGRAMAS<br/>
+          PARA VENCER.
         </h1>
         <p class="mt-6 max-w-md text-sm leading-relaxed text-muted sm:text-base">
-          Catálogo de jogos, contas e assinaturas com liberação automática assim que o pagamento cai — sem fila e sem esperar resposta de ninguém.
+          Software de alta performance para jogadores que buscam o máximo de vantagem. Seguro, estável e sempre à frente.
         </p>
         <a href="#catalogo" onclick="goBackToStore()" class="magnetic-btn mt-8 inline-flex items-center justify-center rounded-xl bg-primary px-7 py-3.5 text-sm font-bold text-white shadow-glow hover:bg-primaryhover">
           <span>Ver catálogo</span>
         </a>
       </div>
-      <div class="relative">
-        <div id="hero-image-box" class="hero-image-frame relative w-full overflow-hidden rounded-2xl border border-border">
-          <img id="hero-image-el" class="hidden h-full w-full object-cover" alt="Destaque da loja" decoding="async" />
-          <div id="hero-image-placeholder" class="flex h-full w-full items-center justify-center px-6 text-center text-xs text-muted">
-            Configure a imagem do banner na área administrativa (Aparência).
-          </div>
-          <div id="hero-overlay" class="pointer-events-none absolute inset-0"></div>
+      <div id="hero-image-box" class="hero-image-frame relative w-full overflow-hidden rounded-2xl border border-border">
+        <img id="hero-image-el" class="hidden h-full w-full object-cover" alt="Destaque da loja" decoding="async" />
+        <div id="hero-image-placeholder" class="flex h-full w-full items-center justify-center px-6 text-center text-xs text-muted">
+          Configure a imagem do banner na área administrativa (Aparência).
         </div>
-        <div class="hero-ticket-stub" aria-hidden="true">
-          <div class="hero-ticket-row"><span>Pedido</span><span class="font-mono-tix">#F8A2C9</span></div>
-          <div class="tix-perf hero-ticket-perf"><span class="tix-notch tix-notch-l"></span><span class="tix-notch tix-notch-r"></span></div>
-          <div class="hero-ticket-row"><span>Status</span><span class="font-mono-tix text-accent">pago ✓</span></div>
-          <div class="hero-ticket-row"><span>Entrega</span><span class="font-mono-tix">imediata</span></div>
-        </div>
+        <div id="hero-overlay" class="pointer-events-none absolute inset-0"></div>
       </div>
     </div>
   </section>
@@ -931,12 +960,12 @@
     </div>
   </main>
 
-  <div class="trust-strip border-y border-border bg-surface/60">
-    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-0 gap-y-4 px-4 py-6 text-center sm:justify-between sm:text-left">
-      <span class="trust-item flex items-center gap-2"><span class="text-base">🛡️</span> Pagamento seguro via Pix</span>
-      <span class="trust-item flex items-center gap-2"><span class="text-base">⚡</span> Entrega automática e imediata</span>
-      <span class="trust-item flex items-center gap-2"><span class="text-base">🎧</span> Suporte real 24/7</span>
-      <span class="trust-item flex items-center gap-2"><span class="text-base">🔒</span> Dados protegidos</span>
+  <div class="border-y border-border bg-surface/60">
+    <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-10 gap-y-4 px-4 py-6 text-center text-xs font-semibold uppercase tracking-wide text-muted sm:justify-between sm:text-left">
+      <span class="flex items-center gap-2"><span class="text-base">🛡️</span> Pagamento seguro via Pix</span>
+      <span class="flex items-center gap-2"><span class="text-base">⚡</span> Entrega automática e imediata</span>
+      <span class="flex items-center gap-2"><span class="text-base">🎧</span> Suporte real 24/7</span>
+      <span class="flex items-center gap-2"><span class="text-base">🔒</span> Dados protegidos</span>
     </div>
   </div>
 
@@ -1004,9 +1033,8 @@
 
   <div id="product-page-view" class="hidden"></div>
 
-  <footer class="bg-surface pb-8 pt-10">
-    <div class="tix-perf mx-4 sm:mx-auto sm:max-w-6xl"><span class="tix-notch tix-notch-l"></span><span class="tix-notch tix-notch-r"></span></div>
-    <div class="mx-auto max-w-6xl px-4 pt-8">
+  <footer class="border-t border-border bg-surface pb-8 pt-14">
+    <div class="mx-auto max-w-6xl px-4">
       <div class="grid grid-cols-2 gap-10 sm:grid-cols-4">
         <div class="col-span-2 sm:col-span-1">
           <p class="mb-3 font-display text-xl font-bold text-white">Nova<span class="lilac">Store</span></p>
@@ -1114,14 +1142,14 @@
 </div>
 
 <div id="sorteio-resultado-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeSorteioResultado()">
-  <div class="w-full max-w-sm rounded-2xl border border-border bg-surface p-6">
+  <div class="sorteio-modal-card w-full max-w-sm rounded-2xl border border-border bg-surface p-6">
     <div id="sorteio-resultado-body"></div>
     <button onclick="closeSorteioResultado()" class="mt-5 w-full rounded-xl border border-border py-3 text-sm font-bold text-muted hover:text-white">Fechar</button>
   </div>
 </div>
 
 <div id="sorteio-detalhe-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeSorteioDetalhe()">
-  <div class="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-border bg-surface">
+  <div class="sorteio-modal-card max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-border bg-surface shadow-glow">
     <div class="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-surface/95 px-5 py-4 backdrop-blur">
       <span class="text-xs font-bold uppercase tracking-wide text-muted">Detalhes do sorteio</span>
       <button onclick="closeSorteioDetalhe()" class="rounded-full border border-border px-3 py-1.5 text-xs font-bold text-muted hover:text-white">Fechar ✕</button>
@@ -1255,7 +1283,7 @@
 
       <section id="admin-tab-conversas" class="hidden">
         <h1 class="mb-6 font-display text-2xl font-bold uppercase">Entregas</h1>
-        <p class="mb-6 text-sm text-muted">Pedidos com pagamento confirmado. Envie a entrega (chave, login, acesso etc.), acompanhe a resposta do cliente e use a lixeira para excluir o chat quando não precisar mais dele.</p>
+        <p class="mb-6 text-sm text-muted">Pedidos com pagamento confirmado. Cada pedido é um chat com o cliente: envie a entrega do produto (chave, login, acesso etc.), veja as respostas dele e exclua o chat quando não precisar mais.</p>
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-[340px_1fr]">
           <div class="overflow-hidden rounded-2xl border border-border bg-surface">
             <div id="admin-conversas-list" class="max-h-[65vh] overflow-y-auto"></div>
@@ -5242,12 +5270,11 @@ function productCardHTML(p, i = 0) {
       ${cat ? `<span class="absolute left-3 ${badge ? "top-11" : "top-3"} flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white backdrop-blur">${cat.icon}${cat.label}</span>` : ""}
       ${p.type === "ASSINATURA" ? `<span class="absolute right-3 top-3 rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white">Assinatura</span>` : ""}
     </div>
-    <div class="tix-perf" aria-hidden="true"><span class="tix-notch tix-notch-l"></span><span class="tix-notch tix-notch-r"></span></div>
-    <div class="flex flex-1 flex-col gap-2.5 p-5 pt-4">
+    <div class="flex flex-1 flex-col gap-2.5 p-5">
       <h3 class="font-display text-xl font-bold uppercase leading-tight">${p.name}</h3>
       ${tags.length ? `<p class="line-clamp-1 text-sm font-medium text-muted">${tags.join(" • ")}</p>` : `<p class="line-clamp-2 text-sm text-muted">${p.description || ""}</p>`}
       <div class="mt-auto pt-3">
-        <p class="flex items-baseline gap-1.5">${p.type === "ASSINATURA" ? `<span class="text-xs font-medium text-muted">a partir de</span>` : ""}<span class="font-mono-tix text-2xl font-bold text-white">${price != null ? fmtPrice(price) : "Consultar"}</span></p>
+        <p class="text-2xl font-extrabold text-white">${p.type === "ASSINATURA" ? `<span class="mr-1 text-xs font-medium text-muted">a partir de</span>` : ""}${price != null ? fmtPrice(price) : "Consultar"}</p>
         <button onclick='event.stopPropagation(); shockThenOpen(event, ${JSON.stringify(p.id)})' class="glow-cta btn-press mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-primary py-3 text-sm font-bold text-white hover:bg-primaryhover">
           ${p.type !== "ASSINATURA" && Number(price) === 0 ? "Resgatar grátis" : "Comprar agora"} <span>→</span>
         </button>
@@ -5275,7 +5302,7 @@ function relatedProductCardHTML(p, i = 0) {
       ${cat ? `<p class="mb-1 text-xs font-bold uppercase tracking-wide text-orange-400">${cat.label}</p>` : ""}
       <h3 class="font-display text-lg font-extrabold uppercase leading-tight text-white sm:text-xl">${p.name}</h3>
       <p class="mt-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">A partir de</p>
-      <p class="font-mono-tix text-xl font-bold text-primary sm:text-2xl">${price != null ? fmtPrice(price) : "Consultar"}</p>
+      <p class="text-xl font-bold text-primary sm:text-2xl">${price != null ? fmtPrice(price) : "Consultar"}</p>
     </div>
   </a>`;
 }
@@ -6365,19 +6392,19 @@ function renderAdminConversasList() {
     const previewPrefix = info ? (isClientMsg(info.last, o.customer_id) ? "Cliente: " : "Você: ") : "";
     const ativo = currentAdminOrder?.id === o.id;
     return `
-    <div class="admin-entrega-row relative border-b border-border/60">
-      <button onclick='openAdminConversa(${JSON.stringify(o.id)})' data-order-id="${o.id}" class="admin-conversa-item block w-full py-3.5 pl-4 pr-14 text-left hover:bg-white/5 ${ativo ? "bg-white/5" : ""}">
-        <div class="flex items-center gap-2">
-          <span class="min-w-0 flex-1 truncate text-sm font-bold text-white">${escapeHTML(o.customer_name || "Cliente")}</span>
-          ${info?.unread ? `<span class="shrink-0 min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">${info.unread > 9 ? "9+" : info.unread}</span>` : ""}
+    <div class="relative border-b border-border/60">
+      <button onclick='openAdminConversa(${JSON.stringify(o.id)})' data-order-id="${o.id}" class="admin-conversa-item block w-full px-4 py-3.5 text-left hover:bg-white/5 ${ativo ? "bg-white/5" : ""}">
+        <div class="flex items-center justify-between gap-2">
+          <span class="truncate text-sm font-bold text-white">${escapeHTML(o.customer_name || "Cliente")}</span>
+          <span class="flex shrink-0 items-center gap-2">
+            ${info?.unread ? `<span class="min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white">${info.unread > 9 ? "9+" : info.unread}</span>` : ""}
+            <span class="text-[11px] text-muted">${fmt(o.total)}</span>
+          </span>
         </div>
-        <div class="mt-0.5 flex items-center justify-between gap-2">
-          <p class="truncate text-xs text-muted">${escapeHTML(productName)}${extra}</p>
-          <span class="shrink-0 font-mono-tix text-[11px] text-muted">${fmt(o.total)}</span>
-        </div>
-        ${info ? `<p class="mt-1 truncate text-xs ${info.unread ? "font-semibold text-white" : "text-muted"}">${previewPrefix}${escapeHTML(preview)}</p>` : ""}
+        <p class="truncate text-xs text-muted">${escapeHTML(productName)}${extra}</p>
+        ${info ? `<p class="mt-0.5 truncate pr-9 text-xs ${info.unread ? "font-semibold text-white" : "text-muted"}">${previewPrefix}${escapeHTML(preview)}</p>` : ""}
       </button>
-      <button onclick='deleteAdminChat(${JSON.stringify(o.id)})' title="Excluir chat" aria-label="Excluir chat" class="admin-entrega-delete absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted hover:bg-red-500/15 hover:text-red-400">🗑️</button>
+      ${info ? `<button onclick='deleteAdminChat(${JSON.stringify(o.id)})' title="Excluir chat" aria-label="Excluir chat" class="absolute bottom-2.5 right-3 flex h-7 w-7 items-center justify-center rounded-lg text-sm text-muted hover:bg-red-500/15 hover:text-red-400">🗑️</button>` : ""}
     </div>`;
   }).join("");
 }
@@ -7980,7 +8007,7 @@ function ticketBadgeHTML(ticket) {
   return `
     <div class="ticket-reveal mx-auto mb-5 w-fit rounded-2xl px-7 py-4 text-center">
       <p class="mb-1 text-[11px] font-bold uppercase tracking-wide text-accent">🎟️ Você está concorrendo ao sorteio!</p>
-      <p class="ticket-number font-mono-tix text-3xl font-bold text-white">${ticket}</p>
+      <p class="ticket-number font-display text-3xl font-black text-white">${ticket}</p>
       <p class="mt-1 text-[11px] text-muted">Guarde seu número da sorte — o resultado sai em breve</p>
     </div>`;
 }
@@ -8034,8 +8061,8 @@ let PUBLIC_SORTEIO_PARTICIPANTES = [];
    (o codigo_cliente do perfil) assim que o pagamento é confirmado.
    ========================================================================= */
 const SORTEIO_PREVIEW = {
-  ativo: true,          // false = mostra só clientes reais (use isso ao lançar)
-  marcarExemplo: true,  // true = cada linha de exemplo leva a etiqueta "EXEMPLO"
+  ativo: true,           // false = mostra só clientes reais (use isso ao lançar)
+  marcarExemplo: false,  // true = cada linha de exemplo leva a etiqueta "EXEMPLO" (desligado — lista fica limpa, sem diferenciar visualmente quem é exemplo)
 };
 
 const SORTEIO_DEMO_EXTRAS = [
@@ -8122,27 +8149,59 @@ function sorteioAvatarsResumoHTML(s) {
     : `<p class="text-xs text-muted">Ainda ninguém confirmou pagamento pra esse sorteio.</p>`;
 }
 
+const TIER_COR = {
+  Bronze: "#a8935f", Silver: "#c9ced9", Gold: "#ffb020", Diamond: "#a78bfa",
+};
+
 function sorteioListaHTML(lista) {
   const meu = (typeof CURRENT_PROFILE !== "undefined" && CURRENT_PROFILE?.codigo_cliente) || null;
   const aviso = "";
-  const linhas = lista.map((p) => {
+  const linhas = lista.map((p, i) => {
     const eu = !!meu && !p.exemplo && p.codigo_cliente === meu;
     const nome = escapeHTML(p.nome_exibicao || "Cliente NovaStore");
     const etiqueta = p.exemplo && SORTEIO_PREVIEW.marcarExemplo
-      ? `<span class="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-muted">Exemplo</span>`
-      : eu ? `<span class="rounded bg-primary/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">Você</span>` : "";
-    const nivel = p.vencedor ? `<span class="text-[11px] font-bold text-amber-400">🏆 Ganhador</span>` : sorteioTierBadgeHTML(p.total_gasto);
+      ? `<span class="participant-tag tag-exemplo">Exemplo</span>`
+      : eu ? `<span class="participant-tag tag-you">★ Você</span>` : "";
+    const tierNome = p.vencedor ? "Gold" : painelRankTier(Number(p.total_gasto || 0)).name;
+    const tierCor = TIER_COR[tierNome] || TIER_COR.Bronze;
+    const nivel = p.vencedor
+      ? `<span class="tier-pill tier-winner" style="--tier-c:#ffd76a;--tier-bg:rgba(255,176,32,.16);--tier-border:rgba(255,176,32,.4)">🏆 Ganhador</span>`
+      : sorteioTierBadgeHTML(p.total_gasto);
+    const estado = p.vencedor ? "is-winner border-amber-400/45 bg-amber-400/10"
+      : eu ? "is-you border-primary/60 bg-primary/10"
+      : "border-border bg-surface2/60";
     return `
-      <div class="flex items-center gap-3 rounded-xl border ${eu || p.vencedor ? "border-primary/60 bg-primary/10" : "border-border bg-surface2/60"} p-3">
-        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black uppercase text-white">${escapeHTML((p.nome_exibicao || "?").trim().charAt(0))}</span>
+      <div class="participant-card flex items-center gap-3 rounded-xl border ${estado} p-3" style="--i:${i};--tier-c:${tierCor}">
+        <span class="participant-avatar relative flex shrink-0">
+          <span class="participant-avatar-ring" aria-hidden="true"></span>
+          <span class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black uppercase text-white">${escapeHTML((p.nome_exibicao || "?").trim().charAt(0))}</span>
+        </span>
         <div class="min-w-0 flex-1">
           <p class="flex items-center gap-1.5 text-sm font-bold text-white"><span class="truncate">${nome}</span>${etiqueta}</p>
           ${nivel}
         </div>
-        <span class="shrink-0 font-mono text-xs lilac" title="Código de sorteio">${escapeHTML(p.codigo_cliente || "")}</span>
+        <span class="participant-code shrink-0 font-mono text-xs lilac" title="Código de sorteio">${escapeHTML(p.codigo_cliente || "")}</span>
       </div>`;
   }).join("");
   return `${aviso}<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">${linhas}</div>`;
+}
+
+/* conta de 0 até o total real de participantes com easing suave — só um
+   toque de "uau" no cabeçalho da lista completa, sem mexer em dado nenhum. */
+function sorteioAnimarContador(el, alvo, duracaoMs = 700) {
+  if (!el) return;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    el.textContent = alvo;
+    return;
+  }
+  const t0 = performance.now();
+  function passo(agora) {
+    const p = Math.min(1, (agora - t0) / duracaoMs);
+    const suavizado = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(alvo * suavizado);
+    if (p < 1) requestAnimationFrame(passo);
+  }
+  requestAnimationFrame(passo);
 }
 
 async function loadSorteioPage() {
@@ -8183,8 +8242,8 @@ async function loadSorteioPage() {
 function sorteioAvatarStackHTML(list, max = 7) {
   const visiveis = list.slice(0, max);
   const resto = list.length - visiveis.length;
-  const avatares = visiveis.map((p) => `<span class="-ml-2.5 first:ml-0 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-surface bg-gradient-to-br from-primary to-[#4b2fd6] text-[10px] font-black uppercase text-white">${escapeHTML((p.nome_exibicao || "?").trim().charAt(0))}</span>`).join("");
-  const maisEl = resto > 0 ? `<span class="-ml-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-surface bg-surface3 text-[10px] font-black text-muted">+${resto}</span>` : "";
+  const avatares = visiveis.map((p) => `<span class="avatar-stack-item -ml-2.5 first:ml-0 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-surface bg-gradient-to-br from-primary to-[#4b2fd6] text-[10px] font-black uppercase text-white">${escapeHTML((p.nome_exibicao || "?").trim().charAt(0))}</span>`).join("");
+  const maisEl = resto > 0 ? `<span class="avatar-stack-item -ml-2.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-surface bg-surface3 text-[10px] font-black text-muted">+${resto}</span>` : "";
   return `<div class="flex items-center">${avatares}${maisEl}</div>`;
 }
 
@@ -8232,7 +8291,7 @@ function renderSorteiosAbertos(list, participantes) {
 
         <div class="mb-4 flex items-center justify-between">
           <p class="text-[11px] font-bold uppercase tracking-wide text-muted">Participantes</p>
-          <span class="text-xs font-bold text-white">${sorteioParticipantesDe(s).length}</span>
+          <span class="participants-count-pill"><span class="dot"></span>${sorteioParticipantesDe(s).length}</span>
         </div>
         ${sorteioAvatarsResumoHTML(s)}
 
@@ -8296,7 +8355,7 @@ function renderSorteiosFinalizados(list) {
 
         <div class="mt-4 flex items-center justify-between">
           <p class="text-[11px] font-bold uppercase tracking-wide text-muted">Participantes</p>
-          <span class="text-xs font-bold text-white">${sorteioParticipantesDe(s).length}</span>
+          <span class="participants-count-pill"><span class="dot"></span>${sorteioParticipantesDe(s).length}</span>
         </div>
         <div class="mt-2">${sorteioAvatarsResumoHTML(s)}</div>
 
@@ -8315,8 +8374,11 @@ window.showSorteioResultado = (id) => {
     <p class="mb-1 text-[11px] font-bold uppercase tracking-wide text-muted">🏆 Resultado</p>
     <h2 class="mb-1 font-display text-xl font-bold uppercase text-white">${escapeHTML(s.titulo)}</h2>
     <p class="mb-4 text-sm text-muted">${escapeHTML(s.premio)}${s.dias ? ` — ${s.dias} dias` : ""} · sorteado em ${new Date(s.data_sorteio).toLocaleDateString("pt-BR")}</p>
-    <div class="flex items-center gap-3 rounded-xl border border-border bg-surface2/60 p-3">
-      <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black text-white">${escapeHTML((s.ganhador_nome || "?").charAt(0).toUpperCase())}</span>
+    <div class="is-winner participant-card flex items-center gap-3 rounded-xl border border-amber-400/45 bg-amber-400/10 p-3" style="--i:0">
+      <span class="participant-avatar relative flex shrink-0" style="--tier-c:#ffd76a">
+        <span class="participant-avatar-ring" aria-hidden="true"></span>
+        <span class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary to-[#4b2fd6] text-sm font-black uppercase text-white">${escapeHTML((s.ganhador_nome || "?").charAt(0).toUpperCase())}</span>
+      </span>
       <div class="min-w-0">
         <p class="truncate text-sm font-bold text-white">${escapeHTML(s.ganhador_nome || "Vencedor")}</p>
         <p class="font-mono text-xs lilac">${escapeHTML(s.ganhador_codigo || "")}</p>
@@ -8334,13 +8396,13 @@ window.showSorteioResultado = (id) => {
 function sorteioTierBadgeHTML(totalGasto) {
   const tier = painelRankTier(Number(totalGasto || 0));
   const map = {
-    Bronze: { emoji: "🥉", cls: "text-muted" },
-    Silver: { emoji: "🥈", cls: "text-slate-300" },
-    Gold: { emoji: "🥇", cls: "text-amber-400" },
-    Diamond: { emoji: "💎", cls: "lilac" },
+    Bronze: { emoji: "🥉", c: "#c9ac7a", bg: "rgba(168,147,95,.14)", border: "rgba(168,147,95,.35)" },
+    Silver: { emoji: "🥈", c: "#dbe0ea", bg: "rgba(201,206,217,.14)", border: "rgba(201,206,217,.32)" },
+    Gold: { emoji: "🥇", c: "#ffb020", bg: "rgba(255,176,32,.14)", border: "rgba(255,176,32,.35)" },
+    Diamond: { emoji: "💎", c: "#c9b6ff", bg: "rgba(167,139,250,.16)", border: "rgba(167,139,250,.4)" },
   };
   const t = map[tier.name] || map.Bronze;
-  return `<span class="text-[11px] font-bold ${t.cls}">${t.emoji} ${tier.name}</span>`;
+  return `<span class="tier-pill" style="--tier-c:${t.c};--tier-bg:${t.bg};--tier-border:${t.border}">${t.emoji} ${tier.name}</span>`;
 }
 
 window.openSorteioDetalhe = (id) => {
@@ -8379,16 +8441,17 @@ window.openSorteioDetalhe = (id) => {
     </div>
 
     <div class="mt-10 border-t border-border pt-8">
-      <p class="mb-1 text-[11px] font-bold uppercase tracking-wide lilac">— Lista completa</p>
-      <div class="mb-5 flex items-center justify-between">
+      <p class="section-title-underline mb-4 inline-block text-[11px] font-bold uppercase tracking-wide lilac">— Lista completa</p>
+      <div class="mb-5 flex items-center justify-between gap-3">
         <h3 class="font-display text-xl font-bold uppercase text-white sm:text-2xl">Participantes</h3>
-        <span class="text-sm font-semibold text-muted">${numerados.length} entrada${numerados.length === 1 ? "" : "s"}</span>
+        <span class="participants-count-pill"><span class="dot"></span><span id="sorteio-participantes-total">0</span> entrada${numerados.length === 1 ? "" : "s"}</span>
       </div>
       ${numerados.length ? sorteioListaHTML(numerados) : `<p class="text-sm text-muted">Ainda ninguém confirmou pagamento pra esse sorteio. Compre qualquer produto pra ser o primeiro a entrar! 👀</p>`}
     </div>`;
 
   document.getElementById("sorteio-detalhe-modal").classList.remove("hidden");
   document.getElementById("sorteio-detalhe-modal").classList.add("flex");
+  sorteioAnimarContador(document.getElementById("sorteio-participantes-total"), numerados.length);
 
   const cdEl = document.querySelector(`#sorteio-detalhe-body [data-sorteio-cd]`);
   if (cdEl) {
