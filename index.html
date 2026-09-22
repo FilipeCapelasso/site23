@@ -585,9 +585,6 @@
   #lightning-canvas.is-active{opacity:1}
 
   /* ================= EFEITO "RAIOS ENTRE OS CARDS" (catálogo) ================= */
-  #catalog-lightning-wrap{position:relative}
-  #card-lightning-canvas{position:absolute;inset:0;z-index:15;pointer-events:none;opacity:0;transition:opacity .35s ease}
-  #card-lightning-canvas.is-active{opacity:1}
   @keyframes cardZapFlash{
     0%{box-shadow:0 0 0 0 rgba(160,140,255,0),inset 0 0 0 1px rgba(160,140,255,0)}
     25%{box-shadow:0 0 34px 6px rgba(160,140,255,.55),inset 0 0 0 1px rgba(200,185,255,.75)}
@@ -951,7 +948,6 @@
       <div class="skeleton-card hidden xl:block"><div class="skeleton-shimmer" style="aspect-ratio:1/1"></div></div>
     </div>
     <div id="catalog-lightning-wrap" class="relative">
-      <canvas id="card-lightning-canvas"></canvas>
       <div id="products-grid" class="grid grid-cols-2 gap-7 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 xl:gap-8"></div>
     </div>
     <div id="empty-state" class="hidden rounded-2xl border border-dashed border-border bg-surface/40 py-14 text-center text-muted">
@@ -1437,24 +1433,6 @@
               <input type="checkbox" id="theme-lightning-input" class="h-5 w-5 accent-primary" />
             </label>
 
-            <label class="mt-3 flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-border bg-surface2/60 p-4">
-              <div>
-                <p class="text-sm font-semibold text-white">⚡ Raios entre os cards do catálogo</p>
-                <p class="text-xs text-muted">Relâmpagos saltando entre os produtos da vitrine, de tempos em tempos.</p>
-              </div>
-              <input type="checkbox" id="theme-card-lightning-input" class="h-5 w-5 accent-primary" />
-            </label>
-            <div id="card-lightning-freq-wrap" class="mt-3 flex items-center justify-between gap-4 rounded-xl border border-border bg-surface2/60 p-4">
-              <div>
-                <p class="text-sm font-semibold text-white">Frequência dos raios do catálogo</p>
-                <p class="text-xs text-muted">Controla o quão seguido os relâmpagos aparecem entre os cards.</p>
-              </div>
-              <select id="card-lightning-freq-input" class="rounded-lg border border-border bg-surface2 px-3 py-2 text-sm text-white outline-none focus:border-primary">
-                <option value="rara">Rara</option>
-                <option value="normal" selected>Normal</option>
-                <option value="frequente">Frequente</option>
-              </select>
-            </div>
 
             <div class="mt-3 flex flex-col gap-4 rounded-xl border border-border bg-surface2/60 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div class="flex items-center gap-4">
@@ -4637,7 +4615,6 @@ let paymentPollTimer = null;
 let SITE_SETTINGS = {
   hero_image_url: null, hero_overlay: 0.35, background_image_url: null, background_overlay: 0.85,
   theme_primary: "#7c5cff", theme_accent: "#00e6a8", effect_lightning: false,
-  effect_card_lightning: false, card_lightning_frequency: "normal",
   category_glow_enabled: true, category_glow_color: "#7c5cff",
 };
 
@@ -4727,7 +4704,6 @@ function applySiteSettings(s) {
   document.documentElement.style.setProperty("--color-accent", accent);
 
   if (s.effect_lightning) startLightningEffect(); else stopLightningEffect();
-  if (s.effect_card_lightning) startCardLightningEffect(s.card_lightning_frequency); else stopCardLightningEffect();
 
   document.documentElement.style.setProperty("--category-glow", s.category_glow_color || "#7c5cff");
   const catBarEl = document.getElementById("category-bar");
@@ -4815,256 +4791,6 @@ function stopLightningEffect() {
   if (canvas._stopLightning) canvas._stopLightning();
 }
 
-/* =========================================================================
-   EFEITO "RAIOS ENTRE OS CARDS" — um raio roxo que percorre os cards do
-   catálogo em sequência, ligados/desligados (e com frequência ajustável) pelo admin.
-   O canvas fica como irmão de #products-grid (dentro de #catalog-lightning-wrap),
-   então ele sobrevive aos re-renders do grid (que reescrevem o innerHTML).
-   ========================================================================= */
-let cardLightningTimer = null;
-
-// pausa entre uma "descarga" e a próxima (ms)
-const CARD_LIGHTNING_DELAYS = {
-  rara: [9000, 16000],
-  normal: [4500, 9000],
-  frequente: [2200, 4500],
-};
-
-function startCardLightningEffect(frequency) {
-  const canvas = document.getElementById("card-lightning-canvas");
-  const wrap = document.getElementById("catalog-lightning-wrap");
-  if (!canvas || !wrap) return;
-  canvas._freq = frequency || "normal";
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  canvas.classList.add("is-active");
-  if (canvas._stopCardLightning) return; // já rodando — só atualiza a frequência
-  const ctx = canvas.getContext("2d");
-  const SPEED = 3.0;   // px/ms — velocidade da ponta do raio
-  const FADE = 320;    // ms até o rastro apagar
-  let raf = null, run = null;
-
-  const resize = () => { canvas.width = wrap.clientWidth; canvas.height = wrap.clientHeight; };
-  resize();
-  const ro = new ResizeObserver(resize);
-  ro.observe(wrap);
-
-  /* deslocamento de ponto médio: dá o zigue-zague irregular de um raio de verdade */
-  function jag(a, b, amp, depth, out) {
-    if (!depth) { out.push({ x: b.x, y: b.y }); return; }
-    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
-    const off = (Math.random() - 0.5) * amp;
-    const m = { x: (a.x + b.x) / 2 - (dy / len) * off, y: (a.y + b.y) / 2 + (dx / len) * off };
-    jag(a, m, amp * 0.58, depth - 1, out);
-    jag(m, b, amp * 0.58, depth - 1, out);
-  }
-
-  /* monta o trajeto: 1º card → segue a linha → desce → volta pela linha de baixo (serpente) */
-  function buildRun() {
-    const wr = wrap.getBoundingClientRect();
-    const vh = window.innerHeight || 800;
-    const all = [...wrap.querySelectorAll(".product-card")].map((el) => {
-      const r = el.getBoundingClientRect();
-      return { el, l: r.left - wr.left, r: r.right - wr.left, t: r.top - wr.top, w: r.width, h: r.height, vt: r.top, vb: r.bottom };
-    });
-    if (!all.length) return null;
-    all.sort((a, b) => a.t - b.t || a.l - b.l);
-    const rows = [];
-    all.forEach((c) => {
-      const last = rows[rows.length - 1];
-      if (last && Math.abs(last[0].t - c.t) < 24) last.push(c); else rows.push([c]);
-    });
-    let order = [];
-    rows.forEach((row, i) => {
-      row.sort((a, b) => a.l - b.l);
-      if (i % 2) row.reverse();
-      row.forEach((c) => { c.rtl = i % 2 === 1; order.push(c); });
-    });
-    // começa no primeiro card visível na tela e desce até o fim
-    const first = order.findIndex((c) => c.vb > 0 && c.vt < vh);
-    if (first < 0) return null;
-    order = order.slice(first); // segue até o último card do catálogo
-
-    const wp = [];
-    order.forEach((c, i) => {
-      const p = { x: c.l + c.w / 2, y: c.t + c.h * 0.34, c };
-      const a = order[i - 1];
-      if (a && Math.abs(a.t - c.t) >= 24 && Math.abs(a.l - c.l) < 40) {
-        // descida: o raio desce rente à borda externa, sem riscar o texto dos cards
-        const ex = a.rtl ? a.l + 10 : a.r - 10, pa = wp[wp.length - 1];
-        wp.push({ x: ex, y: pa.y }, { x: ex, y: p.y });
-      }
-      wp.push(p);
-    });
-
-    const v = [], hits = [];
-    let d = 0;
-    const add = (p) => {
-      const l = v[v.length - 1];
-      if (l) d += Math.hypot(p.x - l.x, p.y - l.y);
-      v.push({ x: p.x, y: p.y, d });
-    };
-    add(wp[0]);
-    hits.push({ d: 0, c: wp[0].c, x: wp[0].x, y: wp[0].y });
-    for (let i = 1; i < wp.length; i++) {
-      const a = wp[i - 1], b = wp[i], len = Math.hypot(b.x - a.x, b.y - a.y);
-      const out = [];
-      jag(a, b, Math.min(22, len * 0.11), Math.max(3, Math.min(8, Math.ceil(Math.log2(len / 4)))), out);
-      out.forEach(add);
-      if (b.c) hits.push({ d, c: b.c, x: b.x, y: b.y });
-    }
-
-    hits[hits.length - 1].big = true; // descarga final no último card
-    // ramificações recursivas (galhos que se abrem em galhos menores), como no raio real
-    const br = [];
-    function grow(p, ang, L, lvl, t0) {
-      const pts = [{ x: p.x, y: p.y }];
-      jag(p, { x: p.x + Math.cos(ang) * L, y: p.y + Math.sin(ang) * L }, L * 0.26, Math.max(2, Math.min(6, Math.ceil(Math.log2(L / 4)))), pts);
-      let dd = 0;
-      const P = pts.map((o, k) => { if (k) dd += Math.hypot(o.x - pts[k - 1].x, o.y - pts[k - 1].y); return { x: o.x, y: o.y, d: dd, jx: o.x, jy: o.y }; });
-      br.push({ t0, pts: P, lvl, end: t0 + dd / (SPEED * 0.8) + FADE });
-      if (lvl < 3) for (let i = 2; i < P.length - 1; i++) {
-        if (br.length > 1400 || Math.random() > (0.16 - lvl * 0.045)) continue;
-        const q = P[Math.min(i + 2, P.length - 1)];
-        grow(P[i], Math.atan2(q.y - P[i].y, q.x - P[i].x) + (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.85), L * (0.35 + Math.random() * 0.35), lvl + 1, t0 + P[i].d / (SPEED * 0.8));
-      }
-    }
-    for (let i = 5; i < v.length - 5; i++) {
-      if (Math.random() > 0.16) continue;
-      const p = v[i], q = v[Math.min(i + 4, v.length - 1)];
-      grow(p, Math.atan2(q.y - p.y, q.x - p.x) + (Math.random() < 0.5 ? -1 : 1) * (0.4 + Math.random() * 0.85), 45 + Math.random() * 150, 0, p.d / SPEED);
-    }
-    const ys = v.map((p) => p.y);
-    return { v, br, hits, total: d, hi: 0, lo: 0, sparks: [], rings: [], y0: Math.max(0, Math.min(...ys) - 160), y1: Math.max(...ys) + 160 };
-  }
-
-  function impact(s, h, now) {
-    const el = h.c.el;
-    const g = "0 0 0 0 rgba(200,90,255,0)";
-    el.animate([{ boxShadow: g }, { boxShadow: "0 0 70px 14px rgba(200,90,255,.8), inset 0 0 40px rgba(190,140,255,.5)", offset: 0.18 }, { boxShadow: g }], { duration: 650, easing: "ease-out" });
-    const art = el.querySelector(".aspect-\\[1\\/1\\]");
-    if (art) art.animate([{ filter: "brightness(1)" }, { filter: "brightness(1.8) saturate(1.4)", offset: 0.18 }, { filter: "brightness(1)" }], { duration: 650, easing: "ease-out" });
-    s.rings.push({ x: h.x, y: h.y, t: now, big: h.big });
-    s.boost = now;
-    for (let i = 0, n = h.big ? 44 : 16; i < n; i++) {
-      const a = Math.random() * Math.PI * 2, sp = 0.06 + Math.random() * 0.3;
-      s.sparks.push({ x: h.x, y: h.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.05, t: now, life: 300 + Math.random() * 350 });
-    }
-  }
-
-  function frame(now) {
-    const s = run;
-    if (!s || !canvas.isConnected) return finish();
-    const el = now - s.t0, head = el * SPEED, v = s.v;
-    ctx.globalCompositeOperation = "source-over";
-    ctx.clearRect(0, s.y0, canvas.width, s.y1 - s.y0);
-    ctx.globalCompositeOperation = "lighter";
-    ctx.lineCap = ctx.lineJoin = "round";
-    while (s.hi < s.hits.length && s.hits[s.hi].d <= head) impact(s, s.hits[s.hi++], now);
-
-    const flick = (0.8 + Math.random() * 0.35) * (1 + 0.9 * Math.max(0, 1 - (now - (s.boost || 0)) / 200));
-    const alive = (age, fade) => (age < 0 || age > fade ? 0 : Math.pow(1 - age / fade, 1.5) * flick);
-    while (s.lo < v.length && el - v[s.lo].d / SPEED > FADE) s.lo++;
-    // segmentos agrupados por intensidade: poucos "stroke" por frame, mesmo com muitos galhos
-    const B = Array.from({ length: 11 }, () => []);
-    const put = (p, q, a) => { const k = Math.round(Math.min(1, a) * 10); if (k > 0) B[k].push(p.jx, p.jy, q.jx, q.jy); };
-    let prev = null;
-    for (let i = s.lo; i < v.length && v[i].d <= head; i++) {
-      const p = v[i];
-      p.jx = p.x + (Math.random() - 0.5) * 1.4; p.jy = p.y + (Math.random() - 0.5) * 1.4;
-      if (prev) put(prev, p, alive(el - p.d / SPEED, FADE));
-      prev = p;
-    }
-    s.br.forEach((b) => {
-      if (b.t0 > el || el > b.end) return;
-      const n = b.pts.length;
-      for (let i = 1; i < n; i++) {
-        const p = b.pts[i];
-        const a = alive(el - (b.t0 + p.d / (SPEED * 0.8)), FADE * 0.75) * (1 - 0.7 * i / n) * (b.lvl ? 0.7 : 0.9);
-        if (a > 0) put(b.pts[i - 1], p, a);
-      }
-    });
-    // haze violeta → brilho magenta → miolo rosado → núcleo branco fino
-    [[30, "150,60,255", 0.08], [12, "190,70,250", 0.22], [4, "232,110,255", 0.48], [1.7, "250,190,255", 0.85], [0.9, "255,250,255", 1]].forEach(([w, rgb, k]) => {
-      ctx.lineWidth = w;
-      for (let l = 1; l <= 10; l++) {
-        const arr = B[l];
-        if (!arr.length) continue;
-        ctx.strokeStyle = `rgba(${rgb},${Math.min(1, (l / 10) * k).toFixed(2)})`;
-        ctx.beginPath();
-        for (let i = 0; i < arr.length; i += 4) { ctx.moveTo(arr[i], arr[i + 1]); ctx.lineTo(arr[i + 2], arr[i + 3]); }
-        ctx.stroke();
-      }
-    });
-
-    // ponta do raio: núcleo branco com halo roxo
-    if (head < s.total && prev) {
-      const r = ctx.createRadialGradient(prev.jx, prev.jy, 0, prev.jx, prev.jy, 110);
-      r.addColorStop(0, "rgba(255,255,255,.95)"); r.addColorStop(0.12, "rgba(240,150,255,.75)"); r.addColorStop(0.4, "rgba(190,70,255,.28)"); r.addColorStop(1, "rgba(170,60,255,0)");
-      ctx.fillStyle = r;
-      ctx.beginPath(); ctx.arc(prev.jx, prev.jy, 110, 0, Math.PI * 2); ctx.fill();
-    }
-    // onda + clarão nos impactos
-    s.rings = s.rings.filter((o) => now - o.t < 480);
-    s.rings.forEach((o) => {
-      const k = (now - o.t) / 480;
-      ctx.strokeStyle = `rgba(225,150,255,${(0.7 * (1 - k)).toFixed(3)})`;
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(o.x, o.y, (8 + k * 84) * (o.big ? 2.2 : 1), 0, Math.PI * 2); ctx.stroke();
-      const f = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, 70);
-      f.addColorStop(0, `rgba(235,190,255,${(0.55 * (1 - k) * (1 - k)).toFixed(3)})`); f.addColorStop(1, "rgba(170,60,255,0)");
-      ctx.fillStyle = f;
-      ctx.beginPath(); ctx.arc(o.x, o.y, 70, 0, Math.PI * 2); ctx.fill();
-    });
-    // faíscas
-    s.sparks = s.sparks.filter((p) => now - p.t < p.life);
-    s.sparks.forEach((p) => {
-      const t = now - p.t, x = p.x + p.vx * t, y = p.y + p.vy * t + 0.0004 * t * t;
-      ctx.strokeStyle = `rgba(250,225,255,${(1 - t / p.life).toFixed(3)})`;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo(x - p.vx * 14, y - p.vy * 14); ctx.lineTo(x, y); ctx.stroke();
-    });
-
-    if (head > s.total + FADE * SPEED && !s.sparks.length && !s.rings.length) return finish();
-    raf = requestAnimationFrame(frame);
-  }
-
-  function schedule(ms) { cardLightningTimer = setTimeout(launch, ms); }
-
-  function finish() {
-    run = null;
-    ctx.globalCompositeOperation = "source-over";
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const [min, max] = CARD_LIGHTNING_DELAYS[canvas._freq] || CARD_LIGHTNING_DELAYS.normal;
-    schedule(min + Math.random() * (max - min));
-  }
-
-  function launch() {
-    if (!canvas.isConnected) return;
-    const r = document.hidden ? null : buildRun();
-    if (!r) return schedule(3000);
-    run = r;
-    r.t0 = performance.now();
-    raf = requestAnimationFrame(frame);
-  }
-
-  canvas._stopCardLightning = () => {
-    ro.disconnect();
-    clearTimeout(cardLightningTimer);
-    cancelAnimationFrame(raf);
-    run = null;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    canvas._stopCardLightning = null;
-  };
-  schedule(900);
-}
-
-function stopCardLightningEffect() {
-  const canvas = document.getElementById("card-lightning-canvas");
-  if (!canvas) return;
-  canvas.classList.remove("is-active");
-  if (canvas._stopCardLightning) canvas._stopCardLightning();
-}
-
 window.switchAdminTab = (tab) => {
   const tabs = ["dashboard", "products", "conversas", "suporte", "convencer", "vendas", "appearance", "anunciantes", "sorteios", "contas", "cupons", "avaliacoes", "atividade"];
   tabs.forEach((t) => {
@@ -5136,9 +4862,6 @@ function populateAppearanceForm() {
   document.getElementById("theme-primary-input").value = SITE_SETTINGS.theme_primary || "#7c5cff";
   document.getElementById("theme-accent-input").value = SITE_SETTINGS.theme_accent || "#00e6a8";
   document.getElementById("theme-lightning-input").checked = !!SITE_SETTINGS.effect_lightning;
-  document.getElementById("theme-card-lightning-input").checked = !!SITE_SETTINGS.effect_card_lightning;
-  document.getElementById("card-lightning-freq-input").value = SITE_SETTINGS.card_lightning_frequency || "normal";
-  document.getElementById("card-lightning-freq-wrap").classList.toggle("opacity-40", !SITE_SETTINGS.effect_card_lightning);
   document.getElementById("category-glow-input").checked = SITE_SETTINGS.category_glow_enabled !== false;
   document.getElementById("category-glow-color-input").value = SITE_SETTINGS.category_glow_color || "#7c5cff";
   document.getElementById("appearance-error").classList.add("hidden");
@@ -5156,14 +4879,6 @@ document.getElementById("theme-accent-input").addEventListener("input", (e) => {
 });
 document.getElementById("theme-lightning-input").addEventListener("change", (e) => {
   if (e.target.checked) startLightningEffect(); else stopLightningEffect();
-});
-document.getElementById("theme-card-lightning-input").addEventListener("change", (e) => {
-  const freq = document.getElementById("card-lightning-freq-input").value;
-  document.getElementById("card-lightning-freq-wrap").classList.toggle("opacity-40", !e.target.checked);
-  if (e.target.checked) startCardLightningEffect(freq); else stopCardLightningEffect();
-});
-document.getElementById("card-lightning-freq-input").addEventListener("change", (e) => {
-  if (document.getElementById("theme-card-lightning-input").checked) startCardLightningEffect(e.target.value);
 });
 document.getElementById("category-glow-input").addEventListener("change", (e) => {
   document.getElementById("category-bar").classList.toggle("glow-off", !e.target.checked);
@@ -5256,8 +4971,6 @@ window.saveSiteSettings = async () => {
     theme_primary: document.getElementById("theme-primary-input").value,
     theme_accent: document.getElementById("theme-accent-input").value,
     effect_lightning: document.getElementById("theme-lightning-input").checked,
-    effect_card_lightning: document.getElementById("theme-card-lightning-input").checked,
-    card_lightning_frequency: document.getElementById("card-lightning-freq-input").value,
     category_glow_enabled: document.getElementById("category-glow-input").checked,
     category_glow_color: document.getElementById("category-glow-color-input").value,
   };
