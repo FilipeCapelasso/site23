@@ -866,7 +866,10 @@
       <a href="#top" onclick="toggleMobileMenu(true); goBackToStore();" class="rounded-lg px-3 py-2.5 text-sm font-medium text-white hover:bg-white/5">Início</a>
       <a href="#catalogo" onclick="toggleMobileMenu(true); goBackToStore();" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white">Produtos</a>
       <a href="#depoimentos" onclick="toggleMobileMenu(true); goBackToStore();" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white">Avaliações</a>
-      <a href="#" onclick="event.preventDefault(); toggleMobileMenu(true); openChatModal();" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white">Suporte</a>
+      <a href="#" onclick="event.preventDefault(); toggleMobileMenu(true); openChatModal();" class="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white">
+        <span>Suporte</span>
+        <span id="menu-chat-unread-badge" class="hidden min-w-[18px] rounded-full bg-accent px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-white"></span>
+      </a>
       <a href="#sorteio" onclick="toggleMobileMenu(true);" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white">🎁 Sorteio</a>
       <a href="#" onclick="event.preventDefault(); toggleMobileMenu(true); openGlobalChatModal();" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white sm:hidden">🌐 Chat global</a>
       <a href="#" onclick="event.preventDefault(); toggleMobileMenu(true); openFriendsModal();" class="rounded-lg px-3 py-2.5 text-sm font-medium text-muted hover:bg-white/5 hover:text-white">👥 Amigos</a>
@@ -1104,6 +1107,7 @@
   </header>
 
   <main class="mx-auto max-w-6xl px-4 py-10 sm:px-8 sm:py-14">
+    <div id="user-menu-code" class="hidden mb-8 rounded-xl border border-accent/25 bg-accent/10 px-4 py-3 text-sm font-bold text-accent"></div>
     <div class="mb-12 flex flex-col items-start justify-between gap-8 border-b border-border pb-10 lg:flex-row lg:items-end">
       <div class="max-w-xl">
         <span class="mb-3 inline-block text-xs font-bold uppercase tracking-wide lilac">— Sorteios NovaStore</span>
@@ -1252,6 +1256,11 @@
           <button onclick="switchAdminTab('contas')" class="admin-shortcut-card"><span class="admin-shortcut-icon text-2xl">👥</span><span>Contas</span></button>
           <button onclick="switchAdminTab('atividade')" class="admin-shortcut-card"><span class="admin-shortcut-icon text-2xl">🗒️</span><span>Atividade</span></button>
           <button onclick="switchAdminTab('appearance')" class="admin-shortcut-card flex-row justify-start gap-4 text-left sm:col-span-4"><span class="admin-shortcut-icon shrink-0 text-2xl">🎨</span><span>Aparência do site — banner, cores, decorações</span></button>
+        </div>
+
+        <h2 class="mb-4 mt-10 text-xs font-bold uppercase tracking-wide text-muted">🔥 Produtos mais visualizados (loja toda)</h2>
+        <div id="dash-ranking-produtos" class="overflow-hidden rounded-2xl border border-border bg-surface">
+          <p class="px-4 py-6 text-center text-sm text-muted">Carregando ranking...</p>
         </div>
       </section>
 
@@ -1544,9 +1553,24 @@
         </div>
         <p class="mb-6 text-sm text-muted">Todas as contas registradas na loja. Clique em uma pra ver o painel dela, os produtos que já visualizou e mandar uma mensagem direta.</p>
 
-        <div class="relative mb-4 max-w-sm">
-          <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted">🔎</span>
-          <input id="contas-search" oninput="renderContasTable()" placeholder="Buscar por nome ou e-mail..." class="w-full rounded-lg border border-border bg-surface2 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-primary" />
+        <div class="mb-4 flex flex-wrap items-center gap-3">
+          <div class="relative max-w-sm flex-1">
+            <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted">🔎</span>
+            <input id="contas-search" oninput="renderContasTable()" placeholder="Buscar por nome ou e-mail..." class="w-full rounded-lg border border-border bg-surface2 py-2.5 pl-10 pr-4 text-sm outline-none focus:border-primary" />
+          </div>
+          <select id="contas-filtro-papel" onchange="renderContasTable()" class="rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary">
+            <option value="">Todos os papéis</option>
+            <option value="admin">Admin</option>
+            <option value="afiliado">Afiliado</option>
+            <option value="client">Cliente comum</option>
+            <option value="bloqueado">Bloqueadas</option>
+          </select>
+          <select id="contas-ordenar" onchange="renderContasTable()" class="rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary">
+            <option value="recentes">Mais recentes</option>
+            <option value="gasto">Maior total gasto</option>
+            <option value="pedidos">Mais pedidos</option>
+            <option value="nome">Nome (A-Z)</option>
+          </select>
         </div>
 
         <div class="overflow-x-auto rounded-2xl border border-border bg-surface">
@@ -2529,7 +2553,7 @@ function renderAuthUI() {
     const codeEl = document.getElementById("user-menu-code");
     if (codeEl) {
       if (CURRENT_PROFILE?.codigo_cliente) {
-        codeEl.textContent = `Seu código de sorteio: ${CURRENT_PROFILE.codigo_cliente}`;
+        codeEl.textContent = `🎟️ Seu código de sorteio: ${CURRENT_PROFILE.codigo_cliente}`;
         codeEl.classList.remove("hidden");
       } else {
         codeEl.classList.add("hidden");
@@ -7109,6 +7133,7 @@ async function loadAdminDashboard() {
     { count: clientesCount },
     { count: ticketsAbertos },
     { data: produtosEstoque },
+    { data: rankingViews, error: rankingError },
   ] = await Promise.all([
     supabase.from("orders").select("total").eq("status", "PAGO").gte("paid_at", todayStart.toISOString()),
     supabase.from("orders").select("id", { count: "exact", head: true }).eq("status", "PENDENTE"),
@@ -7116,6 +7141,7 @@ async function loadAdminDashboard() {
     supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "client"),
     supabase.from("tickets").select("id", { count: "exact", head: true }).eq("status", "aberto"),
     supabase.from("products").select("id, stock").eq("type", "UNICO").eq("active", true).not("stock", "is", null),
+    supabase.rpc("admin_ranking_produtos_vistos", { p_limite: 8 }),
   ]);
 
   const totalHoje = (vendasHoje || []).reduce((s, o) => s + Number(o.total || 0), 0);
@@ -7128,6 +7154,35 @@ async function loadAdminDashboard() {
   document.getElementById("dash-stat-clientes").textContent = clientesCount || 0;
   document.getElementById("dash-stat-abertos").textContent = ticketsAbertos || 0;
   document.getElementById("dash-stat-estoque-baixo").textContent = estoqueBaixoCount;
+
+  renderDashRankingProdutos(rankingViews || [], rankingError);
+}
+
+/* Ranking de produtos mais visualizados na loja toda (todos os clientes),
+   via a RPC admin_ranking_produtos_vistos (agrega no banco, não no front). */
+function renderDashRankingProdutos(lista, error) {
+  const wrap = document.getElementById("dash-ranking-produtos");
+  if (!wrap) return;
+
+  if (error) {
+    wrap.innerHTML = `<p class="px-4 py-6 text-center text-sm text-red-400">Erro ao carregar ranking: ${escapeHTML(error.message)}</p>`;
+    return;
+  }
+  if (!lista.length) {
+    wrap.innerHTML = `<p class="px-4 py-6 text-center text-sm text-muted">Ainda não há visualizações de produto registradas.</p>`;
+    return;
+  }
+
+  const max = Math.max(...lista.map((p) => Number(p.visualizacoes || 0)), 1);
+  wrap.innerHTML = `<div class="divide-y divide-border/60">${lista.map((p, i) => `
+    <div class="flex items-center gap-3 px-4 py-3">
+      <span class="w-5 shrink-0 text-center text-xs font-bold text-muted">${i + 1}º</span>
+      <span class="flex-1 truncate text-sm font-semibold text-white">${escapeHTML(p.product_nome || "—")}</span>
+      <div class="h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-surface2 sm:w-40">
+        <div class="h-full rounded-full bg-accent" style="width:${Math.max((Number(p.visualizacoes || 0) / max) * 100, 4)}%"></div>
+      </div>
+      <span class="w-14 shrink-0 text-right text-xs font-bold text-muted">${p.visualizacoes}x</span>
+    </div>`).join("")}</div>`;
 }
 
 async function loadAdminVendas() {
@@ -8345,15 +8400,16 @@ let contasCarregandoAgora = false;
 // não apaga a tabela, não mostra "Carregando...", só troca os números quando
 // a resposta chega. silent=false → carregamento inicial (mostra "Carregando...").
 async function loadAdminContas(silent = false) {
-  const tbody = document.getElementById("contas-table");
-  if (!silent) tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-muted">Carregando contas...</td></tr>`;
   if (contasCarregandoAgora) return; // evita corridas se duas atualizações caírem juntas
   contasCarregandoAgora = true;
+
+  const tbody = document.getElementById("contas-table");
+  if (!silent) tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-muted">Carregando contas...</td></tr>`;
 
   try {
     const { data: profiles, error } = await supabase
       .from("profiles")
-      .select("id, full_name, email, avatar_url, role, created_at, is_afiliado, codigo_afiliado")
+      .select("id, full_name, email, avatar_url, role, created_at, is_afiliado, codigo_afiliado, bloqueado, bloqueado_motivo, notas_admin, notas_admin_em")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -8392,20 +8448,36 @@ async function loadAdminContas(silent = false) {
 window.renderContasTable = () => {
   const tbody = document.getElementById("contas-table");
   const q = (document.getElementById("contas-search")?.value || "").trim().toLowerCase();
+  const papel = document.getElementById("contas-filtro-papel")?.value || "";
+  const ordem = document.getElementById("contas-ordenar")?.value || "recentes";
 
-  const rows = ADMIN_CONTAS.filter((c) =>
+  let rows = ADMIN_CONTAS.filter((c) =>
     !q || (c.full_name || "").toLowerCase().includes(q) || (c.email || "").toLowerCase().includes(q)
   );
+
+  if (papel === "admin") rows = rows.filter((c) => c.role === "admin");
+  else if (papel === "afiliado") rows = rows.filter((c) => c.is_afiliado);
+  else if (papel === "client") rows = rows.filter((c) => c.role !== "admin" && !c.is_afiliado);
+  else if (papel === "bloqueado") rows = rows.filter((c) => c.bloqueado);
+
+  rows = [...rows].sort((a, b) => {
+    if (ordem === "gasto") return (b.gasto || 0) - (a.gasto || 0);
+    if (ordem === "pedidos") return (b.pedidos || 0) - (a.pedidos || 0);
+    if (ordem === "nome") return (a.full_name || "").localeCompare(b.full_name || "", "pt-BR");
+    return new Date(b.created_at) - new Date(a.created_at); // recentes
+  });
 
   if (!rows.length) { tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-muted">Nenhuma conta encontrada.</td></tr>`; return; }
 
   tbody.innerHTML = rows.map((c) => `
-    <tr class="cursor-pointer border-b border-border/60 last:border-0 hover:bg-white/5" onclick="openContaDetalhe('${c.id}')">
+    <tr class="cursor-pointer border-b border-border/60 last:border-0 hover:bg-white/5 ${c.bloqueado ? "opacity-60" : ""}" onclick="openContaDetalhe('${c.id}')">
       <td class="px-4 py-3 font-semibold text-white">
         <div class="flex items-center gap-3">
           <span class="avatar-circle">${escapeHTML((c.full_name || "C").trim().charAt(0).toUpperCase())}</span>
           <span>${escapeHTML(c.full_name || "Cliente")}</span>
           ${c.role === "admin" ? `<span class="rounded bg-primary/30 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">Admin</span>` : ""}
+          ${c.is_afiliado ? `<span class="rounded bg-accent/20 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-accent">Afiliado</span>` : ""}
+          ${c.bloqueado ? `<span class="rounded bg-red-500/20 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-red-400">🚫 Bloqueada</span>` : ""}
         </div>
       </td>
       <td class="px-4 py-3 text-muted">${escapeHTML(c.email || "—")}</td>
@@ -8487,6 +8559,12 @@ window.openContaDetalhe = async (clienteId, silent = false) => {
       </div>
     </div>
 
+    ${conta?.bloqueado ? `
+    <div class="mb-5 rounded-xl border border-red-500/30 bg-red-500/[0.08] p-4">
+      <p class="mb-1 text-xs font-bold uppercase tracking-wide text-red-400">🚫 Conta bloqueada</p>
+      <p class="text-sm text-muted">${conta.bloqueado_motivo ? `Motivo: ${escapeHTML(conta.bloqueado_motivo)}` : "Nenhum motivo registrado."} Esta conta não consegue fazer novos pedidos.</p>
+    </div>` : ""}
+
     <div class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
       <div class="painel-stat-card !p-3"><p class="font-display text-xl font-bold text-white">${totalPedidos}</p><p class="text-[11px] font-bold uppercase text-muted">Pedidos</p></div>
       <div class="painel-stat-card !p-3"><p class="font-display text-xl font-bold text-white">${fmt(totalGasto)}</p><p class="text-[11px] font-bold uppercase text-muted">Total gasto</p></div>
@@ -8521,6 +8599,15 @@ window.openContaDetalhe = async (clienteId, silent = false) => {
       </div>` : `<p class="text-sm text-muted">Ainda não visualizou nenhum produto.</p>`}
     </div>
 
+    <div class="mb-5">
+      <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-muted">📝 Notas internas (só o admin vê)</h3>
+      <textarea id="conta-notas-textarea" rows="3" placeholder="Ex: cliente difícil, já reclamou 2x, prefere ser chamado de..." class="w-full rounded-lg border border-border bg-surface2 px-3 py-2.5 text-sm outline-none focus:border-primary">${escapeHTML(conta?.notas_admin || "")}</textarea>
+      <div class="mt-2 flex items-center justify-between gap-3">
+        <span id="conta-notas-status" class="text-[11px] text-muted">${conta?.notas_admin_em ? `Última atualização: ${new Date(conta.notas_admin_em).toLocaleString("pt-BR")}` : "Nenhuma nota salva ainda."}</span>
+        <button onclick="salvarNotaConta('${clienteId}')" class="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs font-bold text-muted hover:border-primary/50 hover:text-white">Salvar nota</button>
+      </div>
+    </div>
+
     ${conta?.is_afiliado ? `
     <div class="mb-5 rounded-xl border border-accent/30 bg-accent/[0.06] p-4">
       <p class="mb-1 text-xs font-bold uppercase tracking-wide text-accent">🤝 Conta afiliada</p>
@@ -8531,6 +8618,9 @@ window.openContaDetalhe = async (clienteId, silent = false) => {
     <div class="flex flex-col gap-2.5 sm:flex-row">
       <button onclick="mandarMensagemPara('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}')" class="flex-1 rounded-xl bg-primary py-3 text-sm font-bold text-white hover:bg-primaryhover">🎯 Convencer Cliente</button>
       ${!conta?.is_afiliado ? `<button onclick="afiliarConta('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}')" class="flex-1 rounded-xl border border-accent/50 py-3 text-sm font-bold text-accent hover:bg-accent/10">🤝 Afiliar conta</button>` : ""}
+      ${conta?.bloqueado
+        ? `<button onclick="toggleBloqueioConta('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}', false)" class="flex-1 rounded-xl border border-emerald-500/50 py-3 text-sm font-bold text-emerald-400 hover:bg-emerald-500/10">✅ Desbloquear conta</button>`
+        : `<button onclick="toggleBloqueioConta('${clienteId}','${escapeHTML(conta?.full_name || "Cliente").replace(/'/g, "\\'")}', true)" class="flex-1 rounded-xl border border-red-500/50 py-3 text-sm font-bold text-red-400 hover:bg-red-500/10">🚫 Bloquear conta</button>`}
     </div>
   `;
   } finally {
@@ -8542,6 +8632,54 @@ window.closeContaDetalhe = () => {
   contasDetalheAbertoId = null;
   document.getElementById("admin-conta-detail-modal").classList.add("hidden");
   document.getElementById("admin-conta-detail-modal").classList.remove("flex");
+};
+
+/* Bloqueia ou desbloqueia uma conta. Enquanto bloqueada, o trigger do banco
+   (trg_bloquear_pedido_de_conta_bloqueada) recusa qualquer pedido novo dela,
+   mesmo que o front seja contornado — a trava real está no banco, isto aqui
+   só grava a decisão do admin. */
+window.toggleBloqueioConta = async (clienteId, nome, bloquear) => {
+  let motivo = null;
+  if (bloquear) {
+    motivo = prompt(`Por que bloquear a conta de "${nome}"? (fica só nas notas internas, o cliente não vê isso)`, "");
+    if (motivo === null) return; // admin cancelou o prompt
+  } else if (!confirm(`Desbloquear a conta de "${nome}"? Ela volta a poder fazer pedidos normalmente.`)) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ bloqueado: bloquear, bloqueado_motivo: bloquear ? (motivo.trim() || null) : null })
+    .eq("id", clienteId);
+
+  if (error) { alert(`Erro ao ${bloquear ? "bloquear" : "desbloquear"} conta: ${error.message}`); return; }
+
+  const conta = ADMIN_CONTAS.find((c) => c.id === clienteId);
+  if (conta) { conta.bloqueado = bloquear; conta.bloqueado_motivo = bloquear ? (motivo.trim() || null) : null; }
+
+  logAdminActivity(bloquear ? "Bloqueou conta" : "Desbloqueou conta", nome + (bloquear && motivo.trim() ? ` — ${motivo.trim()}` : ""));
+  renderContasTable();
+  openContaDetalhe(clienteId, true);
+};
+
+/* Salva a nota interna (CRM) do admin sobre o cliente. Protegida no banco
+   pelo trigger trg_protect_profile_privileged_fields — só admin grava. */
+window.salvarNotaConta = async (clienteId) => {
+  const textarea = document.getElementById("conta-notas-textarea");
+  const status = document.getElementById("conta-notas-status");
+  const texto = (textarea?.value || "").trim();
+  const agora = new Date().toISOString();
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ notas_admin: texto || null, notas_admin_em: agora })
+    .eq("id", clienteId);
+
+  if (error) { alert("Erro ao salvar nota: " + error.message); return; }
+
+  const conta = ADMIN_CONTAS.find((c) => c.id === clienteId);
+  if (conta) { conta.notas_admin = texto; conta.notas_admin_em = agora; }
+  if (status) status.textContent = `Nota salva ✓ ${new Date(agora).toLocaleString("pt-BR")}`;
 };
 
 /* Monta a mensagem de "quebra-gelo" citando o produto que o cliente mais
