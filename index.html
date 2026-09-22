@@ -4854,8 +4854,8 @@ function startCardLightningEffect(frequency) {
     const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
     const off = (Math.random() - 0.5) * amp;
     const m = { x: (a.x + b.x) / 2 - (dy / len) * off, y: (a.y + b.y) / 2 + (dx / len) * off };
-    jag(a, m, amp * 0.62, depth - 1, out);
-    jag(m, b, amp * 0.62, depth - 1, out);
+    jag(a, m, amp * 0.58, depth - 1, out);
+    jag(m, b, amp * 0.58, depth - 1, out);
   }
 
   /* monta o trajeto: 1º card → segue a linha → desce → volta pela linha de baixo (serpente) */
@@ -4908,7 +4908,7 @@ function startCardLightningEffect(frequency) {
     for (let i = 1; i < wp.length; i++) {
       const a = wp[i - 1], b = wp[i], len = Math.hypot(b.x - a.x, b.y - a.y);
       const out = [];
-      jag(a, b, Math.min(30, len * 0.14), Math.max(2, Math.min(7, Math.ceil(Math.log2(len / 6)))), out);
+      jag(a, b, Math.min(22, len * 0.11), Math.max(3, Math.min(8, Math.ceil(Math.log2(len / 4)))), out);
       out.forEach(add);
       if (b.c) hits.push({ d, c: b.c, x: b.x, y: b.y });
     }
@@ -4918,20 +4918,20 @@ function startCardLightningEffect(frequency) {
     const br = [];
     function grow(p, ang, L, lvl, t0) {
       const pts = [{ x: p.x, y: p.y }];
-      jag(p, { x: p.x + Math.cos(ang) * L, y: p.y + Math.sin(ang) * L }, L * 0.2, Math.max(2, Math.min(5, Math.ceil(Math.log2(L / 6)))), pts);
+      jag(p, { x: p.x + Math.cos(ang) * L, y: p.y + Math.sin(ang) * L }, L * 0.26, Math.max(2, Math.min(6, Math.ceil(Math.log2(L / 4)))), pts);
       let dd = 0;
       const P = pts.map((o, k) => { if (k) dd += Math.hypot(o.x - pts[k - 1].x, o.y - pts[k - 1].y); return { x: o.x, y: o.y, d: dd, jx: o.x, jy: o.y }; });
       br.push({ t0, pts: P, lvl, end: t0 + dd / (SPEED * 0.8) + FADE });
-      if (lvl < 2) for (let i = 3; i < P.length - 2; i++) {
-        if (br.length > 700 || Math.random() > (lvl ? 0.06 : 0.11)) continue;
-        const q = P[i + 2];
-        grow(P[i], Math.atan2(q.y - P[i].y, q.x - P[i].x) + (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.6), L * (0.3 + Math.random() * 0.3), lvl + 1, t0 + P[i].d / (SPEED * 0.8));
+      if (lvl < 3) for (let i = 2; i < P.length - 1; i++) {
+        if (br.length > 1400 || Math.random() > (0.16 - lvl * 0.045)) continue;
+        const q = P[Math.min(i + 2, P.length - 1)];
+        grow(P[i], Math.atan2(q.y - P[i].y, q.x - P[i].x) + (Math.random() < 0.5 ? -1 : 1) * (0.5 + Math.random() * 0.85), L * (0.35 + Math.random() * 0.35), lvl + 1, t0 + P[i].d / (SPEED * 0.8));
       }
     }
-    for (let i = 6; i < v.length - 6; i++) {
-      if (Math.random() > 0.085) continue;
+    for (let i = 5; i < v.length - 5; i++) {
+      if (Math.random() > 0.16) continue;
       const p = v[i], q = v[Math.min(i + 4, v.length - 1)];
-      grow(p, Math.atan2(q.y - p.y, q.x - p.x) + (Math.random() < 0.5 ? -1 : 1) * (0.25 + Math.random() * 0.6), 50 + Math.random() * 140, 0, p.d / SPEED);
+      grow(p, Math.atan2(q.y - p.y, q.x - p.x) + (Math.random() < 0.5 ? -1 : 1) * (0.4 + Math.random() * 0.85), 45 + Math.random() * 150, 0, p.d / SPEED);
     }
     const ys = v.map((p) => p.y);
     return { v, br, hits, total: d, hi: 0, lo: 0, sparks: [], rings: [], y0: Math.max(0, Math.min(...ys) - 160), y1: Math.max(...ys) + 160 };
@@ -4984,7 +4984,7 @@ function startCardLightningEffect(frequency) {
       }
     });
     // haze violeta → brilho magenta → miolo rosado → núcleo branco fino
-    [[34, "150,60,255", 0.09], [14, "190,70,250", 0.24], [5, "232,110,255", 0.5], [2.4, "250,190,255", 0.85], [1.2, "255,250,255", 1]].forEach(([w, rgb, k]) => {
+    [[30, "150,60,255", 0.08], [12, "190,70,250", 0.22], [4, "232,110,255", 0.48], [1.7, "250,190,255", 0.85], [0.9, "255,250,255", 1]].forEach(([w, rgb, k]) => {
       ctx.lineWidth = w;
       for (let l = 1; l <= 10; l++) {
         const arr = B[l];
