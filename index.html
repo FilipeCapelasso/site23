@@ -203,9 +203,11 @@
   .painel-quick-card{display:flex;flex-direction:column;gap:.45rem;border-radius:1.1rem;border:1px solid rgba(255,255,255,.1);
     background:rgba(255,255,255,.03);padding:1.5rem;text-align:left;transition:.2s ease}
   .painel-quick-card:hover{border-color:rgba(124,92,255,.5);background:rgba(124,92,255,.07);transform:translateY(-2px)}
-  .painel-stat-card{border-radius:1.1rem;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);padding:1.35rem 1.5rem}
-  .admin-shortcut-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;border-radius:1rem;border:1px solid #1c1c1c;background:#050505;padding:1.25rem 1rem;text-align:center;font-size:.8rem;font-weight:700;color:#fff;transition:border-color .2s ease,transform .2s ease,box-shadow .2s ease}
-  .admin-shortcut-card:hover{border-color:rgba(124,92,255,.55);transform:translateY(-2px);box-shadow:0 10px 26px -12px rgba(124,92,255,.5)}
+  /* .painel-stat-card e .admin-shortcut-card já são definidos acima (bloco "Admin panel v2"),
+     com fundo em degradê, barra de destaque no topo e elevação no hover. Antes havia uma
+     segunda declaração aqui, mais "achatada", que sobrescrevia essa versão em TODO o site
+     (painel do cliente e painel admin usam as mesmas classes) — removida para o visual
+     premium aparecer de fato nos dois lugares. */
   .painel-status-badge{display:inline-block;border-radius:999px;padding:.3rem .65rem;font-size:10.5px;font-weight:800;letter-spacing:.02em}
   .painel-filter-btn{flex-shrink:0;border-radius:999px;border:1px solid #1c1c1c;background:#000000;padding:.5rem 1rem;
     font-size:12px;font-weight:700;color:#8b8fa3;white-space:nowrap;transition:.15s ease}
@@ -835,15 +837,15 @@
         <a href="#sorteio" class="hover:text-white">🎁 Sorteio</a>
       </nav>
       <div class="flex items-center gap-1.5 sm:gap-3">
-        <button onclick="openCart()" class="relative flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-2 text-sm font-medium hover:border-primary/60 sm:gap-2 sm:px-4">
+        <button onclick="openCart()" aria-label="Abrir carrinho" class="relative flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-2 text-sm font-medium hover:border-primary/60 sm:gap-2 sm:px-4">
           🛒 <span class="hidden sm:inline">Carrinho</span>
           <span id="cart-count" class="absolute -right-2 -top-2 hidden h-5 w-5 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-white pulse-glow">0</span>
         </button>
-        <button onclick="openGlobalChatModal()" title="Chat Global" class="relative hidden h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60 sm:flex">
+        <button onclick="openGlobalChatModal()" title="Chat Global" aria-label="Abrir chat global" class="relative hidden h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60 sm:flex">
           🌐
           <span id="friends-unread-dot" class="hidden absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-accent ring-2 ring-surface"></span>
         </button>
-        <button onclick="openEntregaModal()" title="Entrega" class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60">
+        <button onclick="openEntregaModal()" title="Entrega" aria-label="Ver minhas entregas" class="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60">
           📦
           <span id="entrega-unread-badge" class="hidden absolute -right-1 -top-1 min-w-[16px] rounded-full bg-accent px-1 py-0.5 text-center text-[10px] font-bold leading-none text-white pulse-glow"></span>
         </button>
@@ -857,7 +859,7 @@
             <span id="user-first-name" class="text-sm font-semibold text-white"></span>
           </button>
         </div>
-        <button onclick="toggleMobileMenu()" title="Menu" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60 md:hidden">
+        <button onclick="toggleMobileMenu()" title="Menu" aria-label="Abrir menu" aria-haspopup="true" aria-expanded="false" aria-controls="mobile-nav-menu" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-base hover:border-primary/60 md:hidden">
           <span id="mobile-menu-icon">☰</span>
         </button>
       </div>
@@ -1772,12 +1774,6 @@
 
       <!-- A) VISÃO GERAL -->
       <section id="painel-tab-overview">
-        <div id="painel-conta-bloqueada-banner" class="mb-6 hidden rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-          <p class="font-bold uppercase tracking-wide">🚫 Sua conta está bloqueada</p>
-          <p class="mt-0.5 text-red-300/90" id="painel-conta-bloqueada-motivo"></p>
-          <p class="mt-1 text-red-300/90">Você não consegue fazer novos pedidos enquanto isso. <button onclick="openNovoTicketModal()" class="font-bold underline hover:text-white">Fale com o suporte</button>.</p>
-        </div>
-
         <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 class="font-display text-3xl font-bold text-white sm:text-4xl">Olá, <span id="painel-overview-name" class="gradient-text">cliente</span> 👋</h1>
@@ -2306,22 +2302,6 @@
   <div class="modal-scroll w-full max-w-xl overflow-y-auto rounded-2xl border border-border bg-surface p-6 sm:p-8" id="checkout-content"></div>
 </div>
 
-<!-- Aviso exibido quando uma conta BLOQUEADA tenta comprar (ver contaEstaBloqueada()
-     em vez de deixar o cliente preencher todo o checkout pra só então
-     descobrir que não pode finalizar o pedido. -->
-<div id="conta-bloqueada-modal" class="fixed inset-0 z-[80] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeContaBloqueadaModal()">
-  <div class="w-full max-w-sm rounded-2xl border border-red-500/40 bg-surface p-6 text-center sm:p-7">
-    <div class="mb-3 text-5xl">🚫</div>
-    <h2 class="mb-2 font-display text-xl font-bold uppercase text-red-400">Conta bloqueada</h2>
-    <p class="mb-1 text-sm text-muted">Sua conta está bloqueada e não pode fazer novos pedidos no momento.</p>
-    <p id="conta-bloqueada-motivo" class="mb-5 text-xs text-muted"></p>
-    <div class="flex flex-col gap-2">
-      <button onclick="avisarContaBloqueadaESuporte()" class="w-full rounded-xl bg-primary py-3 text-sm font-bold text-white hover:bg-primaryhover">💬 Falar com o suporte</button>
-      <button onclick="closeContaBloqueadaModal()" class="w-full rounded-xl border border-border py-3 text-sm font-bold text-muted hover:text-white">Fechar</button>
-    </div>
-  </div>
-</div>
-
 <div id="auth-modal" class="fixed inset-0 z-[70] hidden items-center justify-center p-4 modal-overlay" onclick="if(event.target===this) closeAuthModal()">
   <div class="w-full max-w-sm rounded-2xl border border-border bg-surface p-6">
     <div class="mb-5 flex border-b border-border">
@@ -2596,17 +2576,20 @@ window.goToPainel = () => {
 window.toggleMobileMenu = (forceClose = false) => {
   const menu = document.getElementById("mobile-nav-menu");
   const icon = document.getElementById("mobile-menu-icon");
+  const trigger = document.querySelector('[aria-controls="mobile-nav-menu"]');
   if (!menu) return;
   if (forceClose) {
     menu.classList.add("hidden");
     menu.classList.remove("flex");
     if (icon) icon.textContent = "☰";
+    if (trigger) trigger.setAttribute("aria-expanded", "false");
     return;
   }
   const willOpen = menu.classList.contains("hidden");
   menu.classList.toggle("hidden");
   menu.classList.toggle("flex");
   if (icon) icon.textContent = willOpen ? "✕" : "☰";
+  if (trigger) trigger.setAttribute("aria-expanded", String(willOpen));
 };
 
 document.addEventListener("click", (e) => {
@@ -5620,55 +5603,13 @@ function cartItemFromProduct(p) {
   return { key: p.id, productId: p.id, name: p.name, price: p.price, image: p.image_url, redirectUrl: p.redirect_url || null };
 }
 
-/* =========================================================================
-   TRAVA DE COMPRA PARA CONTA BLOQUEADA (front-end)
-   -------------------------------------------------------------------------
-   O banco já recusa de verdade qualquer pedido de uma conta bloqueada (ver
-   trigger trg_bloquear_pedido_de_conta_bloqueada + checagem dentro de
-   criar_pix_v2 no SQL) — isso é o que garante a segurança de verdade, já
-   que dá pra chamar a API do Supabase direto sem passar pelo site.
-   Só que, sem isto aqui, o cliente bloqueado ainda via TODOS os botões de
-   "Comprar agora" / "Adicionar" ativos: conseguia montar carrinho, abrir o
-   checkout e só descobria que estava bloqueado depois de preencher tudo e
-   tentar enviar. Estas funções cortam o fluxo antes disso, em qualquer
-   ponto de entrada (produto, carrinho, oferta rápida), com um aviso claro
-   e um atalho pra abrir um chamado de suporte. */
-function contaEstaBloqueada() {
-  return !!CURRENT_PROFILE?.bloqueado;
-}
-
-window.avisarContaBloqueada = () => {
-  const motivoEl = document.getElementById("conta-bloqueada-motivo");
-  if (motivoEl) {
-    motivoEl.textContent = CURRENT_PROFILE?.bloqueado_motivo
-      ? `Motivo informado: ${CURRENT_PROFILE.bloqueado_motivo}`
-      : "Nenhum motivo foi detalhado. Fale com o suporte para saber mais.";
-  }
-  closeCart();
-  closeCheckout();
-  document.getElementById("conta-bloqueada-modal").classList.remove("hidden");
-  document.getElementById("conta-bloqueada-modal").classList.add("flex");
-};
-
-window.closeContaBloqueadaModal = () => {
-  document.getElementById("conta-bloqueada-modal").classList.add("hidden");
-  document.getElementById("conta-bloqueada-modal").classList.remove("flex");
-};
-
-window.avisarContaBloqueadaESuporte = () => {
-  closeContaBloqueadaModal();
-  openNovoTicketModal();
-};
-
 window.addToCartFromProductPage = (id) => {
-  if (contaEstaBloqueada()) { avisarContaBloqueada(); return; }
   const p = ALL_PRODUCTS.find((x) => x.id === id);
   addToCart(cartItemFromProduct(p));
   openCart();
 };
 
 window.buyNowFromProductPage = (id) => {
-  if (contaEstaBloqueada()) { avisarContaBloqueada(); return; }
   const p = ALL_PRODUCTS.find((x) => x.id === id);
   addToCart(cartItemFromProduct(p));
   openCheckout();
@@ -5711,7 +5652,8 @@ async function renderCart() {
 
   if (cart.length === 0) {
     itemsEl.innerHTML = `<div class="flex h-full flex-col items-center justify-center gap-2 text-center text-muted py-10">
-      <p class="font-medium">Seu carrinho está vazio</p><p class="text-sm">Adicione um produto para começar.</p></div>`;
+      <span class="mb-1 flex h-14 w-14 items-center justify-center rounded-full border border-dashed border-border text-2xl">🛒</span>
+      <p class="font-medium text-white">Seu carrinho está vazio</p><p class="text-sm">Adicione um produto para começar.</p></div>`;
     footerEl.classList.add("hidden");
   } else {
     itemsEl.innerHTML = cart.map((i) => `
@@ -5777,7 +5719,6 @@ async function renderOffers() {
 }
 
 window.quickAdd = (id) => {
-  if (contaEstaBloqueada()) { avisarContaBloqueada(); return; }
   const p = ALL_PRODUCTS.find((x) => x.id === id);
   if (!p) return;
   if (p.type === "ASSINATURA" && p.plans?.length) {
@@ -5796,10 +5737,6 @@ window.openCheckout = () => {
     openAuthModal("login");
     return;
   }
-  // segunda trava (a primeira já corta em addToCart/buyNow/quickAdd): garante
-  // que nem chegando aqui por outro caminho o cliente bloqueado veja o
-  // formulário de checkout.
-  if (contaEstaBloqueada()) { avisarContaBloqueada(); return; }
   closeCart();
   const prefName = CURRENT_PROFILE?.full_name || CURRENT_USER.email.split("@")[0];
   appliedAnuncianteCode = null;
@@ -5979,13 +5916,6 @@ window.closeCheckout = () => {
 
 async function submitCheckout(e) {
   e.preventDefault();
-  // terceira trava, bem em cima da hora de enviar: se a conta foi bloqueada
-  // enquanto o cliente estava com o checkout aberto (ex: outra aba, ou o
-  // admin bloqueou agora), refaz a checagem com o perfil mais recente do
-  // banco antes de sequer chamar o RPC de pagamento.
-  await refreshCurrentProfile();
-  if (contaEstaBloqueada()) { avisarContaBloqueada(); return; }
-
   const btn = document.getElementById("checkout-submit");
   const errEl = document.getElementById("checkout-error");
   const willBeFree = cartTotal() <= 0; // estimativa pra UX; quem decide de verdade é o banco
@@ -9190,14 +9120,6 @@ window.switchPainelTab = (tab) => {
 /* ---- carrega tudo que o painel precisa (chamado ao entrar em #painel) ---- */
 async function loadPainelCliente() {
   if (!CURRENT_USER) return;
-
-  const bannerEl = document.getElementById("painel-conta-bloqueada-banner");
-  if (bannerEl) {
-    bannerEl.classList.toggle("hidden", !contaEstaBloqueada());
-    document.getElementById("painel-conta-bloqueada-motivo").textContent = CURRENT_PROFILE?.bloqueado_motivo
-      ? `Motivo informado: ${CURRENT_PROFILE.bloqueado_motivo}`
-      : "Nenhum motivo foi detalhado.";
-  }
 
   const name = CURRENT_PROFILE?.full_name || CURRENT_USER.email.split("@")[0];
   const firstName = name.trim().split(" ")[0];
